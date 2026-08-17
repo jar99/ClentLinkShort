@@ -479,9 +479,9 @@ export async function* lemmy(target, { get, progress }) {
  * host — the shape an image share actually has, and one nothing else here
  * produces.
  */
-export async function* commons(target, { get, progress, sleep, deadline = 1500000 }) {
+export async function* commons(target, { get, progress, sleep, deadline = 1500000, cursors = {} }) {
   const until = Date.now() + deadline;
-  let cont = "";
+  let cont = cursors.commons ?? "";
   let seen = 0;
   let failures = 0;
 
@@ -518,6 +518,7 @@ export async function* commons(target, { get, progress, sleep, deadline = 150000
     }
     progress("commons", seen, target);
     cont = body?.continue?.aicontinue;
+    if (cont) cursors.commons = cont;
     if (!cont) return;
     await sleep(150); // stay under the rate limit rather than discover it
   }
@@ -691,10 +692,14 @@ const FANDOM_WIKIS = [
  * needs to prove itself on. Six communities page at once; each is its own
  * subdomain, and Fandom serves them from one CDN that tolerates this fine.
  */
-export async function* fandom(target, { get, progress, sleep }) {
+export async function* fandom(target, { get, progress, sleep, cursors = {} }) {
   const CONCURRENT = 6;
   const perWiki = Math.ceil(target / FANDOM_WIKIS.length);
   let nextWiki = 0;
+  // Per-community continuation: the next run pages DEEPER instead of
+  // re-fetching (and deduping away) everything already collected. null
+  // marks a community fully walked.
+  const state = (cursors.fandom ??= {});
 
   yield* channel(target, "fandom", progress,
     Array.from({ length: CONCURRENT }, () => async (push, stopped) => {
@@ -702,7 +707,8 @@ export async function* fandom(target, { get, progress, sleep }) {
         const at = nextWiki++;
         if (at >= FANDOM_WIKIS.length) return;
         const community = FANDOM_WIKIS[at];
-        let cont = "";
+        if (state[community] === null) continue; // exhausted on a prior run
+        let cont = state[community] ?? "";
         let fromWiki = 0;
         while (fromWiki < perWiki && !stopped()) {
           let body;
@@ -714,7 +720,7 @@ export async function* fandom(target, { get, progress, sleep }) {
             break; // one community down should not stop the sweep
           }
           const pages = body?.query?.allpages ?? [];
-          if (!pages.length) break;
+          if (!pages.length) { state[community] = null; break; }
           for (const page of pages) {
             if (!page.title) continue;
             // Fandom's own URL spelling: spaces become underscores; slashes
@@ -725,7 +731,8 @@ export async function* fandom(target, { get, progress, sleep }) {
             fromWiki++;
           }
           cont = body?.continue?.apcontinue;
-          if (!cont) break;
+          if (!cont) { state[community] = null; break; }
+          state[community] = cont;
           await sleep(120);
         }
       }
@@ -800,8 +807,8 @@ export async function* targeted(target, { get, progress, sleep }) {
  * Crossref: the DOI registry, 185M works. Every URL is a real citable
  * link of the exact form people paste into papers, posts and READMEs.
  */
-export async function* crossref(target, { get, progress, sleep }) {
-  let cursor = "*";
+export async function* crossref(target, { get, progress, sleep, cursors = {} }) {
+  let cursor = cursors.crossref ?? "*";
   let seen = 0;
   let failures = 0;
   while (seen < target && failures < 4) {
@@ -825,6 +832,7 @@ export async function* crossref(target, { get, progress, sleep }) {
     progress("crossref", seen, target);
     cursor = body?.message?.["next-cursor"];
     if (!cursor) return;
+    cursors.crossref = cursor;
     await sleep(150); // their "polite" pool asks for moderation, not silence
   }
 }
@@ -834,8 +842,8 @@ export async function* crossref(target, { get, progress, sleep }) {
  * the npmjs.com URLs people paste into issues and chat, scoped packages'
  * "@" and "/" included.
  */
-export async function* npmjs(target, { get, progress }) {
-  let startkey = "";
+export async function* npmjs(target, { get, progress, cursors = {} }) {
+  let startkey = cursors.npmjs ?? "";
   let seen = 0;
   while (seen < target) {
     let body;
@@ -860,6 +868,7 @@ export async function* npmjs(target, { get, progress }) {
     progress("npm", seen, target);
     startkey = rows[rows.length - 1]?.id;
     if (!startkey) return;
+    cursors.npmjs = startkey;
   }
 }
 

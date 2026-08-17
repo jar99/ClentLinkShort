@@ -89,9 +89,18 @@ test("every dictionary host encodes and decodes", async () => {
   // The probe path is chosen so no template can absorb it — a single segment
   // with a capital and a tilde is outside every slot charset, and the
   // all-text template slots all sit behind multi-segment or literal shapes.
+  //
+  // Every entry must round-trip. The cheap-index head (3 or 11 bits) must
+  // also WIN the race; past index 261 the escape-coded index costs 19 bits
+  // and a short host can legitimately beat its own dictionary entry by
+  // spelling itself — the optimizer picking that is correct, not a miss.
+  const { indexBits } = await import("../src/bits.js");
   for (const host of HOSTS) {
+    const index = HOSTS.indexOf(host);
     const a = await analyze(`https://${host}/Probe~9`, { stripTracking: false });
-    assert.equal(a.hostByte, HOSTS.indexOf(host), `${host} should hit the dictionary`);
+    if (indexBits(index) <= 11) {
+      assert.equal(a.hostByte, index, `${host} should hit the dictionary`);
+    }
     assert.equal((await expand(a.payload)).href, `https://${host}/Probe~9`);
   }
 });

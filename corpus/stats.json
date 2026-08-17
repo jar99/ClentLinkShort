@@ -6,52 +6,52 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.5697805667,
-  "payloadShorterPct": 99.69829296,
-  "medianRatio": 0.5081967213,
-  "p90Ratio": 0.6829268293,
-  "linkSavingsMean": 0.05545050988,
-  "linkSavingsMedian": 0.1014492754,
-  "linkShorterPct": 61.30570296,
-  "bareShorterPct": 3.788606957,
-  "deepShorterPct": 83.42087956,
+  "payloadRatio": 0.5642943903,
+  "payloadShorterPct": 99.7108764,
+  "medianRatio": 0.5,
+  "p90Ratio": 0.6774193548,
+  "linkSavingsMean": 0.0593501429,
+  "linkSavingsMedian": 0.1111111111,
+  "linkShorterPct": 62.09085046,
+  "bareShorterPct": 3.802350821,
+  "deepShorterPct": 84.5026298,
   "bareCount": 1127776,
   "deepCount": 2933117,
-  "deepSavingsMedian": 0.1777777778,
-  "deepSavingsMean": 0.1466704004,
+  "deepSavingsMedian": 0.1836734694,
+  "deepSavingsMean": 0.1521113949,
   "breakEvenLength": 20,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
       "breakEven": 20,
-      "shorterPct": 61.30570296,
-      "medianSaving": 0.1014492754
+      "shorterPct": 62.09085046,
+      "medianSaving": 0.1111111111
     },
     {
       "label": "a github.io project page",
       "length": 40,
-      "breakEven": 110,
-      "shorterPct": 3.716005322,
-      "medianSaving": -0.3953488372
+      "breakEven": 105,
+      "shorterPct": 4.07055788,
+      "medianSaving": -0.3928571429
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.69829296,
-      "medianSaving": 0.4918032787
+      "shorterPct": 99.7108764,
+      "medianSaving": 0.5
     }
   ],
   "modes": {
-    "text": 735970,
-    "raw": 31,
-    "deflate": 12008,
-    "host": 2718691,
-    "template": 594193
+    "text": 939381,
+    "raw": 30,
+    "deflate": 14566,
+    "host": 2516590,
+    "template": 590326
   },
-  "templatePct": 14.63207723,
-  "dictHitPct": 16.33492929,
+  "templatePct": 14.53685187,
+  "dictHitPct": 21.93027494,
   "trackingPct": 1.212122555,
-  "trackingSavingPct": 29.89866297
+  "trackingSavingPct": 29.94759161
 }

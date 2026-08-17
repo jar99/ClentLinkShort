@@ -315,6 +315,21 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://ibb.co/{0}", slots: ["b64"] },
   { pattern: "https://gyazo.com/{0}", slots: ["hex"] },
   { pattern: "https://giphy.com/gifs/{0}", slots: ["slug"] },
+
+  // ---- appended: wildcard-host templates ---------------------------------
+  // The host's first label is a slot; BY_HOST_SUFFIX routes the match. One
+  // entry covers every community/blog/site on the platform.
+  { pattern: "https://{0}.fandom.com/wiki/{1}", slots: ["slug", "text"] },
+  { pattern: "https://{0}.substack.com/p/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://{0}.blogspot.com/{1}/{2}/{3}.html", slots: ["slug", "dec", "dec", "text"] },
+  { pattern: "https://{0}.github.io/{1}", slots: ["slug", "text"] },
+  { pattern: "https://{0}.wordpress.com/{1}/{2}/{3}/{4}/", slots: ["slug", "dec", "dec", "dec", "text"] },
+  { pattern: "https://{0}.tumblr.com/post/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://{0}.tumblr.com/post/{1}/{2}", slots: ["slug", "dec", "slug"] },
+  { pattern: "https://{0}.bandcamp.com/album/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://{0}.bandcamp.com/track/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://{0}.itch.io/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://{0}.medium.com/{1}", slots: ["slug", "text"] },
 ]);
 
 /** Longest slot value a template will hold; the length field is 6 bits. */
@@ -351,16 +366,39 @@ export const COMPILED = TEMPLATES.map(({ pattern, slots }, index) => {
  * it, a URL that is not on a templated host does no regex work at all, which
  * is the overwhelming majority of them.
  *
+ * A template whose HOST carries a slot — "https://{0}.fandom.com/wiki/{1}"
+ * — cannot be keyed by exact host, so it lands in BY_HOST_SUFFIX under its
+ * host's literal tail instead, and asTemplate() consults both indexes. On
+ * the wire nothing is new: a host slot is a slot like any other, and the
+ * usual reproduce-exactly guard decides whether the match is safe.
+ *
  * @type {ReadonlyMap<string, typeof COMPILED>}
  */
 export const BY_HOST = (() => {
   /** @type {Map<string, typeof COMPILED>} */
   const byHost = new Map();
   for (const template of COMPILED) {
+    if (template.host.includes("{")) continue;
     if (!byHost.has(template.host)) byHost.set(template.host, []);
     byHost.get(template.host).push(template);
   }
   return byHost;
+})();
+
+/** Wildcard-host templates, keyed by the literal tail after the host slot. */
+export const BY_HOST_SUFFIX = (() => {
+  /** @type {Map<string, typeof COMPILED>} */
+  const bySuffix = new Map();
+  for (const template of COMPILED) {
+    if (!template.host.includes("{")) continue;
+    // "{0}.fandom.com" -> ".fandom.com"; a slot must open the host.
+    const suffix = template.host.slice(template.host.indexOf("}") + 1);
+    if (!template.host.startsWith("{") || !suffix.startsWith("."))
+      throw new ClentError(`template "${template.pattern}" has an unsupported host slot`);
+    if (!bySuffix.has(suffix)) bySuffix.set(suffix, []);
+    bySuffix.get(suffix).push(template);
+  }
+  return bySuffix;
 })();
 
 /**
@@ -420,10 +458,15 @@ for (const [name, set] of Object.entries(CHARSETS)) {
  * @returns {{index: number, values: string[], bits: number}|null}
  */
 export function asTemplate(url) {
-  // Only templates for this exact host can match, so most URLs do no regex
-  // work at all.
+  // Only templates for this exact host — or a wildcard family whose host
+  // suffix matches — can apply, so most URLs do no regex work at all.
   if (url.protocol !== "https:") return null;
-  const family = BY_HOST.get(url.host);
+  let family = BY_HOST.get(url.host) ?? null;
+  const dot = url.host.indexOf(".");
+  if (dot !== -1) {
+    const wild = BY_HOST_SUFFIX.get(url.host.slice(dot));
+    if (wild) family = family ? [...family, ...wild] : wild;
+  }
   if (!family) return null;
 
   const href = url.href;

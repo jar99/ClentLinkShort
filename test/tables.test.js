@@ -14,8 +14,8 @@ import { TOKENS, CODE_LENGTHS, TOKEN_BASE, SYM_END, SYM_ESC } from "../src/textc
 import { TEMPLATES, CHARSETS } from "../src/templates.js";
 import { ENCODABLE_ORDER, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE } from "../src/schemes.js";
 
-test("HOSTS fits its 8-bit index and every entry is usable", () => {
-  assert.ok(HOSTS.length <= 256, "index is 8 bits");
+test("HOSTS entries are unique and every one is usable", () => {
+  // The escape-coded index is open-ended; there is no size cap any more.
   assert.equal(new Set(HOSTS).size, HOSTS.length, "duplicate entries waste indices");
   for (const host of HOSTS) {
     assert.equal(host, host.toLowerCase(), `${host} must be lowercase to ever match`);

@@ -64,14 +64,17 @@ test("inflate itself enforces the bound", async () => {
   assert.equal((await inflate(okZipped)).length, MAX_INFLATED);
 });
 
-test("the unassigned text6 symbol is rejected, not invented", async () => {
-  // header: scheme https, no flags, mode text -> 0; then a nonsense body.
+test("a malformed text body is rejected, not invented", async () => {
+  // header: scheme https, no flags, mode text -> 0; then an ESC symbol cut
+  // off before its raw byte arrives. Deterministic across table re-mines,
+  // unlike guessing at a bit pattern no symbol happens to own.
   const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
   const { buildCode, pushCode } = await import("../src/huffman.js");
+  const { CODE_LENGTHS, SYM_ESC } = await import("../src/textcode.js");
   const w = new BitWriter();
   pushCode(w, buildCode(HEADER_CODE_LENGTHS), 0);
-  w.push(60, 6);
-  w.push(63, 6);
+  pushCode(w, buildCode(CODE_LENGTHS), SYM_ESC);
+  w.push(1, 2); // two bits where eight are owed
   await assert.rejects(() => expand(w.finish()), (error) => {
     assert.ok(error instanceof ClentError, `threw ${error?.name}`);
     return true;

@@ -35,13 +35,13 @@ const GOLDEN = [
   ["XAa8fjsidWYA", "https://en.wikipedia.org/wiki/Alan_Turing"],
   ["Ox4TTl1_m685yoKLpiQ", "https://blog.startup.io/posts/2026-hello"],
   ["g4P0KTDue8dDzuk4A", "http://old-site.net/index.php?id=42"],
-  ["v-JfZup358osk0Z6JkyaFc79k5mX2jRQcaZ204A",
+  ["v8JfZup358osk0Z6JkyaFc79k5mX2jRQcaZ204A",
     "mailto:someone@example.com?subject=Hi%20there"],
   ["B2QylAetGUb4zaHW3zOI5BYUWEA", "https://example.co.uk/a/b/c?q=test#frag"],
-  ["v-EY5-4bRNcvz5RZJoz0TJkGs5lHYA", "https://user:pw@example.com/secret"],
+  ["v8EY5-4bRNcvz5RZJoz0TJkGs5lHYA", "https://user:pw@example.com/secret"],
   ["B2QylAajnlQbjB0MJqhgV6GE1QwGqGE3QrOUMJqhgNUMJqhgYFDCaoYGHQwmqGA7odbfGLYoYLtCu8A",
     "https://example.com/unicode/%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%BE%D0%B3?q=caf%C3%A9"],
-  ["vqXWpGYW5CTqpedn6qemJSckpqXnjDLoSwCAA",
+  ["wTS61IzC3ISdVLzs_VT0xKTklNS88YZdCWAQA",
     "https://example.com/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/"],
   ["XRiEpi-A", "https://news.ycombinator.com/item?id=39000000"],
 ];
@@ -67,11 +67,11 @@ test("the frozen tables are byte-for-byte what v1 shipped", () => {
 test("the indexed tables only ever grow", () => {
   // Position IS the wire encoding, so the shipped prefix must survive any
   // append. Appending new entries is fine — extend the pin when you do.
-  assert.ok(HOSTS.length >= 253);
-  assert.equal(hash(HOSTS.slice(0, 253)), "f7a7af1885b3587d", "HOSTS prefix changed");
-  assert.ok(TEMPLATES.length >= 247);
-  assert.equal(hash(TEMPLATES.slice(0, 247).map((t) => [t.pattern, ...t.slots])),
-    "1da651d37d090d89", "TEMPLATES prefix changed");
+  assert.ok(HOSTS.length >= 512);
+  assert.equal(hash(HOSTS.slice(0, 512)), "56b35dac1268e1ed", "HOSTS prefix changed");
+  assert.ok(TEMPLATES.length >= 258);
+  assert.equal(hash(TEMPLATES.slice(0, 258).map((t) => [t.pattern, ...t.slots])),
+    "161f1acd5b3eae3d", "TEMPLATES prefix changed");
   assert.ok(ENCODABLE_ORDER.length >= 13);
   assert.equal(hash(ENCODABLE_ORDER.slice(0, 13)), "b1811f4d592941c5",
     "ENCODABLE_ORDER prefix changed");

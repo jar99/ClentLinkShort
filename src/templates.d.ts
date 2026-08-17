@@ -27,6 +27,9 @@ export interface CompiledTemplate extends Template {
 
 export declare const COMPILED: CompiledTemplate[];
 export declare const BY_HOST: ReadonlyMap<string, CompiledTemplate[]>;
+
+/** Wildcard-host templates, keyed by the literal tail after the host slot. */
+export declare const BY_HOST_SUFFIX: ReadonlyMap<string, CompiledTemplate[]>;
 export declare const CHARSET_INDEX: Record<string, { set: Charset; index: Map<string, number> }>;
 
 export interface TemplateMatch {

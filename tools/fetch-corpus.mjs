@@ -76,7 +76,16 @@ const progress = (label, n, target) => {
   }
 };
 
-const context = { get: request, progress, sleep };
+const context = { get: request, progress, sleep, cursors: {} };
+// Continuation cursors from the previous run: sources that support them
+// resume paging where they stopped instead of re-fetching what the dedup
+// set will only throw away.
+try {
+  const { readFile: read } = await import("node:fs/promises");
+  context.cursors = JSON.parse(
+    await read(new URL("../corpus/cursors.json", import.meta.url), "utf8"));
+  console.log("  cursors        resuming from the previous run");
+} catch { /* first run, or no cursors yet */ }
 
 /* -------------------------------------------------------------------------- *
  * Tranco ranks
@@ -207,13 +216,26 @@ async function main() {
   // Shares reflect what each source can actually deliver, not what would be
   // tidy: lemmy and the feeds are shallow and will fall short of their target,
   // which is fine — they are here for the shapes they contribute, not volume.
+  // The default mix is weighted towards what people SHARE, not what is
+  // easiest to fetch: conversation links, news, communities and deep pages
+  // dominate; bare ranked domains and uniform registries are the seasoning.
   const plan = {
-    wikipedia: 0.34,
-    tranco: 0.32,
-    hackernews: 0.17,
-    commons: 0.16,
-    lemmy: 0.005,
-    feeds: 0.005,
+    wikipedia: 0.20,
+    targeted: 0.12,
+    hackernews: 0.12,
+    mastodon: 0.10,
+    hncomments: 0.08,
+    tranco: 0.08,
+    commons: 0.05,
+    reddit: 0.05,
+    fandom: 0.04,
+    googlenews: 0.04,
+    feeds: 0.03,
+    lemmy: 0.03,
+    archiveitems: 0.02,
+    crossref: 0.02,
+    npmjs: 0.01,
+    pypi: 0.01,
   };
   const generators = {
     wikipedia: (n) => wikipedia(n, context),
@@ -264,12 +286,16 @@ async function main() {
 
   // Checkpoint while collecting: every two minutes the union so far lands
   // on disk atomically, so a crash or a kill loses at most two minutes and
-  // the next --merge run resumes from where this one got to.
+  // the next --merge run resumes from where this one got to. Source cursors
+  // ride along, so the next run pages DEEPER instead of re-walking heads.
   let lastSaved = seen.size;
+  const saveCursors = () => writeFile(path.join(OUT, "cursors.json"),
+    JSON.stringify(context.cursors, null, 2) + "\n");
   const checkpointer = setInterval(async () => {
     if (seen.size === lastSaved) return;
     lastSaved = seen.size;
     const saved = await persist(seen, 5); // fast compression for checkpoints
+    await saveCursors();
     console.log(`  …checkpoint ${saved.count.toLocaleString()} URLs saved`);
   }, 120000);
 

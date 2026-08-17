@@ -25,10 +25,10 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **51% of the URL it came from** (median). Every link also
+The encoded destination is **50% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
 longer than about **20 characters** before the whole link comes out shorter. That is
-most links people actually share: **83% of deep links** (anything past a bare
+most links people actually share: **84% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
@@ -36,8 +36,8 @@ Measured over 4,060,893 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~20 | 61.3% |
-| a github.io project page (40c) | ~110 | 3.7% |
+| `nul.im/#` (16c) | ~20 | 62.1% |
+| a github.io project page (40c) | ~105 | 4.1% |
 | payload alone, no prefix | ~10 | 99.7% |
 
 Bare homepages (28% of the corpus) are the one shape that rarely wins — there is
@@ -100,11 +100,11 @@ without ever invalidating a link:
 | URLs round-tripped | **4,060,893** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **57.0%** overall, median **50.8%** |
+| Payload vs input URL | **56.4%** overall, median **50.0%** |
 | Payload shorter than input | **99.7%** |
-| Host dictionary hit rate | **16.3%** |
+| Host dictionary hit rate | **21.9%** |
 | Carried tracking parameters | **1.2%**, worth 30% of the payload on those |
-| Winning body mode | host 66.9%, text 18.1%, template 14.6%, deflate 0.3%, raw 0.0% |
+| Winning body mode | host 62.0%, text 23.1%, template 14.5%, deflate 0.4%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -265,7 +265,7 @@ spelling.
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **Known URL shapes collapse to an ID.**  247 templates cover YouTube, Amazon,
+2. **Known URL shapes collapse to an ID.**  258 templates cover YouTube, Amazon,
    imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv,
    Google Docs and Drive, Discord and WhatsApp invites, the big shorteners (bit.ly,
    tinyurl, t.co), the news sites' date-and-slug shapes, Steam, IMDb, Wikipedia in
@@ -286,9 +286,14 @@ spelling.
    field. Non-http schemes go through a 15-entry scheme table at 4 bits each, so
    `mailto:` and `tel:` links are first-class instead of paying for their scheme in
    the body.
-4. **253 common hosts collapse to an index.** Shopping, news, social and image hosts
+   One template can carry a whole platform: a template's host may hold a slot —
+   `{0}.fandom.com/wiki/{1}`, `{0}.substack.com/p/{1}` — so every community wiki,
+   newsletter, blogspot, tumblr and github.io page rides one table entry. Not a wire
+   feature: a host slot is a slot like any other, and the reproduce-exactly guard
+   still decides every match.
+4. **512 common hosts collapse to an index.** Shopping, news, social and image hosts
    included; the dictionary is ordered by measured use, so the most-shortened hosts
-   cost 3 bits and the rest 11 — and the table can grow without a format change.
+   cost 3 bits and the rest 11-19 — and the table can grow without a format change.
 5. **Every other domain stays cheap without a dictionary entry.** The hostname gets
    its own Huffman code whose *terminal* symbols are registrable suffixes — `.com`,
    `.org`, `.co.uk`, `.github.io`, 160 of them mined across distinct names
