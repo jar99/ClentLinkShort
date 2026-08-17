@@ -26,7 +26,7 @@ import { readLines } from "./corpus.js";
 import {
   wikipedia, hackernews, hncomments, gdelt, stackexchange, trancoDomains,
   feeds, lemmy, commons, reddit, mastodon, fandom, targeted,
-  crossref, npmjs, pypi, archiveitems,
+  crossref, npmjs, pypi, archiveitems, googlenews,
 } from "./sources.js";
 
 const OUT = path.join(ROOT, "corpus");
@@ -131,12 +131,36 @@ function usable(raw) {
   return url;
 }
 
-const brotli = (text) => brotliCompressSync(Buffer.from(text), {
+const brotli = (text, quality = 9) => brotliCompressSync(Buffer.from(text), {
   params: {
-    [constants.BROTLI_PARAM_QUALITY]: 11,
+    [constants.BROTLI_PARAM_QUALITY]: quality,
     [constants.BROTLI_PARAM_SIZE_HINT]: Buffer.byteLength(text),
   },
 });
+
+/**
+ * Deterministically shuffle and write the collected set — atomically, via a
+ * temp file and rename, so a checkpoint interrupted mid-write can never
+ * leave a truncated corpus behind. Called every couple of minutes while
+ * sources run and once at the end: a killed run resumes from its last
+ * checkpoint with --merge instead of starting over.
+ */
+async function persist(seen, quality) {
+  const { rename } = await import("node:fs/promises");
+  const all = [...seen];
+  let state = 0x9e3779b9;
+  for (let i = all.length - 1; i > 0; i--) {
+    state ^= state << 13; state >>>= 0;
+    state ^= state >> 17;
+    state ^= state << 5;  state >>>= 0;
+    [all[i], all[state % (i + 1)]] = [all[state % (i + 1)], all[i]];
+  }
+  const text = all.join("\n") + "\n";
+  const file = path.join(OUT, "urls.txt.br");
+  await writeFile(file + ".tmp", brotli(text, quality));
+  await rename(file + ".tmp", file);
+  return { count: all.length, bytes: text.length, text };
+}
 
 async function main() {
   await mkdir(OUT, { recursive: true });
@@ -193,6 +217,7 @@ async function main() {
     npmjs: (n) => npmjs(n, context),
     pypi: (n) => pypi(n, context),
     archiveitems: (n) => archiveitems(n, context),
+    googlenews: (n) => googlenews(n, context),
     tranco: (n) => trancoDomains(n, ranks),
   };
 
@@ -221,6 +246,18 @@ async function main() {
   // over between awaits, and Node runs this on one thread.
   /** Per-source honesty: what arrived, what was junk, what was already seen. */
   const quality = {};
+
+  // Checkpoint while collecting: every two minutes the union so far lands
+  // on disk atomically, so a crash or a kill loses at most two minutes and
+  // the next --merge run resumes from where this one got to.
+  let lastSaved = seen.size;
+  const checkpointer = setInterval(async () => {
+    if (seen.size === lastSaved) return;
+    lastSaved = seen.size;
+    const saved = await persist(seen, 5); // fast compression for checkpoints
+    console.log(`  …checkpoint ${saved.count.toLocaleString()} URLs saved`);
+  }, 120000);
+
   await Promise.all(Object.entries(wanted).map(async ([name, share]) => {
     const target = Math.round(TOTAL * share);
     counts[name] = 0;
@@ -243,45 +280,43 @@ async function main() {
       ` (${q.duplicates.toLocaleString()} dupes, ${q.rejected.toLocaleString()} rejected)`);
   }));
 
-  // Shuffle deterministically so reading the first N lines still gives a
-  // representative mix rather than one source's block.
-  const all = [...seen];
-  let state = 0x9e3779b9;
-  for (let i = all.length - 1; i > 0; i--) {
-    state ^= state << 13; state >>>= 0;
-    state ^= state >> 17;
-    state ^= state << 5;  state >>>= 0;
-    [all[i], all[state % (i + 1)]] = [all[state % (i + 1)], all[i]];
-  }
+  clearInterval(checkpointer);
 
-  const text = all.join("\n") + "\n";
-  const packed = brotli(text);
-  await writeFile(path.join(OUT, "urls.txt.br"), packed);
+  // The final write: shuffled deterministically so reading the first N
+  // lines still gives a representative mix rather than one source's block.
+  const { count, bytes, text } = await persist(seen, 9);
   await writeFile(path.join(OUT, "manifest.json"), JSON.stringify({
     generated: new Date().toISOString().slice(0, 10),
-    total: all.length,
+    total: count,
     counts,
     quality,
     rankedDomains: ranks.length,
     sha256: createHash("sha256").update(text).digest("hex"),
-    bytes: text.length,
+    bytes,
     sources: {
-      wikipedia: "{lang}.wikipedia.org/w/api.php?action=query&list=exturlusage, 30 editions",
-      hackernews: "hn.algolia.com/api/v1/search_by_date?tags=story",
+      wikipedia: "{lang}.wikipedia.org exturlusage, 40 editions — cited links",
+      hackernews: "hn.algolia.com search_by_date, stories — submitted links",
+      hncomments: "hn.algolia.com search_by_date, comments — links in conversation",
       lemmy: "8 Lemmy instances, /api/v3/post/list — social, news, deals, images",
-      feeds: "36 RSS/Atom feeds — news and shopping deals",
-      commons: "commons.wikimedia.org/w/api.php?action=query&list=allimages — image shares",
-      reddit: "reddit.com listing JSON — submitted links and permalinks",
-      mastodon: "8 instances, /api/v1/timelines/public — posts, cards, body links",
+      feeds: "50 RSS/Atom feeds — news, deals, newsletters, youtube channels",
+      googlenews: "news.google.com/rss, 6 locales x 9 sections",
+      commons: "commons.wikimedia.org allimages — image shares",
+      reddit: "reddit.com listing feeds — submitted links and permalinks",
+      mastodon: "16 instances, /api/v1/timelines/public — posts, cards, body links",
+      fandom: "39 Fandom wikis, allpages — real article URLs",
+      targeted: "en.wikipedia exturlusage?euquery per asked-for domain",
+      crossref: "api.crossref.org/works — DOI links",
+      npmjs: "replicate.npmjs.com — package pages",
+      pypi: "pypi.org/simple — project pages, sampled across the index",
+      archiveitems: "archive.org/advancedsearch — item pages, 5 media types",
       gdelt: "api.gdeltproject.org/api/v2/doc/doc",
       stackexchange: "api.stackexchange.com/2.3/questions?filter=withbody",
       tranco: "tranco-list.eu — ranked domains, sampled across the full range",
     },
   }, null, 2) + "\n");
 
-  console.log(`\n${all.length.toLocaleString()} unique URLs`);
-  console.log(`${(text.length / 1e6).toFixed(1)} MB raw, ` +
-    `${(packed.length / 1e6).toFixed(1)} MB brotli`);
+  console.log(`\n${count.toLocaleString()} unique URLs`);
+  console.log(`${(bytes / 1e6).toFixed(1)} MB raw`);
 }
 
 main().catch((error) => {

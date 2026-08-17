@@ -869,6 +869,52 @@ export async function* pypi(target, { get, progress }) {
   }
 }
 
+/**
+ * Google News feeds: the front page plus topic sections across several
+ * locales. Each item carries the news.google.com share URL — the long
+ * opaque shape people actually paste — and the description links to the
+ * source article, so both populations land in the corpus.
+ */
+const GOOGLE_NEWS = (() => {
+  const locales = [
+    ["en-US", "US", "US:en"], ["en-GB", "GB", "GB:en"], ["de", "DE", "DE:de"],
+    ["fr", "FR", "FR:fr"], ["es-419", "US", "US:es-419"], ["ja", "JP", "JP:ja"],
+  ];
+  const topics = [
+    "WORLD", "NATION", "BUSINESS", "TECHNOLOGY", "ENTERTAINMENT",
+    "SCIENCE", "SPORTS", "HEALTH",
+  ];
+  const feeds = [];
+  for (const [hl, gl, ceid] of locales) {
+    feeds.push(`https://news.google.com/rss?hl=${hl}&gl=${gl}&ceid=${ceid}`);
+    for (const topic of topics) {
+      feeds.push("https://news.google.com/rss/headlines/section/topic/" +
+        `${topic}?hl=${hl}&gl=${gl}&ceid=${ceid}`);
+    }
+  }
+  return feeds;
+})();
+
+/** Headlines from Google News, four feeds at a time. */
+export async function* googlenews(target, { get, progress }) {
+  let nextFeed = 0;
+  yield* channel(target, "googlenews", progress,
+    Array.from({ length: 4 }, () => async (push, stopped) => {
+      while (!stopped()) {
+        const at = nextFeed++;
+        if (at >= GOOGLE_NEWS.length) return;
+        let xml;
+        try {
+          const response = await get(GOOGLE_NEWS[at], { json: false, retries: 1 });
+          xml = await response.text();
+        } catch {
+          continue; // one dead feed shouldn't stop the sweep
+        }
+        for (const url of urlsFromFeed(xml)) push(url);
+      }
+    }));
+}
+
 /** Internet Archive item pages, spread across media types. */
 export async function* archiveitems(target, { get, progress, sleep }) {
   const KINDS = ["texts", "movies", "audio", "software", "image"];
