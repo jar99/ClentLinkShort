@@ -86,10 +86,13 @@ test("analysis reports which parameters were dropped", async () => {
 });
 
 test("every dictionary host encodes and decodes", async () => {
+  // The probe path is chosen so no template can absorb it — a single segment
+  // with a capital and a tilde is outside every slot charset, and the
+  // all-text template slots all sit behind multi-segment or literal shapes.
   for (const host of HOSTS) {
-    const a = await analyze(`https://${host}/probe/path`, { stripTracking: false });
+    const a = await analyze(`https://${host}/Probe~9`, { stripTracking: false });
     assert.equal(a.hostByte, HOSTS.indexOf(host), `${host} should hit the dictionary`);
-    assert.equal((await expand(a.payload)).href, `https://${host}/probe/path`);
+    assert.equal((await expand(a.payload)).href, `https://${host}/Probe~9`);
   }
 });
 

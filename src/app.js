@@ -13,7 +13,7 @@ import {
 import {
   checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
 } from "./sign.js";
-import { toEmoji, decodeTransport } from "./transport.js";
+import { toEmoji, toDense, decodeTransport } from "./transport.js";
 import { qrMatrix } from "./qr.js";
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -373,7 +373,10 @@ function setUpCreate(prefill = "") {
 
     // Tags are computed over the payload, so they never change where the link
     // goes — stripping one leaves a working link, it just stops being checkable.
-    let fragment = field("emoji").checked ? toEmoji(analysis.payload) : analysis.payload;
+    const style = field("style").value;
+    let fragment = style === "emoji" ? toEmoji(analysis.payload)
+      : style === "dense" ? toDense(analysis.payload)
+      : analysis.payload;
     const passphrase = field("passphrase").value.trim();
     try {
       if (passphrase) {
@@ -461,7 +464,17 @@ function setUpCreate(prefill = "") {
 
   input.addEventListener("input", schedule);
   input.addEventListener("paste", () => setTimeout(safeUpdate, 0));
-  for (const id of ["clean", "preview", "tamper"]) $(id).addEventListener("change", safeUpdate);
+  const STYLE_NOTES = {
+    plain: "Base64url; survives every app and clipboard",
+    dense: "≈7% shorter with URL punctuation; some chat apps cut links at it",
+    emoji: "a quarter fewer characters to look at; some apps mangle emoji",
+  };
+  for (const id of ["clean", "preview", "tamper", "style"]) {
+    $(id).addEventListener("change", () => {
+      $("style-note").textContent = STYLE_NOTES[field("style").value];
+      safeUpdate();
+    });
+  }
   $("passphrase").addEventListener("input", schedule);
 
   $("copy").addEventListener("click", async () => {

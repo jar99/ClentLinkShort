@@ -89,11 +89,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **62.9%** overall, median **56.1%** |
+| Payload vs input URL | **62.9%** overall, median **56.0%** |
 | Payload shorter than input | **99.9%** |
-| Host dictionary hit rate | **11.2%** |
+| Host dictionary hit rate | **11.0%** |
 | Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 78.1%, text 15.8%, template 5.7%, deflate 0.3%, raw 0.1% |
+| Winning body mode | host 78.0%, text 15.6%, template 6.0%, deflate 0.3%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -238,14 +238,25 @@ real one.
 
 Append `~` to a link to preview where it goes instead of going there.
 
+**Link styles.** The canonical payload is Base64url — the only alphabet that survives
+every chat app, terminal and clipboard, and the form all integrity tags are computed
+over. Two opt-in dresses re-spell the same bits: **dense** (leading `~`) writes the
+payload in base 87 over every character a browser keeps verbatim in a fragment,
+about 7% fewer characters at the cost of punctuation some apps cut links at; **emoji**
+packs 8 bits a glyph into the animal block, a quarter fewer characters to look at.
+Both are exact re-encodings — the decoder detects the dress from the first character
+and the same tag verifies the link in any spelling.
+
 ## How the encoding works
 
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **Known URL shapes collapse to an ID.**  90 templates cover YouTube, Amazon,
-   imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv
-   and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
+2. **Known URL shapes collapse to an ID.**  247 templates cover YouTube, Amazon,
+   imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv,
+   Google Docs and Drive, Discord and WhatsApp invites, the big shorteners (bit.ly,
+   tinyurl, t.co), the news sites' date-and-slug shapes, Steam, IMDb, Wikipedia in
+   ten languages, the Stack Exchange network and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
    information; templated it is 15. Each slot is encoded at its own alphabet's width —
    a YouTube ID is Base64url so 6 bits a character, an Amazon ASIN is uppercase and
    digits so also 6, a numeric status ID is 4 — where the general text encoder would
@@ -281,7 +292,7 @@ Append `~` to a link to preview where it goes instead of going there.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: host wins 78.1%, text 15.8%, templates 5.7%, deflate 0.3%, raw 0.1%.
+On the corpus: host wins 78.0%, text 15.6%, templates 6.0%, deflate 0.3%, raw 0.0%.
 
 ## Tamper resistance
 
@@ -434,8 +445,8 @@ whole experience. The build inlines the module graph, stylesheet and icon into o
 file.
 
 ```
-Source  ~50 kB across 6 files
-Built   ~31 kB raw · ~11 kB gzip · ~10 kB brotli · 1 request
+Source  ~172 kB across 19 files (over half of it the mined tables and templates)
+Built   ~95 kB raw · ~30 kB gzip · ~26 kB brotli · 1 request
 ```
 
 The minifier is a tokeniser, not a pile of regexes: it tracks strings, template

@@ -29,6 +29,79 @@ import { B64, BitReader, ClentError } from "./bits.js";
 
 const EMOJI_BASE = 0x1f400;
 
+/**
+ * The dense alphabet: every printable ASCII character a WHATWG-parsing
+ * browser keeps verbatim in a fragment (the parser percent-encodes only
+ * space, `"`, `<`, `>` and the backtick there), except "." (the tag
+ * separator), "%" (percent-decoding would eat it) and "~" (the marker and
+ * preview suffix — keeping it out of the digits means a dense payload can
+ * never END with "~", so `~…~` is always dense-plus-preview). 87 symbols
+ * is log2(87) ≈ 6.44 bits a character against Base64url's 6 — several
+ * characters saved on a long link, bought with exactly the characters
+ * chat apps like to cut links at. Opt-in, like emoji.
+ */
+const DENSE = B64 + "!$&'()*+,;=:@/?#[]{}|^\\";
+const DENSE_BASE = BigInt(DENSE.length);
+const DENSE_INDEX = new Map([...DENSE].map((c, i) => [c, i]));
+/**
+ * Dense payloads always OPEN with "~" — never a Base64url character or a
+ * dense digit, so detection is unambiguous in both directions.
+ */
+const DENSE_MARK = "~";
+
+/** Is this fragment payload wearing the dense transport? */
+export function isDense(payload) {
+  return payload.startsWith(DENSE_MARK);
+}
+
+/**
+ * Re-dress a canonical Base64url payload in the dense alphabet.
+ *
+ * The whole payload becomes one big integer with a leading 1 as sentinel
+ * (so leading zero bits survive), written in base 87. Exact by
+ * construction: BigInt arithmetic, no rounding anywhere.
+ * @param {string} payload
+ * @returns {string}
+ */
+export function toDense(payload) {
+  let value = 1n;
+  for (const c of payload) {
+    const bits = DENSE_INDEX.get(c); // b64url is a prefix of DENSE
+    value = (value << 6n) | BigInt(bits);
+  }
+  let out = "";
+  while (value > 0n) {
+    out = DENSE[Number(value % DENSE_BASE)] + out;
+    value /= DENSE_BASE;
+  }
+  return DENSE_MARK + out;
+}
+
+/**
+ * Undress a dense payload back to canonical Base64url.
+ * @param {string} payload
+ * @returns {string}
+ * @throws {ClentError}
+ */
+export function fromDense(payload) {
+  let value = 0n;
+  for (const c of payload.slice(1)) {
+    const digit = DENSE_INDEX.get(c);
+    if (digit === undefined)
+      throw new ClentError("This link carries a character that doesn't belong.");
+    value = value * DENSE_BASE + BigInt(digit);
+  }
+  if (value <= 1n) throw new ClentError("This link is empty.");
+  // Pop 6-bit characters until only the sentinel bit remains.
+  let out = "";
+  while (value > 1n) {
+    out = B64[Number(value & 63n)] + out;
+    value >>= 6n;
+  }
+  if (value !== 1n) throw new ClentError("This link is damaged.");
+  return out;
+}
+
 /** Is this fragment payload wearing the emoji transport? */
 export function isEmoji(payload) {
   const first = payload.codePointAt(0) ?? 0;
@@ -105,5 +178,7 @@ export function fromEmoji(payload) {
  * @returns {string}
  */
 export function decodeTransport(payload) {
-  return isEmoji(payload) ? fromEmoji(payload) : payload;
+  if (isEmoji(payload)) return fromEmoji(payload);
+  if (isDense(payload)) return fromDense(payload);
+  return payload;
 }

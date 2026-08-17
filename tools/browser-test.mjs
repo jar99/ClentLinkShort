@@ -313,6 +313,51 @@ try {
     await clipped.close();
   }
 
+  // ---- link styles: dense and emoji ---------------------------------------
+  {
+    const wait = async (previous) => {
+      await page.waitForFunction((old) => {
+        const field = document.getElementById("short");
+        return field && field.value && field.value !== old;
+      }, previous, { timeout: 5000 });
+      return page.inputValue("#short");
+    };
+    // Long enough that the dense dress must strictly win: the ~ marker costs
+    // one character, the 87-symbol alphabet earns it back about every 15.
+    const target = "https://internal.example-corp.io/teams/platform/runbooks/" +
+      "incident-response-checklist-2026?revision=41";
+    const stale = await page.inputValue("#short").catch(() => "");
+    await page.fill("#url", target);
+    const plain = await wait(stale);
+
+    await page.selectOption("#style", "dense");
+    const dense = await wait(plain);
+    check("the dense style re-dresses the payload behind a ~",
+      dense.includes("#~") || dense.includes("#!~"), dense.slice(-30));
+    check("the dense link is shorter than the standard one",
+      dense.length < plain.length, `${dense.length} vs ${plain.length}`);
+
+    const follower = await context.newPage();
+    await follower.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "DEST" }));
+    await follower.goto(dense);
+    await follower.waitForURL((url) => !url.href.startsWith(BASE), { timeout: 5000 })
+      .catch(() => {});
+    check("a dense link follows to the destination",
+      follower.url() === target, follower.url());
+    await follower.close();
+
+    await page.selectOption("#style", "emoji");
+    const emoji = await wait(dense);
+    check("the emoji style produces an emoji payload",
+      /#\u{1F400}|#[\u{1F400}-\u{1F4FF}]/u.test(emoji), emoji.slice(-30));
+
+    await page.selectOption("#style", "plain");
+    await wait(emoji);
+  }
+
   // ---- maker-side honesty notes ------------------------------------------
   {
     await page.evaluate(() => { document.querySelector(".advanced").open = true; });

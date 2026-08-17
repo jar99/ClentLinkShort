@@ -2,9 +2,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    # The repository's default branch. "main" is listed too so a later
-    # rename needs no workflow change.
-    branches: [claude/github-pages-link-shortener-1bozyz, main]
+    # Deploys come from main and nowhere else; feature branches get the same
+    # checks from ci.yml without touching the live site.
+    branches: [main]
   workflow_dispatch:
 
 permissions:

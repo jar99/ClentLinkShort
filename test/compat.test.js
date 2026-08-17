@@ -69,9 +69,9 @@ test("the indexed tables only ever grow", () => {
   // append. Appending new entries is fine — extend the pin when you do.
   assert.ok(HOSTS.length >= 253);
   assert.equal(hash(HOSTS.slice(0, 253)), "2940b57ecb175911", "HOSTS prefix changed");
-  assert.ok(TEMPLATES.length >= 90);
-  assert.equal(hash(TEMPLATES.slice(0, 90).map((t) => [t.pattern, ...t.slots])),
-    "d2c8c41958415425", "TEMPLATES prefix changed");
+  assert.ok(TEMPLATES.length >= 247);
+  assert.equal(hash(TEMPLATES.slice(0, 247).map((t) => [t.pattern, ...t.slots])),
+    "e3f0084eaafb5353", "TEMPLATES prefix changed");
   assert.ok(ENCODABLE_ORDER.length >= 13);
   assert.equal(hash(ENCODABLE_ORDER.slice(0, 13)), "b1811f4d592941c5",
     "ENCODABLE_ORDER prefix changed");

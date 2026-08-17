@@ -100,7 +100,9 @@ export { TEMPLATES } from "./templates.js";
 export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
-export { isEmoji, toEmoji, fromEmoji, decodeTransport } from "./transport.js";
+export {
+  isEmoji, toEmoji, fromEmoji, isDense, toDense, fromDense, decodeTransport,
+} from "./transport.js";
 
 /**
  * Wire format version this build writes. Version 1 is FROZEN: its tables

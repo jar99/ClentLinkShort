@@ -124,8 +124,12 @@
         <span>Tamper check<em>4 characters; catches a link that got clipped or edited</em></span>
       </label>
       <label class="opt">
-        <input type="checkbox" id="emoji">
-        <span>Emoji link<em>a quarter fewer characters to look at; some apps mangle emoji</em></span>
+        <select id="style" aria-label="Link style">
+          <option value="plain" selected>Standard</option>
+          <option value="dense">Dense</option>
+          <option value="emoji">Emoji</option>
+        </select>
+        <span>Link style<em id="style-note">Base64url; survives every app and clipboard</em></span>
       </label>
     </div>
 
@@ -315,6 +319,11 @@
       <dt>Does it work offline?</dt>
       <dd>After the first visit, yes. The page keeps a copy of itself, and
         links decode in the browser without any network.</dd>
+      <dt>What are the link styles?</dt>
+      <dd>Standard uses only letters, digits, dash and underscore — it
+        survives every chat app and clipboard. Dense packs the same link into
+        fewer characters using URL punctuation, and Emoji spells it in emoji.
+        All three open identically; pick Standard when unsure.</dd>
     </dl>
   </section>
 

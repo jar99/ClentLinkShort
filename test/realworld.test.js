@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { shorten, expand, analyze } from "../src/clent.js";
-import { toEmoji } from "../src/transport.js";
+import { toEmoji, toDense } from "../src/transport.js";
 
 const ORIGIN = 16; // "https://nul.im/#"
 
@@ -59,9 +59,12 @@ test("subdomain-shaped hosts profit from the host tokens", async () => {
   }
 });
 
-test("every wild link also survives the emoji dress", async () => {
+test("every wild link also survives the emoji and dense dresses", async () => {
   for (const url of WILD.slice(0, 6)) {
     const payload = await shorten(url, { stripTracking: false });
     assert.equal((await expand(toEmoji(payload))).href, new URL(url).href, url);
+    assert.equal((await expand(toDense(payload))).href, new URL(url).href, url);
+    // The dense dress must actually be denser.
+    assert.ok(toDense(payload).length <= payload.length + 1, url);
   }
 });

@@ -6,33 +6,33 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.6290301830325494,
+  "payloadRatio": 0.6286500466062308,
   "payloadShorterPct": 99.92188822406743,
-  "medianRatio": 0.5609756097560976,
-  "p90Ratio": 0.717391304347826,
-  "linkSavingsMean": -0.030571232716957157,
+  "medianRatio": 0.56,
+  "p90Ratio": 0.7169811320754716,
+  "linkSavingsMean": -0.030210798510714624,
   "linkSavingsMedian": 0,
-  "linkShorterPct": 46.71860659772746,
+  "linkShorterPct": 46.7414344924831,
   "bareShorterPct": 3.394683321553751,
-  "deepShorterPct": 79.48820755360265,
+  "deepShorterPct": 79.52830214410596,
   "bareCount": 277316,
   "deepCount": 366633,
   "deepSavingsMedian": 0.10526315789473684,
-  "deepSavingsMean": 0.10313686837086247,
+  "deepSavingsMean": 0.10376992989744468,
   "breakEvenLength": 25,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
       "breakEven": 25,
-      "shorterPct": 46.71860659772746,
+      "shorterPct": 46.7414344924831,
       "medianSaving": 0
     },
     {
       "label": "a github.io project page",
       "length": 40,
       "breakEven": 110,
-      "shorterPct": 8.916078757789824,
+      "shorterPct": 8.942012488566641,
       "medianSaving": -0.6000000000000001
     },
     {
@@ -40,18 +40,18 @@
       "length": 0,
       "breakEven": 10,
       "shorterPct": 99.92188822406743,
-      "medianSaving": 0.4390243902439024
+      "medianSaving": 0.43999999999999995
     }
   ],
   "modes": {
-    "text": 102016,
-    "raw": 335,
+    "text": 100724,
+    "raw": 316,
     "deflate": 2098,
-    "host": 502951,
-    "template": 36549
+    "host": 502227,
+    "template": 38584
   },
-  "templatePct": 5.675760036897332,
-  "dictHitPct": 11.190793059698827,
+  "templatePct": 5.991778852051948,
+  "dictHitPct": 10.992174846144648,
   "trackingPct": 3.645785613456966,
-  "trackingSavingPct": 25.517613082188046
+  "trackingSavingPct": 25.517963387128496
 }
