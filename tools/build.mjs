@@ -113,7 +113,14 @@ function applyStrictCsp(html) {
     "default-src 'none'",
     `script-src ${scripts.map(sha256).join(" ")}`,
     `style-src ${styles.map(sha256).join(" ") || "'none'"}`,
-    "img-src data:",
+    // 'self' beside data: lets the manifest reference icon.svg; the worker
+    // and manifest sources are the service worker and web app manifest —
+    // both same-origin files this build writes.
+    "img-src data: 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    // The service worker's background refresh runs in worker scope, not
+    // under this document policy, so connect-src stays closed.
     "connect-src 'none'",
     "form-action 'none'",
     "base-uri 'none'",
@@ -213,6 +220,17 @@ async function main() {
   // GitHub Pages serves 404.html for unknown paths. Serving the app there too
   // means a mistyped path still resolves the fragment instead of dead-ending.
   await writeFile(path.join(DIST, "404.html"), html);
+
+  // The offline pieces: manifest, icon, and the service worker stamped with
+  // this build's content hash so a deploy rotates the cache.
+  const buildHash = createHash("sha256").update(html).digest("hex").slice(0, 12);
+  const swSource = await readFile(path.join(SRC, "sw.js"), "utf8");
+  await writeFile(path.join(DIST, "sw.js"),
+    minifyJS(swSource.replace(/\{\{cacheVersion\}\}/g, () => buildHash)));
+  await writeFile(path.join(DIST, "manifest.webmanifest"),
+    await readFile(path.join(SRC, "manifest.webmanifest"), "utf8"));
+  await writeFile(path.join(DIST, "icon.svg"),
+    await readFile(path.join(SRC, "icon.svg"), "utf8"));
 
   const after = sizes("index.html", html);
   const beforeTotal = before.reduce((sum, s) => sum + s.raw, 0);

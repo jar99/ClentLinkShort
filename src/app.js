@@ -13,6 +13,7 @@ import {
 import {
   checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
 } from "./sign.js";
+import { qrMatrix } from "./qr.js";
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** The same lookup, for elements the code reads values or state from. */
@@ -311,7 +312,8 @@ function renderBreakdown(result) {
   }));
 }
 
-function setUpCreate() {
+/** @param {string} [prefill] URL handed over by the bookmarklet fragment */
+function setUpCreate(prefill = "") {
   const input = field("url");
   const error = $("error");
   const result = $("result");
@@ -321,6 +323,12 @@ function setUpCreate() {
     field("tamper").checked = false;
     field("tamper").disabled = true;
   }
+
+  // The bookmarklet can only be written at runtime: its target is wherever
+  // this page is actually served from, which a static file cannot know.
+  const mark = anchor("bookmarklet");
+  mark.href = "javascript:location.href=" +
+    JSON.stringify(origin() + "#s=") + "+encodeURIComponent(location.href)";
 
   if (!canCompress) {
     $("clean-note").textContent =
@@ -373,6 +381,7 @@ function setUpCreate() {
     field("short").value = link;
     result.hidden = false;
     breakdown.hidden = false;
+    renderQr();
 
     const before = input.value.trim().length;
     const after = link.length;
@@ -457,6 +466,44 @@ function setUpCreate() {
     setTimeout(() => { button.textContent = "Copy"; }, 1400);
   });
 
+  // The QR is the same link for another device's camera; it renders from
+  // the finished link string, so it can never disagree with the text field.
+  const qrBox = $("qr-box");
+  const qrButton = $("qr");
+  const renderQr = () => {
+    qrBox.querySelector("svg")?.remove();
+    if (qrBox.hidden) return;
+    const link = field("short").value;
+    const code = link && qrMatrix(link);
+    if (!code) { qrBox.hidden = true; qrButton.setAttribute("aria-pressed", "false"); return; }
+    const { size, modules } = code;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "QR code for the short link");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    let d = "";
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (modules[y * size + x]) d += `M${x} ${y}h1v1h-1z`;
+      }
+    }
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "#000");
+    svg.append(path);
+    qrBox.prepend(svg);
+  };
+  qrButton.addEventListener("click", () => {
+    qrBox.hidden = !qrBox.hidden;
+    qrButton.setAttribute("aria-pressed", String(!qrBox.hidden));
+    renderQr();
+  });
+
+  if (prefill) {
+    input.value = prefill;
+    safeUpdate();
+  }
   input.focus();
 }
 
@@ -464,7 +511,17 @@ function setUpCreate() {
  * Entry
  * -------------------------------------------------------------------------- */
 
-if (location.hash.length > 1) {
+if (location.hash.startsWith("#s=")) {
+  // The bookmarklet's fragment: open the maker prefilled. The URL rides the
+  // fragment for the same reason payloads do — it never reaches a server.
+  let prefill = "";
+  try {
+    prefill = decodeURIComponent(location.hash.slice(3));
+  } catch { /* a mangled prefill just opens the maker empty */ }
+  // Cleared immediately so a reload or a copied address doesn't re-carry it.
+  history.replaceState(null, "", location.pathname + location.search);
+  whenReady(() => setUpCreate(prefill));
+} else if (location.hash.length > 1) {
   // Every expected failure inside runRedirect renders its own card; this
   // catch is for the unexpected ones, which otherwise leave the spinner
   // running forever with the error only in the console.
@@ -476,3 +533,10 @@ if (location.hash.length > 1) {
 // Pasting a Clent link into an already-open tab only changes the fragment,
 // which is not a navigation, so nothing would happen without this.
 addEventListener("hashchange", () => location.reload());
+
+// After one visit the page works with no connection: links decode locally,
+// so the network was only ever needed to fetch this document. Failure is
+// fine — the page just stays online-only.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}

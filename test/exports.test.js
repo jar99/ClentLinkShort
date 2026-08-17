@@ -17,7 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const MODULES = [
   "clent", "bits", "huffman", "deflate", "text", "textcode", "host",
-  "hostcode", "tracking", "risk", "hosts", "schemes", "templates", "sign",
+  "hostcode", "tracking", "risk", "hosts", "schemes", "templates", "sign", "qr",
 ];
 
 /**

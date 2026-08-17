@@ -15,5 +15,9 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js"]
+  "include": ["src/**/*.js"],
+  // The service worker runs against the webworker lib, which cannot share a
+  // program with "dom"; it is small, self-contained and covered by the
+  // browser end-to-end tests instead.
+  "exclude": ["src/sw.js"]
 }

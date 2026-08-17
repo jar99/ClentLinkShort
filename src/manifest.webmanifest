@@ -1,0 +1,14 @@
+{
+  "name": "Clent — private link shortener",
+  "short_name": "Clent",
+  "description": "A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "minimal-ui",
+  "background_color": "#faf9f6",
+  "theme_color": "#121210",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

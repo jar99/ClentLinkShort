@@ -19,6 +19,8 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+import { shorten } from "../src/clent.js";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIR = process.argv[2] ?? "dist";
 const PORT = 8781;
@@ -312,6 +314,99 @@ try {
       { timeout: 5000 }).catch(() => {});
     check("the note clears for an ordinary link",
       await page.locator(".maker-note").count() === 0);
+  }
+
+  // ---- bookmarklet prefill ------------------------------------------------
+  {
+    const target = "https://example.com/from/the/bookmarklet";
+    const filled = await context.newPage();
+    await filled.goto(BASE + "#s=" + encodeURIComponent(target));
+    await filled.waitForFunction(() =>
+      document.documentElement.dataset.mode !== "redirect" &&
+      /** @type {HTMLTextAreaElement} */(document.getElementById("url"))?.value,
+      { timeout: 5000 }).catch(() => {});
+    const url = await filled.inputValue("#url").catch(() => "");
+    const short = await filled.inputValue("#short").catch(() => "");
+    check("a #s= fragment opens the maker prefilled",
+      url === target && short.includes("#"), `url=${url.slice(0, 40)}`);
+    check("the prefill fragment is cleared from the address bar",
+      !filled.url().includes("#s="), filled.url());
+    const mark = await filled.getAttribute("#bookmarklet", "href");
+    check("the bookmarklet points back at this origin",
+      (mark ?? "").startsWith("javascript:") && (mark ?? "").includes("#s="),
+      (mark ?? "none").slice(0, 60));
+    await filled.close();
+  }
+
+  // ---- QR code ------------------------------------------------------------
+  {
+    await page.fill("#url", "https://example.com/qr/target");
+    await page.waitForFunction(() =>
+      /** @type {HTMLInputElement} */(document.getElementById("short"))?.value,
+      { timeout: 5000 });
+    await page.click("#qr");
+    await page.waitForSelector("#qr-box svg", { timeout: 5000 }).catch(() => {});
+    const modules = await page.evaluate(() => {
+      const svg = document.querySelector("#qr-box svg");
+      if (!svg) return null;
+      const [, , w] = (svg.getAttribute("viewBox") ?? "").split(" ").map(Number);
+      return { size: w, path: svg.querySelector("path")?.getAttribute("d")?.length ?? 0 };
+    });
+    check("the QR button renders a code for the link",
+      !!modules && modules.size >= 21 && modules.path > 500,
+      JSON.stringify(modules));
+    await page.click("#qr");
+    check("the QR toggles back off",
+      await page.locator("#qr-box svg").count() === 0);
+  }
+
+  // ---- offline: the service worker keeps the page working -----------------
+  // Only the built site ships sw.js, so this block is dist-only.
+  if (DIR === "dist") {
+    const offlinePage = await context.newPage();
+    await offlinePage.goto(BASE);
+    const registered = await offlinePage.evaluate(async () => {
+      if (!("serviceWorker" in navigator)) return "unsupported";
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      return registration ? "active" : "timeout";
+    });
+    check("the service worker installs", registered === "active", registered);
+
+    if (registered === "active") {
+      await context.setOffline(true);
+      const airplane = await context.newPage();
+      let served = false;
+      try {
+        await airplane.goto(BASE, { timeout: 8000 });
+        await airplane.waitForSelector("#url", { timeout: 5000 });
+        served = true;
+      } catch { /* recorded below */ }
+      check("the page loads with the network gone", served);
+      if (served) {
+        // And a link still decodes offline: the whole point of carrying the
+        // destination inside the fragment.
+        const preview = await context.newPage();
+        // A payload made by the library right now, so the check can never
+        // drift out of step with the shipped tables.
+        const payload = await shorten("https://example.com/offline/works");
+        let dest = "";
+        try {
+          await preview.goto(BASE + "#" + payload + "~", { timeout: 8000 });
+          await preview.waitForFunction(() =>
+            document.getElementById("r-dest")?.textContent, { timeout: 5000 });
+          dest = (await preview.textContent("#r-dest")).trim();
+        } catch { /* recorded below */ }
+        check("a link still decodes with the network gone",
+          dest === "https://example.com/offline/works", dest.slice(0, 50));
+        await preview.close();
+      }
+      await context.setOffline(false);
+      await airplane.close();
+    }
+    await offlinePage.close();
   }
 
   // ---- signed links -------------------------------------------------------

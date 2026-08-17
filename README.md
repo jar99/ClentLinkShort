@@ -14,7 +14,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 129 tests, no dependencies
+npm test              # 134 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -381,6 +381,9 @@ src/text.js       Huffman text mode, token DP, strict decoder
 src/textcode.js   its mined code + tokens   (data, append-only)
 src/host.js       the host field: suffix-terminal code for any domain
 src/hostcode.js   its mined code + suffixes (data, append-only)
+src/qr.js         dependency-free QR encoder (byte mode, EC M, v1-11)
+src/sw.js         service worker: the page works offline after one visit
+src/manifest.webmanifest, src/icon.svg   installable-app plumbing
 src/deflate.js    bounded DEFLATE (16 KB inflate cap)
 src/tracking.js   tracking-parameter policy
 src/risk.js       phishing-shape assessment
@@ -393,7 +396,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             129 tests on node:test
+test/             134 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -405,6 +408,7 @@ test/             129 tests on node:test
   sign            checksums, signatures, tamper detection
   tables          data-table wire invariants in one place
   exports         .d.ts vs runtime export parity, both directions
+  qr              matrices vs a reference implementation, capacity edges
   corpus          the real-URL corpus, one shared scan
   optimality      brute-force check that no smaller encoding existed
   minify          that the minified library computes what the source computes
@@ -485,6 +489,14 @@ whole experience. Three things follow from that:
 - **The view switch is CSS**, driven by an attribute set before first paint, so someone
   who merely clicked a link never sees the creator UI flash past.
 - **One request.** Everything is inlined, so there is no second round trip.
+- **After the first visit, no requests at all.** A service worker caches the
+  page (cache-first, refreshed in the background, rotated per deploy by build
+  hash), so the site loads and links decode with no connection whatsoever —
+  the destination is inside the fragment, so nothing else was ever fetched.
+  The page also installs as a lightweight app via a web manifest; the icon is
+  SVG, which Chromium-family browsers use for install (Safari falls back to
+  its screenshot behaviour — a deliberate trade against shipping a raster
+  pipeline).
 
 Without JavaScript the explanatory content reads normally and a `<noscript>` block says
 plainly that the box won't work and why. Following a Clent link genuinely requires

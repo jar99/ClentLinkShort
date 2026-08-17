@@ -13,7 +13,7 @@
   frame-ancestors cannot be set from a meta tag, and GitHub Pages cannot send
   headers, so clickjacking protection is the one thing not available here.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src data: 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Clent — private, open-source link shortener</title>
 <meta name="description" content="A free, open-source link shortener that stores nothing. The destination is compressed into the link itself — no database, no accounts, no tracking, no logs, and links never expire.">
 <link rel="canonical" href="{{siteUrl}}">
@@ -23,11 +23,15 @@
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, no logs.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon.svg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
 <script>
   // Choose the view before first paint so the creator UI never flashes
-  // in front of someone who only clicked a link.
-  if (location.hash.length > 1) document.documentElement.dataset.mode = "redirect";
+  // in front of someone who only clicked a link. "#s=…" is the one fragment
+  // that is not a payload: the bookmarklet's "open the maker prefilled".
+  if (location.hash.length > 1 && !location.hash.startsWith("#s="))
+    document.documentElement.dataset.mode = "redirect";
 </script>
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
@@ -131,7 +135,12 @@
       <div class="out">
         <input type="text" id="short" readonly spellcheck="false" aria-label="Your short link">
         <button class="btn primary" id="copy" type="button">Copy</button>
+        <button class="btn" id="qr" type="button" aria-pressed="false">QR</button>
       </div>
+      <figure class="qr-box" id="qr-box" hidden>
+        <figcaption class="muted small">Scan to open on another device. The
+        destination is inside the code itself, same as the link.</figcaption>
+      </figure>
 
       <div class="compare" aria-hidden="true">
         <div class="bar-row">
@@ -147,28 +156,32 @@
       </div>
       <p class="verdict" id="verdict"></p>
     </div>
+    <p class="muted small">
+      Shorten from anywhere: drag
+      <a id="bookmarklet" href="#" draggable="true">Shorten this page</a>
+      to your bookmarks bar and click it on any page. The address travels in
+      the link fragment, so it never reaches a server — not even this one.
+    </p>
   </section>
 
   <section class="card note-card">
     <h2>Is it actually shorter?</h2>
     <p>
-      Usually not, and it's worth being straight about that. The encoded
-      destination is {{medianPct}} of the URL it came from, but every link also
-      carries this site's address, which is {{originLength}} characters before the
-      payload even starts. A URL has to be longer than about {{breakEven}}
-      characters before that trade comes out ahead.
+      For the links people actually share, yes. The encoded destination is
+      {{medianPct}} of the URL it came from, and this site's address adds only
+      {{originLength}} characters in front — so anything longer than about
+      {{breakEven}} characters comes out ahead.
     </p>
     <p>
-      Most URLs aren't. Of the {{checked}} tested, {{linkShorter}} produce a shorter
-      link on this domain. The ones that do are the ones people actually run through
-      a shortener: tracking-laden campaign links, document links, anything with a
-      session token in it. The counter above tells you which kind you pasted.
+      Of the {{checked}} real URLs tested, {{linkShorter}} produce a shorter link
+      here, including {{deepShorter}} of deep links — article pages, products,
+      shares, anything past a bare homepage. Bare homepages are the one shape
+      that rarely wins: there is nothing in them to compress away. The counter
+      above tells you which kind you pasted.
     </p>
     <p class="muted small">
-      A shorter domain moves that threshold more than the encoding can. On
-      <code>clent.link</code> the break-even would be around {{shortBreakEven}} characters instead.
-      What you get regardless is a link that nothing is storing and that will still
-      work when this page is gone.
+      What you get regardless of length is a link that nothing is storing and
+      that will still work when this page is gone.
     </p>
   </section>
 
@@ -341,6 +354,11 @@ scheme template  8 bits of pattern index, then just the IDs</code></pre>
   <!-- ───────────────────────────   limits   ──────────────────────────── -->
   <section>
     <h2>Limits</h2>
+    <p>
+      The page works offline after the first visit — a service worker keeps a
+      copy, and links decode without any network. The first visit, though,
+      needs a connection like any other page.
+    </p>
     <ul class="limits">
       <li>
         <b>It isn't a shortener for most URLs.</b> See above: below about
