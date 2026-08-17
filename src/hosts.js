@@ -3,7 +3,7 @@
  *
  * APPEND-ONLY. An entry's position IS its wire encoding, so reordering or
  * removing one silently repoints every link already shared. Add to the end,
- * never anywhere else, and never past 256 entries.
+ * never anywhere else, and never past 256 entries — the index is 8 bits.
  *
  * @type {readonly string[]}
  */
@@ -40,7 +40,35 @@ export const HOSTS = Object.freeze([
   "yelp.com","weather.com","espn.com","strava.com","steamcommunity.com",
   "store.steampowered.com","itch.io","patreon.com","kickstarter.com","gofundme.com",
   "vimeo.com","dailymotion.com","flickr.com","unsplash.com","behance.net",
-  "dribbble.com","codepen.io","jsfiddle.net","codesandbox.io","observablehq.com"
+  "dribbble.com","codepen.io","jsfiddle.net","codesandbox.io","observablehq.com",
+
+  // ---- appended: shopping, news, social and image hosts ------------------
+  //
+  // Curated rather than mined. Frequency in the corpus is the wrong signal
+  // here: it measures what Wikipedia cites and what my sources happened to
+  // return, which is how "catalogueoflife.org" and "wikisky.org" end up
+  // outscoring every retailer on the web. No dataset available here measures
+  // what people actually put through a shortener, so these are chosen by
+  // category instead, and the reasoning is written down instead of implied.
+  "aliexpress.com","temu.com","shein.com","wayfair.com","ikea.com",
+  "homedepot.com","lowes.com","argos.co.uk","johnlewis.com","asos.com",
+  "zalando.co.uk","mercadolibre.com","rakuten.co.jp","taobao.com","jd.com",
+  "alibaba.com","newegg.com","chewy.com","sephora.com","nordstrom.com",
+  "macys.com","costco.com","tesco.com","carrefour.fr","otto.de",
+  "bsky.app","threads.net","mastodon.social","lemmy.world","vk.com",
+  "weibo.com","snapchat.com","ok.ru","xiaohongshu.com","line.me",
+  "wa.me","t.co","m.youtube.com","youtu.be","old.reddit.com",
+  "i.imgur.com","upload.wikimedia.org","commons.wikimedia.org","i.redd.it",
+  "preview.redd.it","pbs.twimg.com","cdn.discordapp.com","media.giphy.com",
+  "live.staticflickr.com","images.unsplash.com","i.ibb.co","postimg.cc",
+  "ytimg.com","i.pinimg.com","media.tenor.com",
+  "apnews.com","cnbc.com","forbes.com","businessinsider.com","theatlantic.com",
+  "newyorker.com","aljazeera.com","dw.com","france24.com","lemonde.fr",
+  "spiegel.de","elpais.com","corriere.it","asahi.com","scmp.com",
+  "straitstimes.com","abc.net.au","cbc.ca","telegraph.co.uk","independent.co.uk",
+  "dailymail.co.uk","standard.co.uk","sky.com","itv.com","rte.ie",
+  "phys.org","science.org","scientificamerican.com","newscientist.com",
+  "theconversation.com","gutenberg.org","books.google.com","macrumors.com"
 ]);
 
 /** @type {ReadonlyMap<string, number>} */

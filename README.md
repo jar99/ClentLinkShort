@@ -13,7 +13,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 59 tests, no dependencies
+npm test              # 64 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -24,39 +24,48 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 Usually not, and that's worth saying up front.
 
-The encoded destination is about **71% of the URL it came from** (median). But every
-link also carries this site's address, which is 40 characters before the payload
-starts. A URL has to be longer than roughly **295 characters** before that trade comes
-out ahead on `jar99.github.io/ClentLinkShort/`.
+The encoded destination is **68% of the URL it came from** (median). But every link
+also carries this site's address, which is 40 characters before the payload starts. A
+URL has to be longer than about **180 characters** before that trade comes out ahead on
+`jar99.github.io/ClentLinkShort/`.
 
-Measured over 600,000 real URLs:
+Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `jar99.github.io/ClentLinkShort/#` (40c) | ~295 | 0.2% |
-| `jar99.github.io/l/#` (27c) | ~205 | 1.8% |
-| `clent.link/#` (20c) | ~175 | 8.7% |
-| payload alone, no prefix | ~10 | 98.8% |
+| `jar99.github.io/ClentLinkShort/#` (40c) | ~180 | 3.6% |
+| `jar99.github.io/l/#` (27c) | ~170 | 5.9% |
+| `clent.link/#` (20c) | ~105 | 12.7% |
+| payload alone, no prefix | ~10 | 99.1% |
 
-So the domain matters more than the codec does. What you get regardless of length is a
+The domain matters more than the codec does. What you get regardless of length is a
 link nothing is storing, that can't be revoked or logged, and that still resolves when
 whoever made it has forgotten about it.
 
 ## Validation
 
-`corpus/` holds 600,000 real URLs: Wikipedia citations from 30 language editions,
-Hacker News submissions, and domains from the Tranco ranking. Real URLs are messier
-than invented ones — doubled slashes, unencoded spaces, mojibake, kilobyte query
-strings, session tokens, punycode.
+`corpus/` holds 643,949 real URLs from six sources, weighted towards the kinds of link
+people actually shorten:
+
+| Source | What it contributes |
+| --- | --- |
+| Wikipedia, 30 language editions | citations — messy, old, heavily percent-encoded |
+| Tranco top 1M | ranked domains, head-weighted |
+| Hacker News | submitted links |
+| Lemmy, 8 instances | social posts: news, deals, images |
+| Wikimedia Commons | image URLs on a CDN host |
+| 36 RSS/Atom feeds | news articles and shopping deals |
 
 | | |
 | --- | --- |
-| URLs round-tripped | **600,000** |
+| URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **75.4%** overall, median **70.7%** |
-| Payload shorter than input | **98.8%** |
-| Winning body mode | text6 98.9%, deflate 0.9%, raw 0.2% |
+| Payload vs input URL | **76.0%** overall, median **68.2%** |
+| Payload shorter than input | **99.1%** |
+| Host dictionary hit rate | **16.8%** |
+| Carried tracking parameters | **3.6%**, worth 25% of the payload on those |
+| Winning body mode | text6 98.1%, deflate 1.5%, raw 0.4% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -113,9 +122,9 @@ be measured instead:
   | top 1,000 | 99.8% |
   | top 10,000 | 99.9% |
   | top 100,000 | 100% |
-  | top 1,000,000 | 15.4% |
+  | top 1,000,000 | 23.9% |
 
-  Traffic-weighted reach at Zipf *s*=1: **86.4%**. The corpus also contains 108,000
+  Traffic-weighted reach at Zipf *s*=1: **89.8%**. The corpus also contains 84,000
   distinct hosts that aren't ranked at all, which is the tail past the top million.
 
 ### DuckDuckGo
@@ -128,9 +137,11 @@ web results — a few dozen usable URLs per thousand requests. There is no suppo
 to get a result feed out of it.
 
 The sources in `tools/sources.js` are the ones that publish an API for this and
-paginate deeply enough to matter. GDELT and Stack Exchange are implemented and
-reachable but left out of the default mix: both rate-limit hard enough to cost minutes
-for a couple of percent of the corpus. Use `--source` if you want them.
+paginate deeply enough to matter. Reddit blocks scripted access too (403 on both the
+JSON and RSS endpoints), and Common Crawl and the Wayback Machine are unreachable from
+this environment. GDELT and Stack Exchange are implemented and reachable but left out
+of the default mix: both rate-limit hard enough to cost minutes for a rounding error's
+worth of corpus. Use `--source` if you want them.
 
 ## Using the codec
 
@@ -152,23 +163,51 @@ Full types in [`src/clent.d.ts`](src/clent.d.ts).
 
 ### Safety
 
-`expand()` guarantees its result has a scheme in `ENCODABLE` and throws `ClentError`
-otherwise. A fragment is entirely attacker-controlled, so this is the contract that
-makes auto-redirecting safe. `javascript:`, `data:`, `vbscript:`, `blob:` and `file:`
-are refused when encoding and when decoding, including through the verbatim path.
-`isFollowable()` narrows to `http:`/`https:` for automatic navigation; anything else
-needs a click.
+**Code execution.** `expand()` guarantees its result has a scheme in `ENCODABLE` and
+throws `ClentError` otherwise. A fragment is entirely attacker-controlled, so this is
+the contract that makes auto-redirecting safe at all. `javascript:`, `data:`,
+`vbscript:`, `blob:` and `file:` are refused when encoding and when decoding, including
+through the verbatim path. Every one- and two-character payload is swept exhaustively
+in the tests to prove no header byte can produce anything else.
+
+**Deception.** The allowlist stops a payload running code; it does nothing about a
+payload that points somewhere deliberately misleading, which is the likelier abuse of a
+redirector — the link wears this site's domain, and the destination is invisible until
+it has already happened. `assess()` looks for the shapes phishing links take and the
+page stops instead of following:
+
+| | |
+| --- | --- |
+| `https://paypal.com@evil.example/` | the part before the `@` is not the destination |
+| `https://xn--pypal-4ve.example/` | punycode that renders as a familiar name |
+| `https://192.0.2.10/admin` | a raw IP rather than a named site |
+| non-standard port, plain `http:` | shown as a note, still followed |
+
+None of this is a verdict on whether a site is malicious — that can't be known from a
+URL. These are properties an ordinary shared link almost never has.
+
+**The page itself.** The built page ships a Content-Security-Policy that names its own
+script and style by SHA-256 hash and forbids everything else: `default-src 'none'`, no
+network of any kind, no form submission, no `<base>` rewriting. An injected script would
+have the wrong hash and not run. `frame-ancestors` is *not* set, because a meta tag
+cannot set it and GitHub Pages cannot send headers — clickjacking protection is the one
+control not available here.
+
+**Privacy.** No cookies, no storage, no analytics, and one network request, for the page
+itself — all asserted in the browser tests rather than claimed. `Referrer-Policy:
+no-referrer` means the destination isn't told where you came from. The fragment never
+leaves the browser, so no server ever learns the destination.
 
 Append `~` to a link to preview where it goes instead of going there.
 
 ## How the encoding works
 
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
-   about 41% of the payload on a link that has them. It's the only step that changes
+   about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
 2. **The predictable parts become bits.** Scheme, `www.` and a trailing slash cost 12
    characters in a normal URL; here they're 3 bits in a 6-bit header.
-3. **165 common hosts collapse to one byte.**
+3. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts included, chosen by category rather than mined — corpus frequency measures what Wikipedia cites, not what people shorten.
 4. **The rest is encoded three ways and the shortest is kept:**
    - **text6** packs each byte as a 6-bit symbol written straight into the Base64url
      alphabet. Base64 is also 6 bits per character, so a lowercase URL comes out the
@@ -270,6 +309,30 @@ Push to `main`. The workflow tests, builds and publishes `dist/`; set
 **Settings → Pages → Source** to **GitHub Actions**.
 
 `dist/404.html` is a copy of the app, so a mistyped path still resolves its fragment.
+
+## Loading, no-JS and mobile
+
+The page is a redirector, so the gap between a click and knowing where to go is the
+whole experience. Three things follow from that:
+
+- **The script sits in `<head>` as a classic inline script, not a module.** Module
+  scripts are always deferred, so a redirect would wait for the entire document to
+  parse first. As a plain inline script it runs during head parsing, and the redirect
+  fires before the body exists. Anything needing the DOM goes through a `whenReady()`
+  helper instead.
+- **The view switch is CSS**, driven by an attribute set before first paint, so someone
+  who merely clicked a link never sees the creator UI flash past.
+- **One request.** Everything is inlined, so there is no second round trip.
+
+Without JavaScript the explanatory content reads normally and a `<noscript>` block says
+plainly that the box won't work and why. Following a Clent link genuinely requires
+JavaScript: the destination is inside the fragment, browsers never send fragments to
+servers, and there is no database holding a copy — so there is nothing that could
+resolve it server-side. That is the cost of the design, not an oversight.
+
+On mobile: inputs are 16px so iOS doesn't zoom on focus, tap targets are at least 32px,
+`env(safe-area-inset-*)` keeps content clear of notches, and the browser tests assert
+no horizontal overflow at 320, 360, 390, 414, 768 and 1024 pixels.
 
 ## Browser support
 

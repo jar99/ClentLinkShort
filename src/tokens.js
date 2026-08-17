@@ -13,8 +13,15 @@
  * out things like one publisher's URL scheme — those score well on a corpus
  * and are worthless on the open web.
  *
- * APPEND-ONLY, and exactly 64 entries. An entry's index is its wire encoding,
- * so changing one silently repoints every link that used it.
+ * Mining runs over the body the encoder actually emits, so hosts already in
+ * the dictionary are excluded: those never reach the body, and tokens for them
+ * would be slots spent on text that is never written.
+ *
+ * Exactly 64 entries, and APPEND-ONLY once anything is published: an entry's
+ * index is its wire encoding, so changing one repoints every link that used
+ * it. This table has been re-mined twice while the project is unreleased, and
+ * each time the wire format version was bumped so the change is at least
+ * visible. After the first real link is shared, that stops being an option.
  *
  * Order matters for nothing but the index: the encoder picks tokens by
  * dynamic programming, not by scanning this list in order.
@@ -22,12 +29,15 @@
  * @type {readonly string[]}
  */
 export const TOKENS = Object.freeze([
-  ".wikipedia", ".substack", "article", "/2026/0", ".co.uk/", "archive",
-  "science", "github", "search", "/index", "/blog/", "google", ".org/",
-  ".php?", "media", "world", ".edu/", ".com", ".htm", "news", "tion",
-  ".net", "wiki", ".org", ".asp", "stor", "atch", ".gov", "port", "tech",
-  "view", "-ai-", "-to-", "book", ".co.", "html", "ing", "ent", "the",
-  "/20", "ter", "and", "id=", "ine", "log", "es/", "ist", "ers", "for",
-  "all", "age", ".de", "art", "com", "pro", "con", "che", "res", "ver",
-  "ang", "al-", "ata", "ser", "-in",
+  ".github.io", "content", "/2026/0", "article", "archive", "source",
+  "search", "/index", "/blog/", "google", ".co.uk", ".html",
+  "image", ".php?", "world", ".com", "wiki", ".org",
+  "edia", "comm", "tion", "news", "info", ".net",
+  ".htm", ".asp", ".gov", "port", ".edu", "-to-",
+  "page", ".pdf", "post", "ons", "ing", ".jp",
+  "ent", "the", "ori", "ina", "ter", "ile",
+  "/20", "and", "mpa", "sta", "ine", "ign",
+  "pro", "man", ".de", "che", "ist", "art",
+  "ers", "res", "our", "log", "ata", "all",
+  "id=", "nce", "gra", "for"
 ]);

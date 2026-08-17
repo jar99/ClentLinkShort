@@ -56,6 +56,15 @@ try {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(`console: ${message.text()}`);
   });
+  // A CSP violation surfaces as a console error, but catch it explicitly too:
+  // a policy that silently blocks the page's own script would otherwise look
+  // like "no console errors" while nothing worked.
+  await page.addInitScript(() => {
+    addEventListener("securitypolicyviolation", (event) => {
+      (window.__cspViolations ??= []).push(
+        `${event.violatedDirective} blocked ${event.blockedURI}`);
+    });
+  });
 
   // ---- creating a link ----------------------------------------------------
   await page.goto(BASE);
@@ -177,13 +186,88 @@ try {
 
   check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
 
+  // ---- content security policy -------------------------------------------
+  const violations = await page.evaluate(() => window.__cspViolations ?? []);
+  check("no Content-Security-Policy violations", violations.length === 0,
+    violations.join(" | "));
+
+  const policy = await page.evaluate(() =>
+    document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content ?? "");
+  check("a Content-Security-Policy is present", policy.includes("default-src 'none'"));
+  if (DIR === "dist") {
+    check("the built policy pins scripts by hash",
+      /script-src 'sha256-/.test(policy) && !policy.includes("unsafe-inline"),
+      policy.slice(0, 70));
+  }
+
+  // ---- suspicious destinations are not followed silently ------------------
+  for (const [label, target] of [
+    ["userinfo", "https://paypal.com@evil.example/login"],
+    ["punycode", "https://xn--pypal-4ve.example/"],
+    ["ip literal", "https://192.0.2.10/admin"],
+  ]) {
+    // #result is already visible from the previous case, so waiting on it
+    // would read a stale link. Wait for the value itself to change.
+    const stale = await page.inputValue("#short").catch(() => "");
+    await page.fill("#url", target);
+    await page.waitForFunction(
+      (previous) => {
+        const field = document.getElementById("short");
+        return field && field.value && field.value !== previous;
+      }, stale, { timeout: 5000 });
+    const suspicious = await page.inputValue("#short");
+
+    const victim = await context.newPage();
+    await victim.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "SHOULD NOT REACH" }));
+    await victim.goto(suspicious);
+    await victim.waitForSelector("#r-warnings:not([hidden])", { timeout: 5000 })
+      .catch(() => {});
+    const stayed = victim.url().startsWith(BASE);
+    const warned = await victim.locator("#r-warnings li.warn").count();
+    check(`a ${label} destination is not followed silently`, stayed && warned > 0,
+      `stayed=${stayed} warnings=${warned}`);
+    await victim.close();
+  }
+
+  // ---- works with JavaScript switched off ---------------------------------
+  const noJs = await browser.newContext({ javaScriptEnabled: false });
+  const plain = await noJs.newPage();
+  await plain.goto(BASE);
+  const readable = await plain.locator("#create").isVisible();
+  const explains = (await plain.textContent("body")).includes("JavaScript is off");
+  check("the page still reads with JavaScript off", readable && explains,
+    `visible=${readable} noscript=${explains}`);
+  const noJsOverflow = await plain.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  check("no-JS layout does not overflow", noJsOverflow <= 0, `${noJsOverflow}px`);
+  await noJs.close();
+
   // ---- responsive ---------------------------------------------------------
-  await page.setViewportSize({ width: 360, height: 720 });
   await page.fill("#url", "https://example.com/a/reasonably/long/path?with=params");
   await page.waitForSelector("#result:not([hidden])");
-  const overflow = await page.evaluate(() =>
-    document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  check("no horizontal overflow at 360px", overflow <= 0, `${overflow}px`);
+  for (const width of [320, 360, 390, 414, 768, 1024]) {
+    await page.setViewportSize({ width, height: 780 });
+    await page.waitForTimeout(60);
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(`no horizontal overflow at ${width}px`, overflow <= 0, `${overflow}px`);
+  }
+
+  // Touch targets people actually have to hit.
+  await page.setViewportSize({ width: 360, height: 780 });
+  const small = await page.evaluate(() =>
+    [...document.querySelectorAll("#create button, #create .btn, #create input")]
+      // A checkbox is 18px but sits inside a label that toggles it, so the
+      // thing being tapped is the label. Measure what the finger actually hits.
+      .map((el) => (el.closest("label") ?? el))
+      .map((el) => ({ el: el.id || el.className, h: el.getBoundingClientRect().height }))
+      .filter((item) => item.h > 0 && item.h < 32));
+  check("touch targets are big enough on mobile", small.length === 0,
+    small.map((s) => `${s.el}:${Math.round(s.h)}px`).join(" "));
+
   await page.screenshot({ path: path.join(ROOT, "dist", "_screenshot-mobile.png") })
     .catch(() => {});
 } finally {

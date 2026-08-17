@@ -23,7 +23,10 @@ import path from "node:path";
 
 import { ROOT } from "./bundle.js";
 import { readLines } from "./corpus.js";
-import { wikipedia, hackernews, gdelt, stackexchange, trancoDomains } from "./sources.js";
+import {
+  wikipedia, hackernews, gdelt, stackexchange, trancoDomains,
+  feeds, lemmy, commons,
+} from "./sources.js";
 
 const OUT = path.join(ROOT, "corpus");
 const UA = "clent-corpus/2.1 (+https://github.com/jar99/ClentLinkShort)";
@@ -145,21 +148,33 @@ async function main() {
   // Deep links are what people actually shorten, so they dominate. Ranked
   // domains are included too, spread across the whole rank range, so the
   // corpus is not made only of what a handful of link aggregators surface.
-  // gdelt and stackexchange are deliberately absent: both are reachable but
-  // rate-limit a scripted run hard enough that they cost minutes for a couple
-  // of percent of the corpus. They stay available via --source for anyone who
-  // wants them. Wikipedia across 30 language editions already reaches further
-  // into the web than either.
+  // The mix is weighted towards what people actually shorten. Wikipedia and
+  // Hacker News were the whole corpus once and are citation- and tech-heavy;
+  // lemmy, feeds and commons exist to drag it towards shopping, news, social
+  // posts and image shares, which have completely different URL shapes.
+  //
+  // gdelt and stackexchange are reachable but absent by default: both
+  // rate-limit a scripted run hard enough to cost minutes for a rounding
+  // error's worth of corpus. Both stay available via --source.
+  // Shares reflect what each source can actually deliver, not what would be
+  // tidy: lemmy and the feeds are shallow and will fall short of their target,
+  // which is fine — they are here for the shapes they contribute, not volume.
   const plan = {
-    wikipedia: 0.50,
-    hackernews: 0.28,
-    tranco: 0.22,
+    wikipedia: 0.30,
+    tranco: 0.30,
+    hackernews: 0.18,
+    lemmy: 0.13,
+    commons: 0.06,
+    feeds: 0.03,
   };
   const generators = {
     wikipedia: (n) => wikipedia(n, context),
     hackernews: (n) => hackernews(n, context),
     gdelt: (n) => gdelt(n, context),
     stackexchange: (n) => stackexchange(n, context),
+    feeds: (n) => feeds(n, context),
+    lemmy: (n) => lemmy(n, context),
+    commons: (n) => commons(n, context),
     tranco: (n) => trancoDomains(n, ranks),
   };
 
@@ -216,6 +231,9 @@ async function main() {
     sources: {
       wikipedia: "{lang}.wikipedia.org/w/api.php?action=query&list=exturlusage, 30 editions",
       hackernews: "hn.algolia.com/api/v1/search_by_date?tags=story",
+      lemmy: "8 Lemmy instances, /api/v3/post/list — social, news, deals, images",
+      feeds: "36 RSS/Atom feeds — news and shopping deals",
+      commons: "commons.wikimedia.org/w/api.php?action=query&list=allimages — image shares",
       gdelt: "api.gdeltproject.org/api/v2/doc/doc",
       stackexchange: "api.stackexchange.com/2.3/questions?filter=withbody",
       tranco: "tranco-list.eu — ranked domains, sampled across the full range",

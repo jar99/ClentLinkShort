@@ -6,7 +6,7 @@
  */
 
 /** Wire format version this build reads and writes. */
-export declare const VERSION: 3;
+export declare const VERSION: 4;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;

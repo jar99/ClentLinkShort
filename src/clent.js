@@ -7,7 +7,7 @@
  * Zero dependencies. Runs unmodified in browsers and in Node >= 18.
  *
  * ---------------------------------------------------------------------------
- * Wire format v3
+ * Wire format v4
  *
  * A continuous bit stream written straight into the Base64url alphabet at
  * 6 bits per character. Nothing rounds up to a byte, so nothing is wasted.
@@ -38,7 +38,7 @@ import { TOKENS } from "./tokens.js";
 export { HOSTS, TOKENS };
 
 /** Wire format version this build reads and writes. */
-export const VERSION = 3;
+export const VERSION = 4;
 
 export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2;
 export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
@@ -67,12 +67,63 @@ export const ENCODABLE = new Set([
 export const FOLLOWABLE = new Set(["http:", "https:"]);
 
 /**
- * Query parameters removed when `stripTracking` is enabled. This is the only
- * transformation in the codec that changes the destination rather than just
- * re-encoding it, which is why it is opt-out and reported separately.
+ * Query parameters removed when `stripTracking` is enabled.
+ *
+ * This is the only transformation in the codec that changes the destination
+ * rather than re-encoding it, which is why it is a visible switch and is
+ * reported separately.
+ *
+ * The list errs towards leaving things alone. Anything that might select
+ * what you actually see is not here: Amazon's `th` and `psc` pick a product
+ * variant, and a bare `ref` is a real route parameter on plenty of sites even
+ * though Amazon uses it for tracking. Affiliate tags (`tag`, `campid`,
+ * `ascsubtag`) *are* removed — they are tracking identifiers, and the switch
+ * is there for anyone who is deliberately sharing their own.
  */
-export const TRACKING_PARAMS =
-  /^(?:utm_[\w-]*|fbclid|gclid|dclid|gbraid|wbraid|msclkid|yclid|ttclid|twclid|igshid|epik|irclickid|mc_[ce]id|_hsenc|_hsmi|hsa_[\w-]+|_ga|_gl|ref_src|ref_url|s_kwcid|ef_id|oly_(?:enc|anon)_id|vero_id|piwik_[\w-]+|pk_[\w-]+|at_[\w-]+|si|spm|scm|share_source|__s)$/i;
+export const TRACKING_PARAMS = new RegExp("^(?:" + [
+  // analytics and ad networks
+  "utm_[\\w-]*", "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid",
+  "yclid", "ttclid", "twclid", "epik", "irclickid", "mc_[ce]id", "_hsenc",
+  "_hsmi", "hsa_[\\w-]+", "_ga", "_gl", "s_kwcid", "ef_id", "vero_id",
+  "oly_(?:enc|anon)_id", "piwik_[\\w-]+", "pk_[\\w-]+", "at_[\\w-]+", "__s",
+  "spm", "scm", "_openstat", "yclid", "rb_clickid", "cmpid", "ncid", "sfnsn",
+  // social
+  "igshid", "igsh", "share_source", "share_app_id", "share_id", "ref_src",
+  "ref_url", "rdt", "si", "_branch_match_id", "_branch_referrer", "xmt",
+  "is_from_webapp", "sender_device", "web_id", "social_share", "smid",
+  // video
+  "pp", "ab_channel",
+  // shopping and marketplaces
+  "pd_rd_[\\w-]+", "pf_rd_[\\w-]+", "linkCode", "linkId", "ascsubtag", "tag",
+  "creativeASIN", "creative", "camp", "qid", "sr", "sprefix", "crid",
+  "content-id", "dib", "dib_tag", "_trkparms", "_trksid", "campid",
+  "customid", "toolid", "mkevt", "mkcid", "mkrid", "click_key", "click_sum",
+  "frs", "sts", "organic_search_click", "athbdg", "adsRedirect", "veh",
+  "irgwc", "sourceid", "affid", "afsrc", "srsltid",
+].join("|") + ")$", "i");
+
+/**
+ * Parameters that are only safe to remove on particular hosts.
+ *
+ * `s` and `t` are how X marks a shared link, and `trk` is LinkedIn's — but
+ * one-letter and three-letter names like those are ordinary search or state
+ * parameters everywhere else, so removing them globally would quietly break
+ * links. Scoping them keeps the aggressive removal without the collateral.
+ *
+ * @type {ReadonlyArray<{host: RegExp, params: RegExp}>}
+ */
+export const TRACKING_BY_HOST = Object.freeze([
+  { host: /(?:^|\.)(?:twitter|x)\.com$/i, params: /^(?:s|t)$/i },
+  { host: /(?:^|\.)(?:youtube\.com|youtu\.be)$/i, params: /^(?:feature|kw|index)$/i },
+  { host: /(?:^|\.)amazon\.[a-z.]+$/i, params: /^(?:ref|_encoding|smid|keywords)$/i },
+  { host: /(?:^|\.)reddit\.com$/i, params: /^(?:ref|ref_source|correlation_id|share_id)$/i },
+  { host: /(?:^|\.)linkedin\.com$/i, params: /^(?:trk|trackingId|originalSubdomain|lipi)$/i },
+  { host: /(?:^|\.)facebook\.com$/i, params: /^(?:mibextid|extid|rdid)$/i },
+  { host: /(?:^|\.)instagram\.com$/i, params: /^(?:img_index|hl)$/i },
+  { host: /(?:^|\.)(?:ebay|etsy)\.[a-z.]+$/i, params: /^(?:_from|hash|var|ref)$/i },
+  { host: /(?:^|\.)(?:walmart|target|bestbuy)\.com$/i, params: /^(?:from|selectedSellerId|sid)$/i },
+  { host: /(?:^|\.)aliexpress\.[a-z.]+$/i, params: /^(?:sk|aff_[\w]+|terminal_id|algo_[\w]+)$/i },
+]);
 
 /* -------------------------------------------------------------------------- *
  * Bit stream
@@ -246,7 +297,13 @@ const decoder = new TextDecoder();
  * @returns {string[]} the parameter names removed
  */
 export function stripTracking(url) {
-  const hits = [...url.searchParams.keys()].filter((k) => TRACKING_PARAMS.test(k));
+  const scoped = TRACKING_BY_HOST
+    .filter((rule) => rule.host.test(url.hostname))
+    .map((rule) => rule.params);
+
+  const hits = [...url.searchParams.keys()].filter((key) =>
+    TRACKING_PARAMS.test(key) || scoped.some((params) => params.test(key)));
+
   for (const key of hits) url.searchParams.delete(key);
   // Re-serialising an emptied query leaves a bare "?" behind.
   if (![...url.searchParams].length) url.search = "";
@@ -623,4 +680,72 @@ export async function expand(payload) {
  */
 export function isFollowable(url) {
   return FOLLOWABLE.has(url.protocol);
+}
+
+/* -------------------------------------------------------------------------- *
+ * Destination risk
+ * -------------------------------------------------------------------------- */
+
+/** Nothing worth mentioning. */
+export const RISK_NONE = 0;
+/** Worth showing, not worth stopping for. */
+export const RISK_NOTE = 1;
+/** Stop and make a human look before going there. */
+export const RISK_BLOCK = 2;
+
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+/**
+ * Look for the shapes phishing links take.
+ *
+ * A redirector is a gift to a phisher: the destination is invisible until it
+ * has already happened, and the link wears this site's domain. The scheme
+ * allowlist stops a payload from running code, but it does nothing about a
+ * payload that points somewhere deliberately deceptive, and that is a
+ * different problem needing a different answer.
+ *
+ * Nothing here is a verdict on whether a site is malicious — that can't be
+ * known from a URL. These are the properties a normal shared link almost
+ * never has and a deceptive one often does, so the page shows the destination
+ * and waits instead of going there quietly.
+ *
+ * @param {URL} url
+ * @returns {{level: number, reasons: Array<{code: string, level: number, message: string}>}}
+ */
+export function assess(url) {
+  const reasons = [];
+  const add = (code, level, message) => reasons.push({ code, level, message });
+
+  // "https://paypal.com@evil.example/" reads as PayPal and goes to evil.
+  // The oldest trick there is, and still the most effective.
+  if (url.username || url.password) {
+    add("userinfo", RISK_BLOCK,
+      `The part before the "@" is not the destination. This link actually goes to ${url.hostname}.`);
+  }
+
+  // Punycode is how a homograph attack survives being written down:
+  // "xn--pypal-4ve.com" renders as something very close to "paypal.com".
+  const punycode = url.hostname.split(".").filter((label) => label.startsWith("xn--"));
+  if (punycode.length) {
+    add("punycode", RISK_BLOCK,
+      "This address uses characters that can look like a different name.");
+  }
+
+  if (IPV4.test(url.hostname) || url.hostname.startsWith("[")) {
+    add("ip-literal", RISK_BLOCK,
+      "This link points at a raw IP address rather than a named site.");
+  }
+
+  if (url.port && url.port !== "80" && url.port !== "443") {
+    add("port", RISK_NOTE, `It connects on port ${url.port} rather than the usual one.`);
+  }
+
+  if (url.protocol === "http:") {
+    add("insecure", RISK_NOTE, "The connection is plain HTTP, so it isn't encrypted.");
+  }
+
+  return {
+    level: reasons.reduce((worst, r) => Math.max(worst, r.level), RISK_NONE),
+    reasons,
+  };
 }

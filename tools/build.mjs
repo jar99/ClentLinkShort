@@ -15,10 +15,12 @@
 
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { minifyJS, minifyCSS, minifyHTML } from "./minify.js";
 import { bundle } from "./bundle.js";
+import { HOSTS } from "../src/hosts.js";
 
 import { ROOT } from "./bundle.js";
 const SRC = path.join(ROOT, "src");
@@ -58,6 +60,12 @@ function substituteStats(html, stats) {
     breakEven: stats.breakEvenLength ? String(stats.breakEvenLength) : "—",
     originLength: String((stats.origin ?? "").length),
     linkShorter: `${stats.linkShorterPct.toFixed(1)}%`,
+    hostCount: String(HOSTS.length),
+    // The shortest prefix the validator measured, so the page cannot quote a
+    // figure for a domain length nobody checked.
+    shortBreakEven: String(
+      (stats.prefixes ?? []).filter((p) => p.length > 0 && p.breakEven)
+        .sort((a, b) => a.length - b.length)[0]?.breakEven ?? "—"),
     generated: stats.generated ?? "",
   };
 
@@ -69,6 +77,54 @@ function substituteStats(html, stats) {
   const missed = out.match(/\{\{\w+\}\}/);
   if (missed) throw new Error(`unsubstituted placeholder ${missed[0]}`);
   return out;
+}
+
+/* -------------------------------------------------------------------------- *
+ * Content-Security-Policy
+ * -------------------------------------------------------------------------- */
+
+const sha256 = (text) =>
+  "'sha256-" + createHash("sha256").update(text, "utf8").digest("base64") + "'";
+
+/**
+ * Replace the permissive dev policy with one that names the exact scripts and
+ * styles this page is allowed to run, by hash.
+ *
+ * The built page is entirely self-contained, so everything except its own
+ * inline code can be forbidden outright: no network of any kind, no plugins,
+ * no form submissions, no base tag rewriting. If an injected script ever did
+ * make it into the document, it would have the wrong hash and not run.
+ *
+ * frame-ancestors is absent because a meta tag cannot set it — browsers ignore
+ * it there and log an error — and GitHub Pages cannot send headers. That is a
+ * real gap, and the README says so rather than pretending otherwise.
+ */
+function applyStrictCsp(html) {
+  const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => m[1]);
+  const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
+
+  if (!scripts.length) throw new Error("no inline scripts found to hash");
+
+  const policy = [
+    "default-src 'none'",
+    `script-src ${scripts.map(sha256).join(" ")}`,
+    `style-src ${styles.map(sha256).join(" ") || "'none'"}`,
+    "img-src data:",
+    "connect-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+    // frame-ancestors is deliberately absent: it is ignored in a meta tag and
+    // browsers log an error for it on every load. Clickjacking protection
+    // needs a real header, which GitHub Pages cannot send. Noted in the README.
+  ].join("; ");
+
+  const replaced = html.replace(
+    /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
+    `<meta http-equiv="Content-Security-Policy" content="${policy}">`);
+
+  if (replaced === html) throw new Error("no Content-Security-Policy meta tag to replace");
+  return replaced;
 }
 
 /* -------------------------------------------------------------------------- *
@@ -105,16 +161,24 @@ async function main() {
   const css = minifyCSS(cssSource);
   const js = minifyJS(code);
 
+  // The bundle has no imports left, so it can ship as a classic script rather
+  // than a module. That matters: module scripts are always deferred, and this
+  // one sits in <head> precisely so a redirect can fire before the body is
+  // parsed. Wrapped in an IIFE because classic scripts share global scope.
+  const inlineJs = `(()=>{"use strict";\n${js}\n})();`;
+
   // Fold everything into the document, replacing the dev-mode references.
   let html = htmlSource
     .replace(/[ \t]*<link rel="stylesheet"[^>]*>\n?/,
       `<style>${css}</style>`)
     .replace(/[ \t]*<script type="module" src="[^"]*"><\/script>\n?/,
-      `<script type="module">${js}</script>`);
+      `<script>${inlineJs}</script>`);
 
-  if (html.includes("stylesheet") || html.includes('src="./app.js"')) {
+  if (/<link[^>]+rel="stylesheet"/.test(html) || /<script[^>]+src=/.test(html)) {
     throw new Error("index.html no longer matches the inlining patterns in build.mjs");
   }
+
+  html = applyStrictCsp(html);
 
   html = minifyHTML(html);
   await writeFile(path.join(DIST, "index.html"), html);

@@ -61,11 +61,14 @@ html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  padding: 0 20px 96px;
+  /* env() keeps content clear of a notch or a home indicator in landscape. */
+  padding: 0 max(20px, env(safe-area-inset-left)) 96px max(20px, env(safe-area-inset-right));
   background: var(--bg);
   color: var(--ink);
   font: 16px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: rgba(180, 71, 28, .15);
+  overflow-wrap: break-word;
 }
 
 main {
@@ -176,7 +179,9 @@ code {
 
 textarea, input[type=text] {
   width: 100%;
-  font: 14px/1.55 var(--mono);
+  /* 16px minimum: iOS Safari zooms the viewport on focus below that, which
+     throws the layout off and is very hard to undo from inside the page. */
+  font: 16px/1.55 var(--mono);
   color: var(--ink);
   background: var(--bg-sunk);
   border: 1px solid var(--line);
@@ -210,11 +215,15 @@ textarea::placeholder { color: var(--ink-faint); }
 }
 
 .opt input {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   accent-color: var(--accent);
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
+
+/* A bigger hit area than the box itself, without moving anything visually. */
+.opt { padding: 4px 0; min-height: 32px; }
 
 .opt em {
   display: block;
@@ -239,12 +248,13 @@ textarea::placeholder { color: var(--ink-faint); }
 
 .btn {
   font: 600 .9rem/1 var(--sans);
+  /* 44px is the smallest comfortable touch target. */
+  min-height: 44px;
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
   border-radius: var(--r-md);
-  padding: 0 16px;
-  min-height: 40px;
+  padding: 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -502,6 +512,33 @@ textarea::placeholder { color: var(--ink-faint); }
 
 .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
+/* ── destination warnings ────────────────────────────────────────────── */
+
+.warnings {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.warnings li {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  font-size: .89rem;
+  border: 1px solid var(--line);
+  background: var(--bg-sunk);
+  color: var(--ink-soft);
+}
+
+.warnings li.warn {
+  border-color: var(--bad);
+  background: var(--accent-bg);
+  color: var(--bad);
+  font-weight: 560;
+}
+
 /* ── footer ──────────────────────────────────────────────────────────── */
 
 footer {
@@ -517,8 +554,27 @@ footer p { margin: 0 0 6px; }
 /* ── narrow screens ──────────────────────────────────────────────────── */
 
 @media (max-width: 30rem) {
-  .hero { padding-top: 44px; }
+  body { padding-left: max(14px, env(safe-area-inset-left));
+         padding-right: max(14px, env(safe-area-inset-right)); }
+  .hero { padding-top: 40px; }
+  .card { padding: 16px; border-radius: 12px; }
   .out { flex-direction: column; }
-  .bar-row { grid-template-columns: 3.4rem 1fr 2.6rem; }
-  .mode-row { grid-template-columns: 4rem 1fr 4.4rem; }
+  .out .btn { width: 100%; }
+  .bar-row { grid-template-columns: 3.2rem 1fr 2.6rem; gap: 8px; }
+  .mode-row { grid-template-columns: 3.6rem 1fr 4.2rem; gap: 8px; }
+  .legend li { grid-template-columns: 11px 1fr; }
+  .legend .cost { grid-column: 2; }
+  .stats { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .stat { padding: 14px 13px; }
+  .stat b { font-size: 1.3rem; }
+  .opts { gap: 4px 20px; }
+  section { margin-top: 44px; }
+  #redirect { padding-top: 8vh; }
+  .actions .btn { flex: 1 1 auto; }
+}
+
+/* Very narrow phones still in use: nothing may overflow at 320px. */
+@media (max-width: 22rem) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .bar-row, .mode-row { grid-template-columns: 2.8rem 1fr 3.4rem; }
 }

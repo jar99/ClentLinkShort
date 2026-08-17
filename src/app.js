@@ -7,10 +7,26 @@
  */
 
 import {
-  analyze, expand, isFollowable, canCompress, MODE_NAMES, ClentError,
+  analyze, expand, isFollowable, assess, canCompress, MODE_NAMES,
+  RISK_BLOCK, ClentError,
 } from "./clent.js";
 
 const $ = (id) => document.getElementById(id);
+
+/**
+ * Run once the document has a body to touch.
+ *
+ * The built page runs this script in <head>, before the body exists, so that
+ * a redirect can fire without waiting for the rest of the document to parse.
+ * Everything that needs the DOM goes through here instead.
+ */
+function whenReady(fn) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fn, { once: true });
+  } else {
+    fn();
+  }
+}
 
 /** Marks a link as "show me where this goes" rather than "take me there". */
 const PREVIEW_SUFFIX = "~";
@@ -31,44 +47,63 @@ async function runRedirect() {
     fragment = fragment.slice(1);
   }
 
-  const fail = (message) => {
-    $("r-spinner").remove();
-    $("r-title").textContent = "This link didn't work";
-    $("r-note").textContent = message;
-    $("r-dest").remove();
-    $("r-go").remove();
-  };
-
   let url;
   try {
     url = await expand(fragment);
   } catch (error) {
-    fail(error instanceof ClentError ? error.message : "This link is damaged.");
+    const message = error instanceof ClentError ? error.message : "This link is damaged.";
+    whenReady(() => {
+      $("r-spinner").remove();
+      $("r-title").textContent = "This link didn't work";
+      $("r-note").textContent = message;
+      $("r-dest").remove();
+      $("r-go").remove();
+    });
     return;
   }
 
-  // textContent, never innerHTML: this string is attacker-controlled.
-  $("r-dest").textContent = url.href;
-  $("r-go").href = url.href;
+  const risk = assess(url);
+  const follow = isFollowable(url);
 
-  if (!isFollowable(url)) {
+  // The fast path: no DOM needed, so this can happen while the body is still
+  // being parsed. Everything below is the slow path, where we have something
+  // to show and can afford to wait for elements to exist.
+  if (follow && !previewOnly && risk.level < RISK_BLOCK) {
+    location.replace(url.href);
+    return;
+  }
+
+  whenReady(() => {
     $("r-spinner").remove();
-    $("r-title").textContent = "Open this link?";
-    $("r-note").textContent =
-      `It opens an external app (${url.protocol.replace(":", "")}). ` +
-      "Continue only if you trust it.";
-    return;
-  }
+    // textContent, never innerHTML: this string is attacker-controlled.
+    $("r-dest").textContent = url.href;
+    $("r-go").href = url.href;
 
-  if (previewOnly) {
-    $("r-spinner").remove();
-    $("r-title").textContent = "Where this link goes";
-    $("r-note").textContent =
-      "Nothing has been loaded yet. Check the destination before continuing.";
-    return;
-  }
+    if (risk.reasons.length) {
+      const list = $("r-warnings");
+      list.hidden = false;
+      list.replaceChildren(...risk.reasons.map((reason) => {
+        const item = document.createElement("li");
+        item.className = reason.level >= RISK_BLOCK ? "warn" : "note";
+        item.textContent = reason.message;
+        return item;
+      }));
+    }
 
-  location.replace(url.href);
+    if (risk.level >= RISK_BLOCK) {
+      $("r-title").textContent = "Check this link before continuing";
+      $("r-note").textContent = "It has something about it worth a second look:";
+    } else if (!follow) {
+      $("r-title").textContent = "Open this link?";
+      $("r-note").textContent =
+        `It opens an external app (${url.protocol.replace(":", "")}). ` +
+        "Continue only if you trust it.";
+    } else {
+      $("r-title").textContent = "Where this link goes";
+      $("r-note").textContent =
+        "Nothing has been loaded yet. Check the destination before continuing.";
+    }
+  });
 }
 
 /* -------------------------------------------------------------------------- *
@@ -284,7 +319,7 @@ function setUpCreate() {
 if (location.hash.length > 1) {
   runRedirect();
 } else {
-  setUpCreate();
+  whenReady(setUpCreate);
 }
 
 // Pasting a Clent link into an already-open tab only changes the fragment,

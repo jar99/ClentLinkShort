@@ -247,3 +247,46 @@ test("token selection is optimal, not greedy", async () => {
     assert.equal(actual, ideal, `${body}: encoder used ${actual} chars, ideal is ${ideal}`);
   }
 });
+
+test("shopping and social tracking is removed without breaking the link", async () => {
+  const cases = [
+    // Amazon: affiliate tag and referral crumbs go, the variant selector stays.
+    ["https://www.amazon.com/dp/B08N5WRWNW/ref=sr_1_3?tag=aff-20&th=1&pd_rd_w=abc",
+     "https://www.amazon.com/dp/B08N5WRWNW/ref=sr_1_3?th=1"],
+    // eBay campaign parameters.
+    ["https://www.ebay.com/itm/123?_trkparms=x&campid=5338&mkevt=1",
+     "https://www.ebay.com/itm/123"],
+    // X marks shares with s and t; both are host-scoped.
+    ["https://x.com/user/status/1234?s=20&t=abcdef", "https://x.com/user/status/1234"],
+    // ...but s and t elsewhere are ordinary parameters and must survive.
+    ["https://example.com/search?s=query&t=1", "https://example.com/search?s=query&t=1"],
+    ["https://www.tiktok.com/@u/video/7123?is_from_webapp=1&web_id=9",
+     "https://www.tiktok.com/@u/video/7123"],
+    ["https://www.youtube.com/watch?v=abc&si=xyz&feature=share",
+     "https://www.youtube.com/watch?v=abc"],
+    ["https://www.instagram.com/p/Cabc/?igshid=xyz", "https://www.instagram.com/p/Cabc/"],
+    // A product page with nothing to strip must come out untouched.
+    ["https://www.etsy.com/listing/123/handmade-thing",
+     "https://www.etsy.com/listing/123/handmade-thing"],
+  ];
+  for (const [input, expected] of cases) {
+    const out = await expand(await shorten(input, { stripTracking: true }));
+    assert.equal(out.href, expected, input);
+  }
+});
+
+test("removing tracking never changes the path or host", async () => {
+  // The switch is meant to drop parameters, not rewrite where a link points.
+  const { analyze } = await import("../src/clent.js");
+  for (const url of [
+    "https://www.amazon.co.uk/dp/B01?tag=x&ref=y",
+    "https://shop.example/p/1?utm_source=a&size=large",
+    "https://x.com/i/web/status/1?s=46",
+  ]) {
+    const before = new URL(url);
+    const after = (await analyze(url, { stripTracking: true })).url;
+    assert.equal(after.hostname, before.hostname, url);
+    assert.equal(after.pathname, before.pathname, url);
+    assert.equal(after.protocol, before.protocol, url);
+  }
+});

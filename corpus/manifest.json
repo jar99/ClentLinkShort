@@ -1,17 +1,23 @@
 {
   "generated": "2026-08-17",
-  "total": 600000,
+  "total": 643949,
   "counts": {
-    "wikipedia": 300000,
-    "hackernews": 168000,
-    "tranco": 132000
+    "wikipedia": 225000,
+    "tranco": 225000,
+    "hackernews": 135000,
+    "lemmy": 13221,
+    "commons": 45000,
+    "feeds": 728
   },
   "rankedDomains": 1000000,
-  "sha256": "f6d3ccd25b4e195cdaa21284efbcdcd25c5dda5b7ae6d3ae05712b793c052b54",
-  "bytes": 31075976,
+  "sha256": "86b2bccc35696ce516b8da6dc2bd3ec5ba0bbbe9c652b067f13543ceaab4e2cf",
+  "bytes": 37588580,
   "sources": {
     "wikipedia": "{lang}.wikipedia.org/w/api.php?action=query&list=exturlusage, 30 editions",
     "hackernews": "hn.algolia.com/api/v1/search_by_date?tags=story",
+    "lemmy": "8 Lemmy instances, /api/v3/post/list — social, news, deals, images",
+    "feeds": "36 RSS/Atom feeds — news and shopping deals",
+    "commons": "commons.wikimedia.org/w/api.php?action=query&list=allimages — image shares",
     "gdelt": "api.gdeltproject.org/api/v2/doc/doc",
     "stackexchange": "api.stackexchange.com/2.3/questions?filter=withbody",
     "tranco": "tranco-list.eu — ranked domains, sampled across the full range"

@@ -196,3 +196,195 @@ export function* trancoDomains(target, ranks) {
 
 export const SOURCES = { wikipedia, hackernews, gdelt, stackexchange };
 export { WIKIS, SE_SITES };
+
+/* -------------------------------------------------------------------------- *
+ * Everyday links: news, shopping, social, images
+ *
+ * The sources above skew heavily towards citations and tech submissions. The
+ * links people actually run through a shortener are product pages, articles,
+ * posts and photos, and those have completely different shapes: long opaque
+ * product IDs, campaign parameters, CDN hostnames, image extensions.
+ * -------------------------------------------------------------------------- */
+
+/** News and deal feeds. RSS is shallow but the URLs are exactly the real thing. */
+const FEEDS = [
+  // news
+  "https://feeds.bbci.co.uk/news/rss.xml",
+  "https://feeds.bbci.co.uk/news/world/rss.xml",
+  "https://feeds.bbci.co.uk/news/technology/rss.xml",
+  "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+  "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+  "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+  "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+  "https://www.theguardian.com/world/rss",
+  "https://www.theguardian.com/uk/business/rss",
+  "https://www.theguardian.com/uk/technology/rss",
+  "https://www.theguardian.com/uk/lifeandstyle/rss",
+  "https://www.theverge.com/rss/index.xml",
+  "https://feeds.arstechnica.com/arstechnica/index",
+  "https://www.npr.org/rss/rss.php?id=1001",
+  "https://www.npr.org/rss/rss.php?id=1006",
+  "https://feeds.washingtonpost.com/rss/world",
+  "https://feeds.skynews.com/feeds/rss/home.xml",
+  "https://www.aljazeera.com/xml/rss/all.xml",
+  "https://rss.cnn.com/rss/edition.rss",
+  "https://feeds.nbcnews.com/nbcnews/public/news",
+  "https://abcnews.go.com/abcnews/topstories",
+  "https://www.cbsnews.com/latest/rss/main",
+  "https://time.com/feed/",
+  "https://www.wired.com/feed/rss",
+  "https://techcrunch.com/feed/",
+  "https://www.engadget.com/rss.xml",
+  "https://gizmodo.com/feed",
+  "https://lifehacker.com/feed/rss",
+  "https://www.eurogamer.net/feed",
+  "https://www.polygon.com/rss/index.xml",
+  "https://www.espn.com/espn/rss/news",
+  "https://feeds.bbci.co.uk/sport/rss.xml",
+  "https://lobste.rs/rss",
+  // shopping and deals — these link out to retailers, which is the point
+  "https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1",
+  "https://feeds.feedburner.com/SlickdealsnetFP",
+  "https://www.dealnews.com/rss.xml",
+];
+
+/**
+ * Link-aggregator posts from Lemmy instances. Federated, so a handful of
+ * instances reach a wide spread of communities — news, deals, photography,
+ * memes — and it paginates deeply enough to be a real source.
+ */
+const LEMMY = [
+  "lemmy.world", "lemmy.ml", "sh.itjust.works", "programming.dev",
+  "beehaw.org", "feddit.org", "lemm.ee", "sopuli.xyz",
+];
+
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>)\]]+/g;
+
+/**
+ * Undo XML escaping. Feeds write `&amp;` between query parameters, so without
+ * this the corpus fills up with URLs that were never real.
+ */
+const unescapeXml = (text) => text
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/&quot;/g, '"').replace(/&apos;|&#39;|&#034;/g, "'")
+  .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+  .replace(/&amp;/g, "&");   // last, so "&amp;lt;" does not become "<"
+
+/** Pull every plausible URL out of an RSS or Atom document. */
+function* urlsFromFeed(xml) {
+  for (const match of xml.matchAll(/<link[^>]*href=["']([^"']+)["']/gi)) {
+    yield unescapeXml(match[1]);
+  }
+  for (const match of xml.matchAll(/<link>([^<]+)<\/link>/gi)) yield unescapeXml(match[1]);
+  for (const match of xml.matchAll(/<guid[^>]*>([^<]+)<\/guid>/gi)) yield unescapeXml(match[1]);
+  // Feed bodies carry outbound links too, which is where the retailer URLs are.
+  for (const match of xml.matchAll(/<(?:description|content:encoded)[^>]*>([\s\S]*?)<\//gi)) {
+    for (const found of unescapeXml(match[1]).matchAll(URL_IN_TEXT)) yield found[0];
+  }
+}
+
+/** News and shopping links from RSS/Atom feeds. */
+export async function* feeds(target, { get, progress }) {
+  let seen = 0;
+  for (const feed of FEEDS) {
+    if (seen >= target) return;
+    let xml;
+    try {
+      const response = await get(feed, { json: false, retries: 1 });
+      xml = await response.text();
+    } catch {
+      continue; // one dead feed shouldn't stop the run
+    }
+    for (const url of urlsFromFeed(xml)) {
+      yield url;
+      seen++;
+    }
+    progress("feeds", seen, target);
+  }
+}
+
+/** Posts from Lemmy instances: social, news, deals and image links. */
+export async function* lemmy(target, { get, progress }) {
+  let seen = 0;
+  const perInstance = Math.ceil(target / LEMMY.length);
+
+  for (const instance of LEMMY) {
+    let fromInstance = 0;
+    for (let page = 1; page <= 60 && fromInstance < perInstance; page++) {
+      let body;
+      try {
+        body = await get(`https://${instance}/api/v3/post/list` +
+          `?limit=50&page=${page}&sort=New&type_=All`, { retries: 1 });
+      } catch {
+        break;
+      }
+      const posts = body?.posts ?? [];
+      if (!posts.length) break;
+      for (const entry of posts) {
+        const url = entry?.post?.url;
+        if (url) {
+          yield url;
+          fromInstance++;
+          seen++;
+        }
+        // Post bodies quote links as well, and those skew towards shopping.
+        for (const found of String(entry?.post?.body ?? "").matchAll(URL_IN_TEXT)) {
+          yield found[0];
+          fromInstance++;
+          seen++;
+        }
+      }
+      progress("lemmy", seen, target);
+    }
+    if (seen >= target) return;
+  }
+}
+
+/**
+ * Image URLs from Wikimedia Commons. Long percent-encoded filenames on a CDN
+ * host — the shape an image share actually has, and one nothing else here
+ * produces.
+ */
+export async function* commons(target, { get, progress, sleep, deadline = 420000 }) {
+  const until = Date.now() + deadline;
+  let cont = "";
+  let seen = 0;
+  let failures = 0;
+
+  // Time-boxed: Wikimedia throttles this hard enough that chasing a large
+  // target would take hours. A few thousand image URLs is enough to cover the
+  // shape; the rest of the corpus supplies the volume.
+  while (seen < target && failures < 6 && Date.now() < until) {
+    let body;
+    try {
+      body = await get("https://commons.wikimedia.org/w/api.php?action=query" +
+        "&list=allimages&ailimit=500&aiprop=url&format=json&formatversion=2" +
+        (cont ? `&aicontinue=${encodeURIComponent(cont)}` : ""), { retries: 2 });
+    } catch {
+      // Wikimedia rate-limits an unauthenticated run, and a heavy Wikipedia
+      // pass just before this one uses up the allowance. Backing off and
+      // carrying on recovers; giving up on the first 429 loses the whole
+      // source, which is what happened the first time this ran.
+      failures++;
+      await sleep(3000 * failures);
+      continue;
+    }
+
+    const images = body?.query?.allimages ?? [];
+    if (!images.length) return;
+    for (const image of images) {
+      if (image.url) {
+        yield image.url;
+        seen++;
+      }
+      if (image.descriptionurl) {
+        yield image.descriptionurl;
+        seen++;
+      }
+    }
+    progress("commons", seen, target);
+    cont = body?.continue?.aicontinue;
+    if (!cont) return;
+    await sleep(150); // stay under the rate limit rather than discover it
+  }
+}

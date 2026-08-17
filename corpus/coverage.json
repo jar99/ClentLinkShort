@@ -1,9 +1,9 @@
 {
-  "urls": 600000,
-  "rankedDomainsPresent": 153563,
+  "urls": 643949,
+  "rankedDomainsPresent": 238809,
   "rankedDomainsTotal": 1000000,
-  "urlsOnRankedDomainPct": 74.74066666666667,
-  "unrankedHosts": 108433,
+  "urlsOnRankedDomainPct": 82.11255860324343,
+  "unrankedHosts": 83924,
   "tiers": [
     {
       "top": 1000,
@@ -22,11 +22,11 @@
     },
     {
       "top": 1000000,
-      "covered": 153563,
-      "pct": 15.3563
+      "covered": 238809,
+      "pct": 23.8809
     }
   ],
   "zipfExponent": 1,
-  "weightedReachPct": 86.3640242168964,
+  "weightedReachPct": 89.81597310128453,
   "sweep": null
 }
