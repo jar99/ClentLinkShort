@@ -49,15 +49,20 @@ test("the scheme index beats spelling the scheme out", async () => {
 });
 
 test("userinfo URLs no longer pay for their scheme", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
   const a = await analyze("https://user:pw@example.com/x", { stripTracking: false });
-  assert.equal(a.headerBits, 6 + SCHEME_BITS);
+  assert.equal(a.headerBits,
+    HEADER_CODE_LENGTHS[SCHEME_OTHER | (a.mode << 4)] + SCHEME_BITS);
   assert.equal((await expand(a.payload)).href, "https://user:pw@example.com/x");
 });
 
 test("unknown scheme indices are rejected, not guessed", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
+  const headerCode = buildCode(HEADER_CODE_LENGTHS);
   for (let index = ENCODABLE_ORDER.length; index < 15; index++) {
     const w = new BitWriter();
-    w.push(SCHEME_OTHER | (MODE_RAW << 4), 6);
+    pushCode(w, headerCode, SCHEME_OTHER | (MODE_RAW << 4));
     w.push(index, SCHEME_BITS);
     for (const byte of new TextEncoder().encode("//x.example/")) w.push(byte, 8);
     await assert.rejects(() => expand(w.finish()), (error) => {

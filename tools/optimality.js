@@ -21,14 +21,17 @@
  */
 
 import {
-  build, shorten, parse, stripTracking, BitWriter,
+  build, shorten, parse, stripTracking, BitWriter, HEADER_CODE_LENGTHS,
   SCHEME_HTTPS, SCHEME_HTTP, SCHEME_OTHER, SCHEME_TEMPLATE, SCHEME_IN_BODY,
   F_WWW, F_HOST, MODE_TEXT, MODE_RAW, MODE_DEFLATE, MODE_HOST, MODE_NAMES,
 } from "../src/clent.js";
 import { deflate } from "../src/deflate.js";
+import { buildCode, pushCode } from "../src/huffman.js";
 import { HOST_INDEX } from "../src/hosts.js";
 import { SCHEME_INDEX } from "../src/schemes.js";
 import { asTemplate, writeTemplate } from "../src/templates.js";
+
+const HEADER_CODE = buildCode(HEADER_CODE_LENGTHS);
 
 const encoder = new TextEncoder();
 const MODES = [MODE_TEXT, MODE_RAW, MODE_DEFLATE];
@@ -147,7 +150,7 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
   const template = asTemplate(url);
   if (template) {
     const w = new BitWriter();
-    w.push(SCHEME_TEMPLATE, 6);
+    pushCode(w, HEADER_CODE, SCHEME_TEMPLATE);
     candidates.push({
       payload: writeTemplate(w, template),
       how: `template #${template.index}`,

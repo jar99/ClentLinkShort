@@ -1,0 +1,80 @@
+/**
+ * Mine the header code: canonical-Huffman lengths for the 64 header values,
+ * from how often each one actually wins over the corpus.
+ *
+ * Every payload starts with one header symbol, so this is the one table
+ * whose savings apply to every link ever made. All 64 values get a codeword
+ * — combinations the encoder never produces are smoothed to frequency 1 so
+ * the decoder can still parse (and then reject) them — and the length cap
+ * keeps the worst legal header readable in one readSymbol walk.
+ *
+ * Usage: node tools/mine-header.mjs
+ * Paste the printed array over HEADER_CODE_LENGTHS in src/clent.js, then
+ * regenerate the compat goldens in the same commit (beta stance).
+ */
+import fs from "node:fs";
+import zlib from "node:zlib";
+
+import { shorten, HEADER_CODE_LENGTHS } from "../src/clent.js";
+import { BitReader } from "../src/bits.js";
+import { buildCode, readSymbol } from "../src/huffman.js";
+
+const MAX_CODE_LEN = 12;
+const SYMBOLS = 64;
+
+const urls = zlib.brotliDecompressSync(fs.readFileSync("corpus/urls.txt.br"))
+  .toString("utf8").split("\n").filter(Boolean);
+
+// Decode each payload's first symbol with the SHIPPED code, so the miner
+// keeps working after its own output lands.
+const shipped = buildCode(HEADER_CODE_LENGTHS);
+const freq = new Array(SYMBOLS).fill(1); // +1 smoothing: every value parses
+let counted = 0;
+for (const u of urls) {
+  let p;
+  try { p = await shorten(u, { stripTracking: false }); } catch { continue; }
+  freq[readSymbol(new BitReader(p), shipped)]++;
+  counted++;
+}
+
+// Plain Huffman over the frequencies, then clamp and re-Kraft, the same way
+// mine-text.mjs does.
+function huffmanLengths(frequencies) {
+  const heap = frequencies.map((f, s) => ({ f, syms: [s] }));
+  const lengths = new Uint8Array(SYMBOLS);
+  while (heap.length > 1) {
+    heap.sort((a, b) => a.f - b.f);
+    const a = heap.shift(), b = heap.shift();
+    for (const s of a.syms) lengths[s]++;
+    for (const s of b.syms) lengths[s]++;
+    heap.push({ f: a.f + b.f, syms: [...a.syms, ...b.syms] });
+  }
+  for (let s = 0; s < SYMBOLS; s++) {
+    if (lengths[s] > MAX_CODE_LEN) lengths[s] = MAX_CODE_LEN;
+  }
+  const kraft = () =>
+    lengths.reduce((sum, l) => sum + (l ? 2 ** -l : 0), 0);
+  while (kraft() > 1) {
+    let best = -1;
+    for (let s = 0; s < SYMBOLS; s++) {
+      if (lengths[s] && lengths[s] < MAX_CODE_LEN &&
+          (best === -1 || lengths[s] < lengths[best] ||
+           (lengths[s] === lengths[best] && frequencies[s] < frequencies[best]))) best = s;
+    }
+    lengths[best]++;
+  }
+  return lengths;
+}
+
+const lengths = huffmanLengths(freq);
+
+const total = freq.reduce((s, f) => s + f, 0);
+const avgNew = freq.reduce((s, f, i) => s + f * lengths[i], 0) / total;
+const avgOld = freq.reduce((s, f, i) => s + f * HEADER_CODE_LENGTHS[i], 0) / total;
+console.log(`// ${counted.toLocaleString()} URLs | header bits ` +
+  `${avgOld.toFixed(2)} -> ${avgNew.toFixed(2)} average`);
+let out = "";
+for (let i = 0; i < SYMBOLS; i += 16) {
+  out += "  " + [...lengths.slice(i, i + 16)].join(", ") + ",\n";
+}
+console.log(out.replace(/,\n$/, ",\n"));

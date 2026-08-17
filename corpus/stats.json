@@ -6,52 +6,52 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.626915613259204,
-  "payloadShorterPct": 99.92173293226638,
-  "medianRatio": 0.5588235294117647,
-  "p90Ratio": 0.7165354330708661,
-  "linkSavingsMean": -0.02880745249942182,
+  "payloadRatio": 0.6181861986928493,
+  "payloadShorterPct": 99.92949752231931,
+  "medianRatio": 0.5454545454545454,
+  "p90Ratio": 0.7102803738317757,
+  "linkSavingsMean": -0.01248370560872076,
   "linkSavingsMedian": 0,
-  "linkShorterPct": 47.21538506931449,
-  "bareShorterPct": 3.395043921014294,
-  "deepShorterPct": 80.3604694612869,
+  "linkShorterPct": 49.056524662667385,
+  "bareShorterPct": 4.991417732839071,
+  "deepShorterPct": 82.38674641944397,
   "bareCount": 277316,
   "deepCount": 366633,
-  "deepSavingsMedian": 0.10769230769230764,
-  "deepSavingsMean": 0.10623354037365142,
+  "deepSavingsMedian": 0.11475409836065575,
+  "deepSavingsMean": 0.11331169325005319,
   "breakEvenLength": 25,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
       "breakEven": 25,
-      "shorterPct": 47.21538506931449,
+      "shorterPct": 49.056524662667385,
       "medianSaving": 0
     },
     {
       "label": "a github.io project page",
       "length": 40,
       "breakEven": 110,
-      "shorterPct": 9.00568212700074,
-      "medianSaving": -0.5952380952380953
+      "shorterPct": 9.121995685993767,
+      "medianSaving": -0.5833333333333333
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.92173293226638,
-      "medianSaving": 0.4411764705882353
+      "shorterPct": 99.92949752231931,
+      "medianSaving": 0.4545454545454546
     }
   ],
   "modes": {
-    "text": 97806,
-    "raw": 311,
-    "deflate": 2063,
-    "host": 502227,
-    "template": 41542
+    "text": 85989,
+    "raw": 7,
+    "deflate": 1975,
+    "host": 514439,
+    "template": 41539
   },
-  "templatePct": 6.451131999583818,
-  "dictHitPct": 10.532821698612779,
+  "templatePct": 6.450666124180642,
+  "dictHitPct": 10.524280649554546,
   "trackingPct": 3.645785613456966,
-  "trackingSavingPct": 25.64111523922458
+  "trackingSavingPct": 25.685951537223552
 }

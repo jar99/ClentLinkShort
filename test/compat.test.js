@@ -26,24 +26,24 @@ import { TEMPLATES } from "../src/templates.js";
 import { ENCODABLE_ORDER } from "../src/schemes.js";
 
 const GOLDEN = [
-  ["wHQEIvGrA", "https://example.com/"],
-  ["IQupyJR2hQvcfGxGY", "https://github.com/anthropics/claude-code"],
-  ["wVIDmoaiJ5lckai4z0RahQS0mDjHijMvAUfRmszM",
+  ["B0BCLxqw", "https://example.com/"],
+  ["lC6nIlHaFC9x8bEZg", "https://github.com/anthropics/claude-code"],
+  ["FSA5qGoieZXJGouM9EWoUEtJg4x4ozLwFH0ZrMzA",
     "https://some-unseen-shop.com/products/blue-widget?size=m"],
-  ["DRbqGHGHq0C7iA", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
-  ["D6wWmdXqrfHF1GAEk", "https://www.youtube.com/watch?v=TOr1Vvji6jA&t=36s"],
-  ["DdrnSaGlJ542A", "https://en.wikipedia.org/wiki/Alan_Turing"],
-  ["wt4liz6ukeeF8Ahtjrhk8Ghg", "https://blog.startup.io/posts/2026-hello"],
-  ["xR7cylMdgXwBwOAqjY", "http://old-site.net/index.php?id=42"],
-  ["CJXfe1e4DY5ZvQWoUTYCqYPMbO4H7CuQyTM",
+  ["hFuoYcYerQLuIA", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+  ["jrBaZ1eqt8cXUYASQ", "https://www.youtube.com/watch?v=TOr1Vvji6jA&t=36s"],
+  ["h2udJoaUnnjY", "https://en.wikipedia.org/wiki/Alan_Turing"],
+  ["LeJYs-rpHnhfAIbY64ZPBoY", "https://blog.startup.io/posts/2026-hello"],
+  ["SPbmUpjsC-AOBwFUbA", "http://old-site.net/index.php?id=42"],
+  ["v8JXfe1e4DY5ZvQWoUTYCqYPMbO4H7CuQyTM",
     "mailto:someone@example.com?subject=Hi%20there"],
-  ["wHQEIvHeCKKAUOButlfi_IbiSxs", "https://example.co.uk/a/b/c?q=test#frag"],
-  ["CEQu9pzFGN7gNjlm9BahRML1pJls", "https://user:pw@example.com/secret"],
-  ["wHQEIvGoqZzw9nEDCbBg2gYTYMFsGE4B4YMJsGC2DCbBg4IMJsGDhgwmwYLuButmEtwFt0Fp9g",
+  ["B0BCLx3giigFDgbrZX4vyG4ksbA", "https://example.co.uk/a/b/c?q=test#frag"],
+  ["v8EQu9pzFGN7gNjlm9BahRML1pJls", "https://user:pw@example.com/secret"],
+  ["B0BCLxqKmc8PZxAwmwYNoGE2DBbBhOAeGDCbBgtgwmwYOCDCbBg4YMJsGC7gbrZhLcBbdBafY",
     "https://example.com/unicode/%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%BE%D0%B3?q=caf%C3%A9"],
-  ["gS61IzC3ISdVLzs_VT0xKTklNS88YZdCWAQA",
+  ["wTS61IzC3ISdVLzs_VT0xKTklNS88YZdCWAQA",
     "https://example.com/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/"],
-  ["D4oQlMXwA", "https://news.ycombinator.com/item?id=39000000"],
+  ["jihCUxfA", "https://news.ycombinator.com/item?id=39000000"],
 ];
 
 test("golden payloads decode to their destinations, forever", async () => {
@@ -84,8 +84,10 @@ test("the wire version is 1 and stays 1", () => {
 });
 
 test("a future-version envelope fails with the right message, not a misread", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
   const w = new BitWriter();
-  w.push(VERSION_ESCAPE, 6);
+  pushCode(w, buildCode(HEADER_CODE_LENGTHS), VERSION_ESCAPE);
   w.push(3, 4); // hypothetical wire v-next
   w.push(0b10101010, 8); // arbitrary trailing content
   await assert.rejects(() => expand(w.finish()), (error) => {

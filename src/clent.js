@@ -71,6 +71,7 @@
 import {
   B64, BitWriter, BitReader, ClentError, writeIndex, readIndex, indexBits,
 } from "./bits.js";
+import { buildCode, pushCode, readSymbol } from "./huffman.js";
 import { canCompress, deflate, inflate } from "./deflate.js";
 import { planText, emitText, decodeText, END_BITS } from "./text.js";
 import { hostBits, emitHost, decodeHost } from "./host.js";
@@ -116,11 +117,31 @@ export {
 export const VERSION = 1;
 
 /**
- * Reserved first-header value (a leading "-" character) marking a payload
- * from a future wire version: 4 version bits follow it. Never a legal v1
- * header; the v1 encoder never emits it.
+ * Reserved header symbol marking a payload from a future wire version: 4
+ * version bits follow its codeword. Never a legal v1 header; the v1 encoder
+ * never emits it.
  */
 export const VERSION_ESCAPE = 62;
+
+/**
+ * The header is one symbol of its own canonical Huffman code, not a flat 6
+ * bits: the header's measured entropy over the corpus is 2.6 bits, so the
+ * common shapes ("https, host mode", "https, dict host, text tail") cost
+ * 2-3 bits and the rare-but-legal combinations up to 12. All 64 values keep
+ * a codeword — combinations this encoder never produces still parse, then
+ * fail the same validity checks as before. Symbol 62 is VERSION_ESCAPE.
+ * Mined by tools/mine-header.mjs; frozen with the other tables.
+ */
+export const HEADER_CODE_LENGTHS = Object.freeze([
+  5, 8, 12, 4, 10, 7, 12, 12, 4, 7, 12, 12, 5, 7, 12, 12,
+  12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+  12, 11, 12, 12, 12, 11, 12, 12, 10, 12, 12, 12, 12, 12, 12, 12,
+  2, 3, 12, 12, 5, 3, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+]);
+
+const HEADER_CODE = buildCode(HEADER_CODE_LENGTHS);
+/** Bits the header symbol costs, by header value. */
+const HEADER_LEN = HEADER_CODE.len;
 
 export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_OTHER = 2,
   SCHEME_TEMPLATE = 3;
@@ -216,7 +237,7 @@ export function parse(input) {
  */
 export function build(flags, mode, hostByte, bytes, schemeIndex = null, host = null) {
   const w = new BitWriter();
-  w.push(flags | (mode << 4), 6);
+  pushCode(w, HEADER_CODE, flags | (mode << 4));
   if ((flags & SCHEME_MASK) === SCHEME_OTHER) {
     if (schemeIndex === null)
       throw new ClentError("A scheme-2 payload needs a scheme index.");
@@ -320,7 +341,7 @@ export async function analyze(input, options = {}) {
    * Candidate shapes: each knows its header cost, its body offset into
    * `bytes`, and how to build itself. Body modes text/raw price by
    * arithmetic; only the winner is actually built.
-   * @type {Array<{headerBits: number, at: number, flags: number, hostByte: number|null, schemeIndex: number|null, host: string|null}>}
+   * @type {Array<{extraBits: number, at: number, flags: number, hostByte: number|null, schemeIndex: number|null, host: string|null}>}
    */
   const shapes = [];
 
@@ -329,7 +350,7 @@ export async function analyze(input, options = {}) {
   // host that begins with a token suffix ("//index…") gets the token where
   // the compact body cannot.
   shapes.push({
-    headerBits: 6 + SCHEME_BITS, at: 0, flags: SCHEME_OTHER,
+    extraBits: SCHEME_BITS, at: 0, flags: SCHEME_OTHER,
     hostByte: null, schemeIndex, host: null,
   });
 
@@ -352,12 +373,12 @@ export async function analyze(input, options = {}) {
       const index = HOST_INDEX.get(host);
       if (index !== undefined) {
         shapes.push({
-          headerBits: 6 + indexBits(index), at: tailAt, flags: scheme | extra | F_HOST,
+          extraBits: indexBits(index), at: tailAt, flags: scheme | extra | F_HOST,
           hostByte: index, schemeIndex: null, host,
         });
       }
       shapes.push({
-        headerBits: 6, at, flags: scheme | extra,
+        extraBits: 0, at, flags: scheme | extra,
         hostByte: null, schemeIndex: null, host,
       });
       // hostBits is Infinity for a host the decoder would refuse (too
@@ -365,7 +386,7 @@ export async function analyze(input, options = {}) {
       const fieldBits = hostBits(host);
       if (Number.isFinite(fieldBits)) {
         hostShapes.push({
-          headerBits: 6, at: tailAt, flags: scheme | extra,
+          extraBits: 0, at: tailAt, flags: scheme | extra,
           host, hostFieldBits: fieldBits,
         });
       }
@@ -376,6 +397,10 @@ export async function analyze(input, options = {}) {
   const candidates = { text: null, raw: null, deflate: null, host: null };
   /** @type {{chars: number, shape: (typeof shapes)[0], mode: number}|null} */
   let winner = null;
+  // The header symbol's cost depends on the mode as well as the flags, so
+  // it is priced here, where the two meet — not stored on the shape.
+  const headerBits = (shape, mode) =>
+    HEADER_LEN[shape.flags | (mode << 4)] + shape.extraBits;
   const consider = (length, shape, mode) => {
     const name = MODE_NAMES[mode];
     if (candidates[name] === null || length < candidates[name]) {
@@ -385,12 +410,14 @@ export async function analyze(input, options = {}) {
   };
 
   for (const shape of shapes) {
-    consider(chars(shape.headerBits + textBitsAt(shape.at)), shape, MODE_TEXT);
-    consider(chars(shape.headerBits + 8 * (bytes.length - shape.at)), shape, MODE_RAW);
+    consider(chars(headerBits(shape, MODE_TEXT) + textBitsAt(shape.at)),
+      shape, MODE_TEXT);
+    consider(chars(headerBits(shape, MODE_RAW) + 8 * (bytes.length - shape.at)),
+      shape, MODE_RAW);
   }
   for (const shape of hostShapes) {
-    consider(chars(shape.headerBits + shape.hostFieldBits + textBitsAt(shape.at)),
-      /** @type {any} */ (shape), MODE_HOST);
+    consider(chars(headerBits(shape, MODE_HOST) + shape.hostFieldBits +
+      textBitsAt(shape.at)), /** @type {any} */ (shape), MODE_HOST);
   }
 
   // Deflate is genuinely expensive — an async stream per call — and almost
@@ -409,7 +436,8 @@ export async function analyze(input, options = {}) {
     const stream = await deflate(bytes.subarray(shortest.at));
     if (stream) {
       zipped = { stream, shape: shortest };
-      consider(chars(shortest.headerBits + 8 * stream.length), shortest, MODE_DEFLATE);
+      consider(chars(headerBits(shortest, MODE_DEFLATE) + 8 * stream.length),
+        shortest, MODE_DEFLATE);
     }
   }
 
@@ -419,10 +447,13 @@ export async function analyze(input, options = {}) {
   let templateLength = null;
   if (template) {
     const w = new BitWriter();
-    w.push(SCHEME_TEMPLATE, 6); // mode bits stay 0: slots are self-describing
+    // Mode bits stay 0: slots are self-describing.
+    pushCode(w, HEADER_CODE, SCHEME_TEMPLATE);
     const payload = writeTemplate(w, template);
     templateLength = payload.length;
     if (payload.length < winner.chars) {
+      const templateHeaderBits =
+        HEADER_LEN[SCHEME_TEMPLATE] + indexBits(template.index);
       return {
         payload,
         url,
@@ -433,8 +464,8 @@ export async function analyze(input, options = {}) {
         hostByte: null,
         template: template.index,
         templatePattern: TEMPLATES[template.index].pattern,
-        headerBits: 14,
-        bodyBits: payload.length * 6 - 14,
+        headerBits: templateHeaderBits,
+        bodyBits: payload.length * 6 - templateHeaderBits,
         hostFieldBits: 0,
         candidates: { ...candidates, template: payload.length },
       };
@@ -451,7 +482,7 @@ export async function analyze(input, options = {}) {
       : build(shape.flags, mode, shape.hostByte, bytes.subarray(shape.at),
           shape.schemeIndex);
   return finishAnalysis(payload, url, mode, removed, shape, candidates,
-    templateLength);
+    templateLength, headerBits(shape, mode));
 }
 
 /**
@@ -460,12 +491,14 @@ export async function analyze(input, options = {}) {
  * @param {URL} url
  * @param {number} mode
  * @param {string[]} removed
- * @param {{headerBits: number, hostByte?: number|null, host?: string|null, hostFieldBits?: number}} shape
+ * @param {{hostByte?: number|null, host?: string|null, hostFieldBits?: number}} shape
  * @param {Record<string, number|null>} candidates
  * @param {number|null} templateLength
+ * @param {number} headerBits header symbol plus scheme/host index bits
  * @returns {Analysis}
  */
-function finishAnalysis(payload, url, mode, removed, shape, candidates, templateLength) {
+function finishAnalysis(payload, url, mode, removed, shape, candidates,
+    templateLength, headerBits) {
   const hostFieldBits = mode === MODE_HOST ? shape.hostFieldBits ?? 0 : 0;
   return {
     payload,
@@ -477,8 +510,8 @@ function finishAnalysis(payload, url, mode, removed, shape, candidates, template
     hostByte: shape.hostByte ?? null,
     template: null,
     templatePattern: null,
-    headerBits: shape.headerBits,
-    bodyBits: payload.length * 6 - shape.headerBits - hostFieldBits,
+    headerBits,
+    bodyBits: payload.length * 6 - headerBits - hostFieldBits,
     hostFieldBits,
     candidates: { ...candidates, template: templateLength },
   };
@@ -509,10 +542,10 @@ export async function expand(payload) {
   if (!/^[A-Za-z0-9_-]+$/.test(code)) throw new ClentError("This isn't a valid Clent link.");
 
   const reader = new BitReader(code);
-  const header = reader.read(6);
+  const header = readSymbol(reader, HEADER_CODE);
 
-  // The forward-compatibility escape. Header value 62 (a leading "-") was
-  // never a legal v1 header — scheme 2 forbids the www/host bits — so it is
+  // The forward-compatibility escape. Header value 62 was never a legal v1
+  // header — scheme 2 forbids the www/host bits — so its codeword is
   // reserved as the envelope for future wire versions: 4 version bits
   // follow, then that version's own format. This decoder knows none yet;
   // the promise is that it fails with the right message instead of

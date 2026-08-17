@@ -31,8 +31,15 @@ export {
  */
 export declare const VERSION: 1;
 
-/** Reserved first-header value marking a payload from a future wire version. */
+/** Reserved header symbol marking a payload from a future wire version. */
 export declare const VERSION_ESCAPE: 62;
+
+/**
+ * Canonical-Huffman code lengths for the 64 header values; symbol 62 is
+ * the version escape. Mined by tools/mine-header.mjs; frozen with the
+ * other tables.
+ */
+export declare const HEADER_CODE_LENGTHS: readonly number[];
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;

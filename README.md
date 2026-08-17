@@ -25,10 +25,10 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **56% of the URL it came from** (median). Every link also
+The encoded destination is **55% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
 longer than about **25 characters** before the whole link comes out shorter. That is
-most links people actually share: **80% of deep links** (anything past a bare
+most links people actually share: **82% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
@@ -36,8 +36,8 @@ Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~25 | 47.2% |
-| a github.io project page (40c) | ~110 | 9.0% |
+| `nul.im/#` (16c) | ~25 | 49.1% |
+| a github.io project page (40c) | ~110 | 9.1% |
 | payload alone, no prefix | ~10 | 99.9% |
 
 Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
@@ -53,18 +53,19 @@ encoder head-to-head over 3,999 corpus URLs:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **145,734 chars** | 151,216 chars |
+| Total payload, same 3,999 URLs | **143,780 chars** | 151,216 chars |
 | Decodes back byte-identical | **100%** | 83.4% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
-| `upload.wikimedia.org/...%22Agnese%22...` | **133** | 160 |
-| Shorter link, per URL | 37.5% | 51.3% |
+| `upload.wikimedia.org/...%22Agnese%22...` | **132** | 160 |
+| Shorter link, per URL | 43.3% | 43.6% |
 
-Read the last row with the others: ha.mr's per-URL edge is many 1–3-character wins on
-long-tail text, bought mostly by the wider output alphabet — and characters like
-`[](),'` are exactly the ones chat apps cut links off at, which is why Clent's
-default refuses them. (Clent's opt-in dense style plays the same alphabet game,
-base 87, while keeping the safe Base64url form the default and the canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
+Read the last row with the others: the per-URL split is now a coin flip, and ha.mr's
+remaining wins are 1–3-character margins on long-tail text bought mostly by the wider
+output alphabet — characters like `[](),'` are exactly the ones chat apps cut links
+off at, which is why Clent's default refuses them. (Clent's opt-in dense style plays
+the same alphabet game, base 87, while keeping the safe Base64url form the default
+and the canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
 slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
 page. Clent holds byte-exactness at 100% across the full 643,949 and fails loudly
 otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and
@@ -90,11 +91,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **62.7%** overall, median **55.9%** |
+| Payload vs input URL | **61.8%** overall, median **54.5%** |
 | Payload shorter than input | **99.9%** |
 | Host dictionary hit rate | **10.5%** |
 | Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 78.0%, text 15.2%, template 6.5%, deflate 0.3%, raw 0.0% |
+| Winning body mode | host 79.9%, text 13.4%, template 6.5%, deflate 0.3%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -269,9 +270,11 @@ and the same tag verifies the link in any spelling.
    pattern reproduces the URL exactly. A near miss falls back rather than guessing;
    getting this wrong would mean a link that silently resolves somewhere else.
 3. **The predictable parts become bits.** Scheme, `www.` and a trailing slash cost 12
-   characters in a normal URL; here they're 3 bits in a 6-bit header. Non-http schemes
-   go through a 15-entry scheme table at 4 bits each, so `mailto:` and `tel:` links are
-   first-class instead of paying for their scheme in the body.
+   characters in a normal URL; here they ride inside one Huffman-coded header symbol
+   whose common shapes cost 2-3 bits — the header's measured entropy, not a flat
+   field. Non-http schemes go through a 15-entry scheme table at 4 bits each, so
+   `mailto:` and `tel:` links are first-class instead of paying for their scheme in
+   the body.
 4. **253 common hosts collapse to an index.** Shopping, news, social and image hosts
    included; the dictionary is ordered by measured use, so the most-shortened hosts
    cost 3 bits and the rest 11 — and the table can grow without a format change.
@@ -338,7 +341,10 @@ Amazon does not.
 ### Wire format v1
 
 ```
-6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = other,
+header   one canonical-Huffman symbol over the 64 header values — the
+         measured header entropy is 2.6 bits, so the common shapes cost
+         2-3 bits and rare-but-legal ones up to 12. The value's bits:
+                  bits 0-1  scheme: 0 = https://, 1 = http://, 2 = other,
                                     3 = template
                   bit  2    "www." was stripped
                   bit  3    host came from the dictionary
@@ -441,8 +447,8 @@ test/             134 tests on node:test
   readme          this file's quoted numbers against corpus/stats.json
 
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
-                  optimality, mine-text, mine-host, bundle, minify, build,
-                  serve, browser-test
+                  optimality, mine-text, mine-host, mine-header, bundle,
+                  minify, build, serve, browser-test
 ```
 
 ## Build and delivery

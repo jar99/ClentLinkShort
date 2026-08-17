@@ -122,10 +122,12 @@ test("the shortest body mode wins", async () => {
 
 test("analysis bit accounting adds up", async () => {
   const { indexBits } = await import("../src/bits.js");
+  const { HEADER_CODE_LENGTHS, F_HOST } = await import("../src/clent.js");
   for (const url of ["https://github.com/x", "https://not-in-dictionary.example/x/y"]) {
     const a = await analyze(url, { stripTracking: false });
-    assert.equal(a.headerBits,
-      a.hostByte === null ? 6 : 6 + indexBits(a.hostByte));
+    const flags = (a.hostByte === null ? 0 : F_HOST) | (a.mode << 4);
+    assert.equal(a.headerBits, HEADER_CODE_LENGTHS[flags] +
+      (a.hostByte === null ? 0 : indexBits(a.hostByte)));
     assert.equal(a.headerBits + a.bodyBits, a.payload.length * 6);
   }
 });
