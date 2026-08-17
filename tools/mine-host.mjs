@@ -252,7 +252,7 @@ for (let iteration = 0; iteration < 3; iteration++) {
  * Emit
  * -------------------------------------------------------------------------- */
 
-const lengthsLiteral = JSON.stringify([...lengths]);
+const lengthsLiteral = `[..."${[...lengths].map((v) => v.toString(16)).join("")}"].map((c) => parseInt(c, 16))`;
 const suffixesLiteral = suffixes.map((s) => JSON.stringify(s)).join(", ");
 
 const file = `/**
@@ -277,7 +277,7 @@ const file = `/**
  * @module hostcode
  */
 
-/** Code length per symbol; 256 END, 257 ESC, 258+k suffix terminals. */
+/** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k terminals. */
 export const HOST_CODE_LENGTHS = Object.freeze(${lengthsLiteral});
 
 export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;

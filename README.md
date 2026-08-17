@@ -465,6 +465,45 @@ one-time steps remain at the registrar and on GitHub:
 2. Repo **Settings → Pages**: set the custom domain to `nul.im` and tick
    **Enforce HTTPS** once the certificate is issued.
 
+### Running behind Cloudflare
+
+`nul.im` is proxied through Cloudflare. Three settings matter; two of them can
+silently break the page:
+
+1. **SSL/TLS mode: Full (strict)** — or Full if GitHub hasn't issued the
+   domain certificate yet. *Flexible* causes redirect loops with GitHub Pages.
+2. **Anything that rewrites HTML must stay off**: Rocket Loader, Email
+   Obfuscation, Mirage, and any minification/injection app. The page's CSP
+   pins its inline scripts by hash — a proxy that edits or injects a single
+   byte of script makes the page refuse to run itself. (This is a feature:
+   the same pin is what stops anyone else injecting script.)
+3. **Caching**: a Cache Rule for `nul.im/*` with "Cache eligible" and an edge
+   TTL of an hour or more serves the page from Cloudflare's edge worldwide.
+   GitHub Pages only sends `max-age=600`; the rule lifts that at the edge.
+   Deploys still propagate within the TTL, and returning visitors don't
+   touch the network at all — the service worker has the page already.
+
+### Analytics without tracking
+
+The measurement this project will accept: aggregate counts nobody can be
+identified from, collected without touching the page.
+
+- **Cloudflare's proxy analytics** (dashboard → Analytics) already counts
+  requests, visitors, countries and status codes server-side — no script, no
+  cookie, no page change. Crucially it can never see where any link goes:
+  destinations live in the URL fragment, and browsers do not send fragments
+  in requests. Cloudflare sees that someone opened `nul.im`, never what the
+  link pointed at.
+- **Google Search Console** reports search impressions and clicks on its own
+  data. Submit the sitemap once: Search Console → Sitemaps →
+  `https://nul.im/sitemap.xml`.
+- **The line not crossed**: no analytics JavaScript — not even the
+  "privacy-friendly" kind. A beacon would be the page's first third-party
+  request, the CSP forbids it (`connect-src 'none'`), and the README's
+  premise is that nothing observes the people using it. If deeper insight is
+  ever wanted, it comes from Cloudflare's edge, never from the visitor's
+  browser.
+
 **Deploying a fork on a different domain:** the links themselves adapt
 automatically — the prefix comes from `location` at runtime. Only the *prose*
 quoting break-even lengths is baked from `corpus/stats.json`, which was measured

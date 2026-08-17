@@ -279,7 +279,7 @@ console.error(`holdout: ${(heldBits / holdout.length).toFixed(1)} bits/body, ` +
  * Emit
  * -------------------------------------------------------------------------- */
 
-const lengthsLiteral = JSON.stringify([...lengths]);
+const lengthsLiteral = `[..."${[...lengths].map((v) => v.toString(16)).join("")}"].map((c) => parseInt(c, 16))`;
 const tokensLiteral = tokens.map((t) => JSON.stringify(t.text)).join(", ");
 
 const file = `/**
@@ -299,7 +299,7 @@ const file = `/**
  * @module textcode
  */
 
-/** Code length per symbol; index 256 TOKEN, 257 END, 258 ESC. */
+/** Code length per symbol (one hex digit each); index 256 TOKEN, 257 END, 258 ESC. */
 export const CODE_LENGTHS = Object.freeze(${lengthsLiteral});
 
 export const SYM_TOKEN = 256, SYM_END = 257, SYM_ESC = 258;

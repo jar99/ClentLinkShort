@@ -2,7 +2,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # The repository's default branch. "main" is listed too so a later
+    # rename needs no workflow change.
+    branches: [claude/github-pages-link-shortener-1bozyz, main]
   workflow_dispatch:
 
 permissions:
@@ -22,8 +24,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -52,7 +54,11 @@ jobs:
       - name: Rebuild clean
         run: node tools/build.mjs
 
+      # enablement: true flips the Pages source to "GitHub Actions" by API,
+      # so no dashboard step is needed and the Jekyll branch builds stop.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
