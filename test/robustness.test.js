@@ -65,9 +65,11 @@ test("inflate itself enforces the bound", async () => {
 });
 
 test("the unassigned text6 symbol is rejected, not invented", async () => {
-  // header: scheme https, no flags, mode text6 -> 0; then symbol 60; then END.
+  // header: scheme https, no flags, mode text -> 0; then a nonsense body.
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
   const w = new BitWriter();
-  w.push(0, 6);
+  pushCode(w, buildCode(HEADER_CODE_LENGTHS), 0);
   w.push(60, 6);
   w.push(63, 6);
   await assert.rejects(() => expand(w.finish()), (error) => {

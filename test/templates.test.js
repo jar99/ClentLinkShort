@@ -127,10 +127,12 @@ test("a slot longer than the length field can hold is refused", async () => {
 });
 
 test("a template index beyond the table is rejected, not guessed", async () => {
-  const { BitWriter, SCHEME_TEMPLATE } = await import("../src/clent.js");
+  const { BitWriter, SCHEME_TEMPLATE, HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
+  const { writeIndex } = await import("../src/bits.js");
   const w = new BitWriter();
-  w.push(SCHEME_TEMPLATE, 6);
-  w.push(255, 8);        // no such template
+  pushCode(w, buildCode(HEADER_CODE_LENGTHS), SCHEME_TEMPLATE);
+  writeIndex(w, 900);    // no such template
   w.push(3, 6);
   for (let i = 0; i < 3; i++) w.push(1, 6);
   await assert.rejects(() => expand(w.finish()), /newer template|damaged|truncated/);

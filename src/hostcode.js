@@ -22,7 +22,7 @@
  */
 
 /** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k terminals. */
-export const HOST_CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000000000f0000f76099999aaaaaf000000000000000000000000000000000000f04655466548655445954557676700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008fecdfdfeadfdfdbdebfdeeffdcbcefefedddeedffefddddffeeddeffcffdeeccfdfdedcfdebebcdd9dfededfeddeeeffdebedfeeddebd5a9eace8e7ddefcaecfbddebcbdbbc8bdbbaeaebeeadedbaceaaeeeeceeaaeedeaccd8aeddedfcecdcdfdccabbbbcabbabbbbcfb0d9bbbabbbbaa9aaaaa99aaad99a9a9faa9ab99aaaaa"].map((c) => parseInt(c, 16)));
+export const HOST_CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000000000000f00760a99aaaaaaaf000000000000000000000000000000000000f04655466648656545944457786800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008fffddcda5bdeebdfddcbdfefdeeefefeefcfdceffdededecdeadfedeedeecfeeeedddbde5bafbe8e7dfcefbfbececeefbccdcbc9cfcccfbfbeecdeedbadebbdeffceeacefeebdce9cfefefeeddecccfdfcbbaabab9ebbbfaba9a9abe9aabbafaa99c9aa9c9fd99999d9becece999aa9ae"].map((c) => parseInt(c, 16)));
 
 export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
 
@@ -31,45 +31,40 @@ export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
  * @type {readonly string[]}
  */
 export const SUFFIXES = Object.freeze([
-  ".sourceforge.net", ".wikipedia.org", ".wordpress.com", ".bearblog.dev",
-  ".blogspot.com", ".in-addr.arpa", ".stanford.edu", ".substack.com", ".harvard.edu",
-  ".netlify.app", ".google.com", ".medium.com", ".vercel.app", ".github.io",
-  ".yahoo.com", ".narod.ru", ".nasa.gov", ".digital", ".free.fr", ".gouv.fr",
-  ".mit.edu", ".network", ".casino", ".com.ar", ".com.au", ".com.br", ".com.cn",
-  ".com.co", ".com.hk", ".com.mx", ".com.my", ".com.pl", ".com.tr", ".com.tw",
-  ".com.ua", ".com.vn", ".edu.au", ".edu.cn", ".edu.pl", ".edu.tr", ".edu.tw",
-  ".gob.mx", ".gov.au", ".gov.br", ".gov.cn", ".gov.in", ".gov.my", ".gov.pl",
-  ".gov.tr", ".gov.tw", ".gov.ua", ".gov.uk", ".gov.vn", ".net.au", ".nic.in",
-  ".online", ".org.au", ".org.br", ".org.il", ".org.tr", ".org.ua", ".org.uk",
-  ".social", ".ac.id", ".ac.il", ".ac.in", ".ac.jp", ".ac.kr", ".ac.th", ".ac.uk",
-  ".click", ".cloud", ".co.id", ".co.il", ".co.in", ".co.jp", ".co.kr", ".co.nz",
-  ".co.th", ".co.uk", ".co.za", ".gc.ca", ".go.id", ".go.jp", ".go.kr", ".go.th",
-  ".lg.jp", ".media", ".ne.jp", ".or.jp", ".or.kr", ".space", ".store", ".world",
-  ".arpa", ".blog", ".club", ".info", ".link", ".live", ".mobi", ".news",
-  ".shop", ".site", ".tech", ".work", ".app", ".biz", ".com", ".dev", ".edu",
-  ".fun", ".gov", ".int", ".mil", ".net", ".one", ".org", ".pro", ".top",
-  ".vip", ".xxx", ".xyz", ".ai", ".ar", ".at", ".au", ".be", ".bg", ".br",
+  ".sourceforge.net", ".posterous.com", ".wikipedia.org", ".wordpress.com",
+  ".blogspot.com", ".linkedin.com", ".substack.com", ".fandom.com", ".google.com",
+  ".medium.com", ".tumblr.com", ".vercel.app", ".github.io", ".nasa.gov",
+  ".free.fr", ".casino", ".com.ar", ".com.au", ".com.br", ".com.cn", ".com.co",
+  ".com.mx", ".com.pl", ".com.tr", ".com.tw", ".com.ua", ".edu.cn", ".gov.au",
+  ".gov.br", ".gov.cn", ".gov.in", ".gov.uk", ".net.br", ".online", ".org.au",
+  ".org.uk", ".social", ".ac.id", ".ac.in", ".ac.jp", ".ac.uk", ".click",
+  ".cloud", ".co.id", ".co.il", ".co.in", ".co.jp", ".co.kr", ".co.nz", ".co.uk",
+  ".co.za", ".ne.jp", ".or.jp", ".space", ".store", ".world", ".blog", ".buzz",
+  ".club", ".info", ".life", ".link", ".live", ".mobi", ".news", ".shop",
+  ".site", ".tech", ".app", ".biz", ".cfd", ".com", ".dev", ".edu", ".fun",
+  ".gov", ".lol", ".net", ".one", ".org", ".pro", ".run", ".top", ".vip",
+  ".win", ".xyz", ".ae", ".ai", ".ar", ".at", ".au", ".be", ".bg", ".br",
   ".by", ".ca", ".cc", ".ch", ".cl", ".cn", ".co", ".cz", ".de", ".dk", ".ee",
   ".es", ".eu", ".fi", ".fm", ".fr", ".gg", ".gr", ".hk", ".hr", ".hu", ".id",
-  ".ie", ".il", ".in", ".io", ".ir", ".is", ".it", ".jp", ".kr", ".kz", ".lt",
-  ".lv", ".me", ".mx", ".my", ".nl", ".no", ".nz", ".pe", ".ph", ".pk", ".pl",
-  ".pt", ".ro", ".rs", ".ru", ".se", ".sg", ".sh", ".sk", ".th", ".to", ".tr",
-  ".tv", ".tw", ".ua", ".uk", ".us", ".vn", ".za"
+  ".ie", ".il", ".im", ".in", ".io", ".ir", ".is", ".it", ".jp", ".kr", ".kz",
+  ".lt", ".lv", ".me", ".mx", ".my", ".nl", ".no", ".nz", ".pe", ".ph", ".pk",
+  ".pl", ".pt", ".ro", ".rs", ".ru", ".se", ".sg", ".sh", ".si", ".sk", ".su",
+  ".th", ".to", ".tr", ".tv", ".tw", ".ua", ".uk", ".us", ".uy", ".vn", ".za"
 ]);
 
 /** First host-token symbol; token k lives at HOST_TOKEN_BASE + k. */
-export const HOST_TOKEN_BASE = 450;
+export const HOST_TOKEN_BASE = 418;
 
 /**
  * Common host fragments as their own symbols, indexed as on the wire.
  * @type {readonly string[]}
  */
 export const HOST_TOKENS = Object.freeze([
-  "library", "science", ".googl", "google", "online", "cloud", "imedi", "media",
-  "music", "tools", "world", ".gov", ".wik", "arch", "atio", "book", "brit",
-  "erve", "ews.", "game", "ikim", "life", "news", "port", "serv", "spor",
-  "tech", "time", "tion", "wiki", "work", "age", "all", "and", "art", "ata",
-  "ber", "blo", "cat", "com", "ent", "ers", "fli", "for", "gue", "ing", "ist",
-  "ive", "log", "mar", "net", "ogu", "per", "pro", "sta", "str", "tal", "ter",
-  "the", "tor", "tra", "tur", "ver", "web"
+  "science", "google", "online", "blog.", "craft", "cyber", "disco", "world",
+  "alph", "ders", "digi", "edia", "game", "lder", "lege", "medi", "mine",
+  "news", "omat", "otte", "poke", "port", "roll", "star", "tech", "tion",
+  "tter", "wiki", "all", "arv", "che", "com", "cro", "eld", "emo", "ent",
+  "fal", "gen", "har", "her", "ing", "kem", "llo", "lls", "lou", "mar", "mem",
+  "mon", "mor", "ory", "out", "pha", "pot", "rry", "rve", "rwa", "ryp", "the",
+  "vel", "ver", "vil", "war", "web", "ypo"
 ]);

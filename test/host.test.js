@@ -80,15 +80,19 @@ test("a host past the decoder's cap still round-trips, via another mode", async 
 });
 
 test("host mode with the dictionary flag is refused", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
   const w = new BitWriter();
-  w.push(SCHEME_HTTPS | F_HOST | (MODE_HOST << 4), 6);
+  pushCode(w, buildCode(HEADER_CODE_LENGTHS), SCHEME_HTTPS | F_HOST | (MODE_HOST << 4));
   w.push(0, 8);
   await assert.rejects(() => expand(w.finish()), ClentError);
 });
 
 test("host mode under scheme 2 is refused", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
   const w = new BitWriter();
-  w.push(SCHEME_OTHER | (MODE_HOST << 4), 6);
+  pushCode(w, buildCode(HEADER_CODE_LENGTHS), SCHEME_OTHER | (MODE_HOST << 4));
   w.push(SCHEME_IN_BODY, 4);
   await assert.rejects(() => expand(w.finish()), ClentError);
 });

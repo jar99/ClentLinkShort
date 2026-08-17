@@ -86,9 +86,12 @@ test("the spelled-scheme escape hatch works and stays gated", async () => {
 });
 
 test("scheme-2 payloads with host bits set are malformed", async () => {
+  const { HEADER_CODE_LENGTHS } = await import("../src/clent.js");
+  const { buildCode, pushCode } = await import("../src/huffman.js");
+  const headerCode = buildCode(HEADER_CODE_LENGTHS);
   for (const extra of [F_WWW, F_HOST, F_WWW | F_HOST]) {
     const w = new BitWriter();
-    w.push(SCHEME_OTHER | extra | (MODE_RAW << 4), 6);
+    pushCode(w, headerCode, SCHEME_OTHER | extra | (MODE_RAW << 4));
     w.push(2, SCHEME_BITS); // mailto
     for (const byte of new TextEncoder().encode("a@b.example")) w.push(byte, 8);
     await assert.rejects(() => expand(w.finish()), ClentError, `flags ${extra}`);

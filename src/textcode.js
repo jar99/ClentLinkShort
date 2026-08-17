@@ -20,7 +20,7 @@
  */
 
 /** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k tokens. */
-export const CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000c0cf57f99f9956566567777669e0708d7878889a9ab99999b989aaacbb0000505666576659766656a555678879000b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005fffcacabd9caacfdfddd9aaecccccfddce988b99f9f99999a9abdabbbabbbbbcccbccccccdcddddddddcdededdd99c9999e9ad9aaaaaaaaacaaaaabababbcabccaaabbcaabababbbbbbabbbbcbbabbbbbbbbbbbbbbcbbbbccbcbbcbcabccabcbcbbdbbbbbbbcbbbbccccbbccbdcccccaacccccbccbccccccdccccdccccccccbcc"].map((c) => parseInt(c, 16)));
+export const CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000c0bf79d99fbb5756666777776af080987888889999a98999a888989aa9f0f050565657665776665695556778780f0c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004fbddace7f0f00bfafbccd9bacccccdd9aaaabbabcbbbbbfbbcccbcccbccbccccedddd8b88e9ac99edb9aaaabbabaabaaababaaababbabaaaababbabbbbbbcbbbabbbabcbbbbbbbbbbabbbbbbbbbbbbbcbcbbbbcbbbbcbcbbcbbbbccbbbcccbbbccccbbbcbbbdcbcccbcbcbcbcbccbcbcbabcbccbccbbbbccccbcccccbdbccccbb"].map((c) => parseInt(c, 16)));
 
 export const SYM_END = 256, SYM_ESC = 257, TOKEN_BASE = 258;
 
@@ -29,30 +29,30 @@ export const SYM_END = 256, SYM_ESC = 257, TOKEN_BASE = 258;
  * @type {readonly string[]}
  */
 export const TOKENS = Object.freeze([
-  "articles/", "index.php", "/cgi-bin/", "/article", "content", "/2026/0",
-  "/index.", "archive", "source", "search", "/blog/", "/searc", "2026-0",
-  "posts/", "-with-", "detail", "claude", "system", "google", "image", ".php?",
-  "/news", "news/", "story", "world", "/post", "agent", "publi", "ublic",
-  "type=", "build", "-2026", "glish", "wiki", ".htm", "/wik", "html", ".jpg",
-  "comm", "edia", "info", "iki/", "tion", "pedi", "/com", "_con", "medi",
-  "ing-", "inal", "ment", "the-", "ogra", ".asp", ".pdf", "-the", "atch",
-  "auto", "/201", "page", "-to-", "view", "-of-", "ture", "-ai-", "play",
-  "port", "data", "ject", "tech", "work", "open", "-is-", "/doc", "from",
-  "down", "News", "what", "tive", "lock", "load", "ight", "ener", "-new",
-  "ing/", "new-", "/ai-", "peci", "spec", "/05/", "/01/", "ons", "mon", "mpa",
-  "org", "ign", "ile", "cam", "amp", "_de", "id=", "rig", "ori", "and", "man",
-  "que", "che", "200", "ter", "ist", "all", "for", "ine", "ver", "nce", "pro",
-  "-co", "-in", "al-", "res", "es-", "rap", "how", "lin", "ang", "par", "ant",
-  "lle", "rit", "ate", "str", "cri", "tes", "000", "ID=", "per", "ide", "100",
-  "olo", "ica", "sta", "/en", "on-", "ann", "ack", "ook", "ers", "ass", "und",
-  "ill", "ian", "%20", "mar", "-de", "ble", "usi", "ain", "pri", "ame", "ode",
-  "pic", "ed-", "one", "ite", "-re", "web", "ber", "/p/", "ult", "ens", "app",
-  "min", "ess", "rea", "ext", "war", "ple", "us/", "you", "ram", "out", "ser",
-  "eur", "duc", "ran", "ave", "ity", "off", "act", "use", "/10", "acc", "hl=",
-  "ome", "s/1", "-wh", "ts-", "cha", "er-", "/re", "ell", "ari", "hin", "en-",
-  "/de", "oli", "dis", "int", "end", "ard", "ry/", "ary", "st-", "est", "lea",
-  "ace", "re-", "qui", "oni", "val", "ntr", "al_", "ani", "lan", "/ma", "ord",
-  "tro", "ole", "ale", "tal", "tin", "sec", "cie", "s/c", "ics", "tri", "ela",
-  "as-", "s/s", "mic", "500", "tha", "ath", "tle", "an-", "vel", "iss", "ini",
-  "cia", "ull", "not", "-be", "/ca", "alt", "ies", "ele", "-fi"
+  "?utm_source=", "/index.php", "articles/", "/article", "/117112", "release",
+  "/wiki/", "roject", "wiki/A", "wiki/B", "wiki/C", "wiki/D", "/blog/", "wiki/F",
+  "/news/", "detail", "search", "/tags/", "-with-", "public", ".html", "-the-",
+  "&utm_", ".php?", "/the-", "/post", "graph", "ology", "from-", "secur",
+  "/pro", "tion", "atio", "comm", "_of_", "-of-", "edia", "-to-", "atch",
+  "medi", "11/0", "ight", "book", "tech", "camp", "mpai", "view", "the_",
+  "25/0", "data", ".pdf", "ture", "comp", "-new", ".asp", "port", "The_",
+  "-you", "-pro", "-is-", "poli", "goog", "scri", "ffic", "why-", "tics",
+  "gram", "our-", "ing", "ack", "age", "/20", "10.", "/10", "202", "pac",
+  "ent", "/pa", "ge/", "ng-", "201", "and", "ter", "all", "for", "ver", "000",
+  "ers", "-in", "mon", "-co", "con", "er-", "ine", "ive", "es-", "6/0", "wor",
+  "id=", "nal", "tor", "man", "al-", "sta", "nce", "'s_", "ill", "le-", "ons",
+  "on-", "est", "ist", "how", "-re", "ang", "ity", "rea", "ed-", "app", "pla",
+  "enc", "ign", "100", "07/", "end", "ard", "und", "ode", "ell", "ant", "-de",
+  "ide", "per", "ark", "ess", "ame", "an-", "one", "ile", "org", "que", "ite",
+  "che", "lin", "ate", "fil", "int", "out", "tra", "ock", "on_", "rth", "are",
+  "ain", "hat", "us/", "200", "ome", "web", "en-", "ext", "cha", "-ma", "/p/",
+  "re-", "ult", "ble", "her", "ts-", "21/", "off", "ser", "oll", "ass", "ene",
+  "eng", "16/", "ens", "ori", "aut", "24/", "own", "chi", "ast", "dis", "111",
+  "ner", "ann", "/ma", "ali", "ime", "en_", "ld-", "_Co", "ary", "ber", "par",
+  "in-", "08/", "ai-", "min", "in/", "ick", "unt", "ric", "not", "vel", "Cha",
+  "net", "-su", "ust", "ood", "ts/", "bus", "act", "ani", "se-", "duc", "cli",
+  "tle", "-cl", "s-a", "-ex", "der", "/de", "ari", "er_", "ls/", "ory", "ake",
+  "an_", "05/", "06/", "/re", "hot", "ial", "ree", "es_", "ave", "hou", "cor",
+  "res", "mic", "-lo", "-be", "on/", "eed", "-st", "way", "son", "ly-", "nt-",
+  "ype", "s-s", "ope", "ies"
 ]);

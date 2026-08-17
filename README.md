@@ -14,7 +14,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 151 tests, no dependencies
+npm test              # 152 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -25,22 +25,22 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **55% of the URL it came from** (median). Every link also
+The encoded destination is **51% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
-longer than about **25 characters** before the whole link comes out shorter. That is
-most links people actually share: **82% of deep links** (anything past a bare
+longer than about **20 characters** before the whole link comes out shorter. That is
+most links people actually share: **83% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
-Measured over 643,949 real URLs:
+Measured over 4,060,893 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~25 | 49.1% |
-| a github.io project page (40c) | ~110 | 9.1% |
-| payload alone, no prefix | ~10 | 99.9% |
+| `nul.im/#` (16c) | ~20 | 61.3% |
+| a github.io project page (40c) | ~110 | 3.7% |
+| payload alone, no prefix | ~10 | 99.7% |
 
-Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
+Bare homepages (28% of the corpus) are the one shape that rarely wins — there is
 nothing to compress away. What you get regardless of length is a link nothing is
 storing, that can't be revoked or logged, and that still resolves when whoever made
 it has forgotten about it.
@@ -53,49 +53,58 @@ encoder head-to-head over 3,999 corpus URLs:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **143,780 chars** | 151,216 chars |
+| Total payload, same 3,999 URLs | **112,854 chars** | 125,326 chars |
 | Decodes back byte-identical | **100%** | 83.4% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
-| `upload.wikimedia.org/...%22Agnese%22...` | **132** | 160 |
-| Shorter link, per URL | 43.3% | 43.6% |
+| `zelda.fandom.com/wiki/Ice_Queen` | **16** | 25 |
+| Shorter link, per URL | **57.5%** | 32.2% |
 
-Read the last row with the others: the per-URL split is now a coin flip, and ha.mr's
-remaining wins are 1–3-character margins on long-tail text bought mostly by the wider
-output alphabet — characters like `[](),'` are exactly the ones chat apps cut links
-off at, which is why Clent's default refuses them. (Clent's opt-in dense style plays
-the same alphabet game, base 87, while keeping the safe Base64url form the default
-and the canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
+Clent wins the per-URL split outright now, with a 64-character safe alphabet against
+their 84 — characters like `[](),'` are exactly the ones chat apps cut links off at,
+which is why Clent's default refuses them. (The opt-in dense style plays the same
+alphabet game, base 87, while keeping the safe Base64url form the default and the
+canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
 slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
-page. Clent holds byte-exactness at 100% across the full 643,949 and fails loudly
+page. Clent holds byte-exactness at 100% across the full 4,060,893 and fails loudly
 otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and
 decode, phishing-shape interception, hash-pinned CSP, integrity tags and signing, and
 bounded decompression are all Clent-only.
 
 ## Validation
 
-`corpus/` holds 643,949 real URLs from six sources, weighted towards the kinds of link
-people actually shorten:
+`corpus/` holds 4,060,893 real URLs from seventeen sources, weighted towards the
+kinds of link people actually share — collected by `npm run corpus:update`, which
+merges, checkpoints every two minutes, and can be re-run any time to grow the set
+without ever invalidating a link:
 
 | Source | What it contributes |
 | --- | --- |
-| Wikipedia, 30 language editions | citations — messy, old, heavily percent-encoded |
+| Wikipedia, 40 language editions | citations — messy, old, heavily percent-encoded |
+| Wikipedia per-domain mining | cited IMDb, LinkedIn, Instagram, X deep links |
 | Tranco top 1M | ranked domains, head-weighted |
-| Hacker News | submitted links |
+| Hacker News stories + comments | submitted links, and links shared in conversation |
+| Reddit listing feeds | submitted destinations and permalinks |
+| Mastodon, 16 instances | posts, link cards, body links |
 | Lemmy, 8 instances | social posts: news, deals, images |
+| 83 Fandom wikis | real article URLs — capitals, quotes, parentheses |
+| Google News, 6 locales | share URLs and source articles |
+| Crossref | DOI links, capped at 200k |
+| npm + PyPI registries | package pages, capped at 200k each |
+| Internet Archive | item pages across five media types |
 | Wikimedia Commons | image URLs on a CDN host |
-| 36 RSS/Atom feeds | news articles and shopping deals |
+| 50 RSS/Atom feeds | news, deals, newsletters, YouTube channels |
 
 | | |
 | --- | --- |
-| URLs round-tripped | **643,949** |
+| URLs round-tripped | **4,060,893** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **61.8%** overall, median **54.5%** |
-| Payload shorter than input | **99.9%** |
-| Host dictionary hit rate | **10.5%** |
-| Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 79.9%, text 13.4%, template 6.5%, deflate 0.3%, raw 0.0% |
+| Payload vs input URL | **57.0%** overall, median **50.8%** |
+| Payload shorter than input | **99.7%** |
+| Host dictionary hit rate | **16.3%** |
+| Carried tracking parameters | **1.2%**, worth 30% of the payload on those |
+| Winning body mode | host 66.9%, text 18.1%, template 14.6%, deflate 0.3%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -155,9 +164,9 @@ be measured instead:
   | top 1,000 | 99.8% |
   | top 10,000 | 99.9% |
   | top 100,000 | 100% |
-  | top 1,000,000 | 23.9% |
+  | top 1,000,000 | 99.2% |
 
-  Traffic-weighted reach at Zipf *s*=1: **89.8%**. The corpus also contains 84,000
+  Traffic-weighted reach at Zipf *s*=1: **99.9%**. The corpus also contains 217,995
   distinct hosts that aren't ranked at all, which is the tail past the top million.
 
 ### DuckDuckGo
@@ -282,7 +291,7 @@ spelling.
    cost 3 bits and the rest 11 — and the table can grow without a format change.
 5. **Every other domain stays cheap without a dictionary entry.** The hostname gets
    its own Huffman code whose *terminal* symbols are registrable suffixes — `.com`,
-   `.org`, `.co.uk`, `.github.io`, 128 of them mined across distinct names
+   `.org`, `.co.uk`, `.github.io`, 160 of them mined across distinct names
    (`src/hostcode.js`, `tools/mine-host.mjs`). `.com` — the ending of two in five
    unknown hosts — costs a couple of bits instead of four spelled characters, and a
    host whose ending isn't listed just ends with the plain END symbol. Nothing about
@@ -363,7 +372,7 @@ body     text     canonical-Huffman symbols (table in src/textcode.js):
          host     the hostname in its own code (table in src/hostcode.js):
                   name characters, 64 mined fragments ("blog.", "mail."),
                   then one terminal symbol that both appends a registrable
-                  suffix (".com", ".co.uk", ".github.io" — 192 of them) and
+                  suffix (".com", ".co.uk", ".github.io" — 160 of them) and
                   ends the field; the tail follows as text
 
 under scheme 2 ("other"): bits 2-3 must be zero, the mode must not be 3,

@@ -1,57 +1,57 @@
 {
   "generated": "2026-08-17",
-  "corpusTotal": 643949,
-  "checked": 643949,
+  "corpusTotal": 4060893,
+  "checked": 4060893,
   "skipped": 0,
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.6181863340305118,
-  "payloadShorterPct": 99.92949752231931,
-  "medianRatio": 0.5454545454545454,
-  "p90Ratio": 0.7102803738317757,
-  "linkSavingsMean": -0.012483713969796438,
-  "linkSavingsMedian": 0,
-  "linkShorterPct": 49.056524662667385,
-  "bareShorterPct": 4.991417732839071,
-  "deepShorterPct": 82.38674641944397,
-  "bareCount": 277316,
-  "deepCount": 366633,
-  "deepSavingsMedian": 0.11475409836065575,
-  "deepSavingsMean": 0.11331167856477807,
-  "breakEvenLength": 25,
+  "payloadRatio": 0.5697805667,
+  "payloadShorterPct": 99.69829296,
+  "medianRatio": 0.5081967213,
+  "p90Ratio": 0.6829268293,
+  "linkSavingsMean": 0.05545050988,
+  "linkSavingsMedian": 0.1014492754,
+  "linkShorterPct": 61.30570296,
+  "bareShorterPct": 3.788606957,
+  "deepShorterPct": 83.42087956,
+  "bareCount": 1127776,
+  "deepCount": 2933117,
+  "deepSavingsMedian": 0.1777777778,
+  "deepSavingsMean": 0.1466704004,
+  "breakEvenLength": 20,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
-      "breakEven": 25,
-      "shorterPct": 49.056524662667385,
-      "medianSaving": 0
+      "breakEven": 20,
+      "shorterPct": 61.30570296,
+      "medianSaving": 0.1014492754
     },
     {
       "label": "a github.io project page",
       "length": 40,
       "breakEven": 110,
-      "shorterPct": 9.121995685993767,
-      "medianSaving": -0.5833333333333333
+      "shorterPct": 3.716005322,
+      "medianSaving": -0.3953488372
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.92949752231931,
-      "medianSaving": 0.4545454545454546
+      "shorterPct": 99.69829296,
+      "medianSaving": 0.4918032787
     }
   ],
   "modes": {
-    "text": 85989,
-    "raw": 7,
-    "deflate": 1975,
-    "host": 514439,
-    "template": 41539
+    "text": 735970,
+    "raw": 31,
+    "deflate": 12008,
+    "host": 2718691,
+    "template": 594193
   },
-  "templatePct": 6.450666124180642,
-  "dictHitPct": 10.524280649554546,
-  "trackingPct": 3.645785613456966,
-  "trackingSavingPct": 25.68591919102878
+  "templatePct": 14.63207723,
+  "dictHitPct": 16.33492929,
+  "trackingPct": 1.212122555,
+  "trackingSavingPct": 29.89866297
 }

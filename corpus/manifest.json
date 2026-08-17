@@ -1,23 +1,36 @@
 {
   "generated": "2026-08-17",
-  "total": 643949,
+  "total": 4060893,
   "counts": {
-    "wikipedia": 225000,
-    "tranco": 225000,
-    "hackernews": 135000,
-    "lemmy": 13221,
-    "commons": 45000,
-    "feeds": 728
+    "existing": 4060893,
+    "fandom": 0
+  },
+  "quality": {
+    "fandom": {
+      "kept": 0,
+      "duplicates": 0,
+      "rejected": 0
+    }
   },
   "rankedDomains": 1000000,
-  "sha256": "86b2bccc35696ce516b8da6dc2bd3ec5ba0bbbe9c652b067f13543ceaab4e2cf",
-  "bytes": 37588580,
+  "sha256": "56017e03cb6a01a03d98fec7c5baff2a88b80041187d26ee2e8db6c0b86efbaf",
+  "bytes": 209854858,
   "sources": {
-    "wikipedia": "{lang}.wikipedia.org/w/api.php?action=query&list=exturlusage, 30 editions",
-    "hackernews": "hn.algolia.com/api/v1/search_by_date?tags=story",
+    "wikipedia": "{lang}.wikipedia.org exturlusage, 40 editions — cited links",
+    "hackernews": "hn.algolia.com search_by_date, stories — submitted links",
+    "hncomments": "hn.algolia.com search_by_date, comments — links in conversation",
     "lemmy": "8 Lemmy instances, /api/v3/post/list — social, news, deals, images",
-    "feeds": "36 RSS/Atom feeds — news and shopping deals",
-    "commons": "commons.wikimedia.org/w/api.php?action=query&list=allimages — image shares",
+    "feeds": "50 RSS/Atom feeds — news, deals, newsletters, youtube channels",
+    "googlenews": "news.google.com/rss, 6 locales x 9 sections",
+    "commons": "commons.wikimedia.org allimages — image shares",
+    "reddit": "reddit.com listing feeds — submitted links and permalinks",
+    "mastodon": "16 instances, /api/v1/timelines/public — posts, cards, body links",
+    "fandom": "39 Fandom wikis, allpages — real article URLs",
+    "targeted": "en.wikipedia exturlusage?euquery per asked-for domain",
+    "crossref": "api.crossref.org/works — DOI links",
+    "npmjs": "replicate.npmjs.com — package pages",
+    "pypi": "pypi.org/simple — project pages, sampled across the index",
+    "archiveitems": "archive.org/advancedsearch — item pages, 5 media types",
     "gdelt": "api.gdeltproject.org/api/v2/doc/doc",
     "stackexchange": "api.stackexchange.com/2.3/questions?filter=withbody",
     "tranco": "tranco-list.eu — ranked domains, sampled across the full range"

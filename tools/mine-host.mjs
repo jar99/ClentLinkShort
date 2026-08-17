@@ -40,9 +40,15 @@ const HOLDOUT = 30000;
 const MIN_NAMES = 30;
 const MAX_CODE_LEN = 15;
 
-/** Symbols: bytes, END, ESC, suffix terminals, then one per host token. */
+/**
+ * Symbols: bytes, END, ESC, suffix terminals, then one per host token.
+ * TOKEN_BASE tracks the suffixes actually SELECTED, not the count asked
+ * for — when scoring surfaces fewer than SUFFIX_COUNT, an offset anchored
+ * to the request would emit a lengths array misaligned with the file's
+ * own HOST_TOKEN_BASE, leaving half the tokens pointing at padding.
+ */
 const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
-const TOKEN_BASE = () => SUFFIX_BASE + SUFFIX_COUNT;
+const TOKEN_BASE = () => SUFFIX_BASE + suffixes.length;
 
 /* -------------------------------------------------------------------------- *
  * Hosts as the encoder sees them: www-stripped, weighted by occurrence
