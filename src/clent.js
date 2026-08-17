@@ -33,7 +33,7 @@
  *                   bit  2    "www." was stripped from the host
  *                   bit  3    host came from the dictionary
  *                   bits 4-5  body mode: 0 text, 1 raw, 2 deflate, 3 host
- *   8 bits  host dictionary index, present only when bit 3 is set
+ *   index   host dictionary index (escape-coded, bits.js), only when bit 3 set
  *   body    text    Huffman-coded bytes with tokens, terminated by END
  *           raw     UTF-8 bytes, 8 bits each
  *           deflate DEFLATE-raw bytes, 8 bits each
@@ -51,8 +51,8 @@
  * is spelled in the body. The encoder never emits 15 for a scheme the table
  * knows; the decoder accepts it so future tables can grow.
  *
- * Under scheme 3 the layout is: 8 bits of template index, then each slot as
- * described by templates.js.
+ * Under scheme 3 the layout is: an escape-coded template index (bits.js),
+ * then each slot as described by templates.js.
  *
  * An optional integrity tag rides OUTSIDE the payload — "#<payload>.c<tag>"
  * or ".h<tag>" — see sign.js; it never changes what the payload decodes to.
@@ -68,7 +68,9 @@
  * @module clent
  */
 
-import { B64, BitWriter, BitReader, ClentError } from "./bits.js";
+import {
+  B64, BitWriter, BitReader, ClentError, writeIndex, readIndex, indexBits,
+} from "./bits.js";
 import { canCompress, deflate, inflate } from "./deflate.js";
 import { planText, emitText, decodeText, END_BITS } from "./text.js";
 import { hostBits, emitHost, decodeHost } from "./host.js";
@@ -220,7 +222,7 @@ export function build(flags, mode, hostByte, bytes, schemeIndex = null, host = n
       throw new ClentError("A scheme-2 payload needs a scheme index.");
     w.push(schemeIndex, SCHEME_BITS);
   }
-  if (hostByte !== null) w.push(hostByte, 8);
+  if (hostByte !== null) writeIndex(w, hostByte);
 
   if (mode === MODE_HOST) {
     if (host === null) throw new ClentError("A host-mode payload needs a host.");
@@ -350,7 +352,7 @@ export async function analyze(input, options = {}) {
       const index = HOST_INDEX.get(host);
       if (index !== undefined) {
         shapes.push({
-          headerBits: 6 + 8, at: tailAt, flags: scheme | extra | F_HOST,
+          headerBits: 6 + indexBits(index), at: tailAt, flags: scheme | extra | F_HOST,
           hostByte: index, schemeIndex: null, host,
         });
       }
@@ -547,7 +549,7 @@ export async function expand(payload) {
   if (mode === MODE_HOST && (flags & F_HOST))
     throw new ClentError("This link uses an unknown format.");
 
-  const hostIndex = flags & F_HOST ? reader.read(8) : null;
+  const hostIndex = flags & F_HOST ? readIndex(reader) : null;
 
   let fieldHost = null;
   let body;

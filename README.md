@@ -14,7 +14,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 134 tests, no dependencies
+npm test              # 151 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -28,7 +28,7 @@ More often than before, and the numbers are measured, not hoped.
 The encoded destination is **56% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
 longer than about **25 characters** before the whole link comes out shorter. That is
-most links people actually share: **79% of deep links** (anything past a bare
+most links people actually share: **80% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
@@ -36,8 +36,8 @@ Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~25 | 46.7% |
-| a github.io project page (40c) | ~110 | 8.9% |
+| `nul.im/#` (16c) | ~25 | 47.2% |
+| a github.io project page (40c) | ~110 | 9.0% |
 | payload alone, no prefix | ~10 | 99.9% |
 
 Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
@@ -89,11 +89,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **62.9%** overall, median **56.0%** |
+| Payload vs input URL | **62.7%** overall, median **55.9%** |
 | Payload shorter than input | **99.9%** |
-| Host dictionary hit rate | **11.0%** |
+| Host dictionary hit rate | **10.5%** |
 | Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 78.0%, text 15.6%, template 6.0%, deflate 0.3%, raw 0.0% |
+| Winning body mode | host 78.0%, text 15.2%, template 6.5%, deflate 0.3%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -257,10 +257,12 @@ and the same tag verifies the link in any spelling.
    Google Docs and Drive, Discord and WhatsApp invites, the big shorteners (bit.ly,
    tinyurl, t.co), the news sites' date-and-slug shapes, Steam, IMDb, Wikipedia in
    ten languages, the Stack Exchange network and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
-   information; templated it is 15. Each slot is encoded at its own alphabet's width —
-   a YouTube ID is Base64url so 6 bits a character, an Amazon ASIN is uppercase and
-   digits so also 6, a numeric status ID is 4 — where the general text encoder would
-   spend up to 12 a character on capitals.
+   information; templated it is 14. Each slot travels as one integer in its own
+   alphabet's base, so a character costs exactly what its alphabet needs —
+   a YouTube ID is Base64url so 6 bits a character, an Amazon ASIN base 36 so 5.17,
+   a numeric status ID 3.33 — where the general text encoder would spend up to 12 a
+   character on capitals. The template table is ordered by measured use, so the
+   most-shared shapes spend 3 bits on their index and the rarest 11.
 
    A template is used **only if** substituting the captured values back into the
    pattern reproduces the URL exactly. A near miss falls back rather than guessing;
@@ -269,9 +271,9 @@ and the same tag verifies the link in any spelling.
    characters in a normal URL; here they're 3 bits in a 6-bit header. Non-http schemes
    go through a 15-entry scheme table at 4 bits each, so `mailto:` and `tel:` links are
    first-class instead of paying for their scheme in the body.
-4. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts
-   included, chosen by category rather than mined — corpus frequency measures what
-   Wikipedia cites, not what people shorten.
+4. **253 common hosts collapse to an index.** Shopping, news, social and image hosts
+   included; the dictionary is ordered by measured use, so the most-shortened hosts
+   cost 3 bits and the rest 11 — and the table can grow without a format change.
 5. **Every other domain stays cheap without a dictionary entry.** The hostname gets
    its own Huffman code whose *terminal* symbols are registrable suffixes — `.com`,
    `.org`, `.co.uk`, `.github.io`, 128 of them mined across distinct names
@@ -341,17 +343,19 @@ Amazon does not.
                   bit  3    host came from the dictionary
                   bits 4-5  body mode: 0 = text, 1 = raw, 2 = deflate,
                                        3 = host
-8 bits   host     dictionary index — only when bit 3 is set
+index    host     dictionary index — only when bit 3 is set. Escape-coded:
+                  3 bits for the seven most-shortened hosts, 11 for the
+                  rest, open-ended past the table's current end
 body     text     canonical-Huffman symbols (table in src/textcode.js):
-                  literal bytes, TOKEN + 7-bit index into 128 mined
-                  substrings, ESC + raw byte, END
+                  literal bytes, 256 mined substrings as symbols of their
+                  own, ESC + raw byte, END
          raw      UTF-8 bytes, 8 bits each
          deflate  DEFLATE-raw bytes, 8 bits each
          host     the hostname in its own code (table in src/hostcode.js):
-                  name characters, then one terminal symbol that both
-                  appends a registrable suffix (".com", ".co.uk",
-                  ".github.io" — 128 of them) and ends the field; the tail
-                  follows as text
+                  name characters, 64 mined fragments ("blog.", "mail."),
+                  then one terminal symbol that both appends a registrable
+                  suffix (".com", ".co.uk", ".github.io" — 192 of them) and
+                  ends the field; the tail follows as text
 
 under scheme 2 ("other"): bits 2-3 must be zero, the mode must not be 3,
          then a 4-bit index into the scheme table — mailto:, ftp:, tel: and
@@ -361,9 +365,11 @@ under scheme 2 ("other"): bits 2-3 must be zero, the mode must not be 3,
          user:password@ ride this path too, and don't pay 8 characters for
          "https://".
 
-under scheme 3: 8 bits of template index, then each slot as 6 bits of length
-         followed by its characters at the slot alphabet's own width
-         (4 bits for digits, 6 for Base64url)
+under scheme 3: an escape-coded template index (3 bits for the most-shared
+         shapes, 11 for the rest), then each slot as 6 bits of length
+         followed by the whole value as one integer in the slot alphabet's
+         base — exactly ceil(len·log2 N) bits, so digits cost 3.33 a
+         character and an ASIN 5.17
 
 optional tag, outside the payload:
          #<payload>.c<tag>   keyless integrity check

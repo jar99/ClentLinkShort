@@ -87,3 +87,64 @@ export class BitReader {
     return this.bits + 6 * (this.str.length - this.at);
   }
 }
+
+/* -------------------------------------------------------------------------- *
+ * Table indexes: 3-bit head, escape into a chained byte tail
+ * -------------------------------------------------------------------------- */
+
+/**
+ * The dictionary and template tables are ordered by how often their entries
+ * are actually used, so an index is small far more often than not. The code
+ * spends 3 bits on values 0-6; the eighth value escapes into the open-ended
+ * byte chain (255 = "add 255 and keep reading"), so the tables can grow
+ * forever — an appended entry costs 11 bits and up, but never a format
+ * change, and links made against early indexes never notice later growth.
+ */
+const INDEX_HEAD = 7;
+
+/** Bits {@link writeIndex} would spend on this index. */
+export function indexBits(index) {
+  if (index < INDEX_HEAD) return 3;
+  let bits = 3, remaining = index - INDEX_HEAD;
+  for (;;) {
+    bits += 8;
+    if (remaining < 255) return bits;
+    remaining -= 255;
+  }
+}
+
+/**
+ * @param {BitWriter} w
+ * @param {number} index
+ */
+export function writeIndex(w, index) {
+  if (index < INDEX_HEAD) {
+    w.push(index, 3);
+    return;
+  }
+  w.push(INDEX_HEAD, 3);
+  let remaining = index - INDEX_HEAD;
+  while (remaining >= 255) {
+    w.push(255, 8);
+    remaining -= 255;
+  }
+  w.push(remaining, 8);
+}
+
+/**
+ * @param {BitReader} reader
+ * @returns {number}
+ * @throws {ClentError} when the chain runs long enough to be damage
+ */
+export function readIndex(reader) {
+  let index = reader.read(3);
+  if (index < INDEX_HEAD) return index;
+  // Eight links bound the chain at over two thousand entries — far past
+  // plausible table growth, cheap to refuse beyond.
+  for (let hops = 0; ; hops++) {
+    if (hops > 8) throw new ClentError("This link is damaged.");
+    const byte = reader.read(8);
+    index += byte;
+    if (byte !== 255) return index;
+  }
+}

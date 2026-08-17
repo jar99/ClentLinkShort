@@ -24,7 +24,7 @@
  * codec rule: an http pattern added here would work.
  */
 
-import { ClentError } from "./bits.js";
+import { ClentError, writeIndex, readIndex, indexBits } from "./bits.js";
 import { emitText, decodeText, textBits } from "./text.js";
 
 const slotEncoder = new TextEncoder();
@@ -60,128 +60,192 @@ export const CHARSETS = Object.freeze({
  * Patterns are matched against the URL exactly as the URL parser normalises
  * it, so they carry the `www.` and trailing slash the browser would produce.
  *
+ * ORDERED BY MEASURED USE, then APPEND-ONLY — the escape-coded index makes
+ * the most-shared shapes cost 3 bits and the table free to grow forever.
+ * (This order was set once, from the corpus, while the format was still
+ * beta; from 1.0 on it never moves again. Append new templates at the end.)
+ *
  * @type {ReadonlyArray<{pattern: string, slots: string[]}>}
  */
 export const TEMPLATES = Object.freeze([
-  // ---- video ------------------------------------------------------------
+  { pattern: "https://commons.wikimedia.org/wiki/File:{0}", slots: ["text"] },
+  { pattern: "https://github.com/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://www.youtube.com/watch?v={0}", slots: ["b64"] },
-  { pattern: "https://youtu.be/{0}", slots: ["b64"] },
-  { pattern: "https://m.youtube.com/watch?v={0}", slots: ["b64"] },
-  { pattern: "https://www.youtube.com/shorts/{0}", slots: ["b64"] },
-
-  // ---- social -----------------------------------------------------------
+  { pattern: "https://en.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://twitter.com/{0}/status/{1}", slots: ["slug", "dec"] },
-  { pattern: "https://x.com/{0}/status/{1}", slots: ["slug", "dec"] },
-  { pattern: "https://www.facebook.com/{0}/posts/{1}", slots: ["slug", "dec"] },
-  { pattern: "https://www.instagram.com/p/{0}/", slots: ["b64"] },
-  { pattern: "https://www.instagram.com/reel/{0}/", slots: ["b64"] },
-  { pattern: "https://www.reddit.com/r/{0}/comments/{1}/", slots: ["slug", "slug"] },
-  { pattern: "https://old.reddit.com/r/{0}/comments/{1}/", slots: ["slug", "slug"] },
-  { pattern: "https://www.tiktok.com/@{0}/video/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://arxiv.org/abs/{0}", slots: ["slug"] },
+  { pattern: "https://www.theguardian.com/{0}/{1}/{2}/{3}/{4}", slots: ["slug", "dec", "slug", "dec", "slug"] },
+  { pattern: "https://www.nytimes.com/{0}/{1}/{2}/{3}/{4}.html", slots: ["dec", "dec", "dec", "slug", "slug"] },
+  { pattern: "https://www.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
+  { pattern: "https://www.ft.com/content/{0}", slots: ["b64"] },
+  { pattern: "https://medium.com/@{0}/{1}", slots: ["slug", "text"] },
+  { pattern: "https://www.bbc.com/news/articles/{0}", slots: ["b64"] },
+  { pattern: "https://www.nature.com/articles/{0}", slots: ["b64"] },
+  { pattern: "https://www.bloomberg.com/news/articles/{0}/{1}", slots: ["b64", "b64"] },
+  { pattern: "https://www.nytimes.com/{0}/{1}/{2}/{3}/{4}/{5}.html", slots: ["dec", "dec", "dec", "slug", "slug", "slug"] },
+  { pattern: "https://old.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
+  { pattern: "https://www.wired.com/story/{0}/", slots: ["b64"] },
+  { pattern: "https://huggingface.co/{0}/{1}", slots: ["text", "text"] },
+  { pattern: "https://www.theverge.com/{0}/{1}/{2}", slots: ["b64", "dec", "b64"] },
+  { pattern: "https://www.bbc.co.uk/news/articles/{0}", slots: ["b64"] },
+  { pattern: "https://zenodo.org/records/{0}", slots: ["dec"] },
+  { pattern: "https://github.com/{0}/{1}/blob/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://apps.apple.com/us/app/{0}/{1}", slots: ["b64", "b64"] },
+  { pattern: "https://spectrum.ieee.org/{0}", slots: ["b64"] },
+  { pattern: "https://chromewebstore.google.com/detail/{0}/{1}", slots: ["b64", "b64"] },
+  { pattern: "https://www.phoronix.com/news/{0}", slots: ["b64"] },
+  { pattern: "https://github.com/{0}/{1}/releases/tag/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://news.ycombinator.com/item?id={0}", slots: ["dec"] },
+  { pattern: "https://github.com/{0}/{1}/tree/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://web.archive.org/web/{0}/{1}", slots: ["dec", "text"] },
+  { pattern: "https://github.com/{0}/{1}/issues/{2}", slots: ["slug", "slug", "dec"] },
+  { pattern: "https://www.lesswrong.com/posts/{0}/{1}", slots: ["b64", "b64"] },
+  { pattern: "https://www.theverge.com/tech/{0}/{1}", slots: ["dec", "b64"] },
+  { pattern: "https://gist.github.com/{0}/{1}", slots: ["slug", "hex"] },
+  { pattern: "https://thenewstack.io/{0}/", slots: ["b64"] },
+  { pattern: "https://www.npmjs.com/package/{0}", slots: ["text"] },
+  { pattern: "https://openai.com/index/{0}/", slots: ["b64"] },
+  { pattern: "https://www.abc.net.au/news/{0}/{1}/{2}", slots: ["b64", "b64", "dec"] },
+  { pattern: "https://www.businessinsider.com/{0}", slots: ["b64"] },
+  { pattern: "https://blog.cloudflare.com/{0}/", slots: ["b64"] },
   { pattern: "https://bsky.app/profile/{0}/post/{1}", slots: ["slug", "b64"] },
-  { pattern: "https://www.linkedin.com/posts/{0}", slots: ["slug"] },
-
-  // ---- images -----------------------------------------------------------
+  { pattern: "https://store.steampowered.com/app/{0}/{1}/", slots: ["dec", "text"] },
+  { pattern: "https://lobste.rs/s/{0}/{1}", slots: ["b64", "b64"] },
+  { pattern: "https://lwn.net/{0}/{1}/", slots: ["b64", "dec"] },
+  { pattern: "https://www.youtube.com/shorts/{0}", slots: ["b64"] },
+  { pattern: "https://apnews.com/article/{0}", slots: ["slug"] },
+  { pattern: "https://www.sciencedirect.com/science/article/pii/{0}", slots: ["b64"] },
+  { pattern: "https://github.com/{0}/{1}/pull/{2}", slots: ["slug", "slug", "dec"] },
+  { pattern: "https://www.goodreads.com/book/show/{0}", slots: ["text"] },
+  { pattern: "https://github.com/{0}/{1}/discussions/{2}", slots: ["slug", "slug", "dec"] },
+  { pattern: "https://www.science.org/content/article/{0}", slots: ["b64"] },
+  { pattern: "https://youtu.be/{0}", slots: ["b64"] },
+  { pattern: "https://archive.org/details/{0}", slots: ["slug"] },
+  { pattern: "https://www.engadget.com/{0}/{1}/", slots: ["dec", "b64"] },
+  { pattern: "https://www.bbc.com/future/article/{0}", slots: ["b64"] },
+  { pattern: "https://t.co/{0}", slots: ["b64"] },
+  { pattern: "https://pypi.org/project/{0}/", slots: ["slug"] },
+  { pattern: "https://www.anthropic.com/news/{0}", slots: ["b64"] },
+  { pattern: "https://lwn.net/{0}/{1}/{2}/", slots: ["b64", "dec", "b64"] },
+  { pattern: "https://mastodon.social/@{0}/{1}", slots: ["text", "dec"] },
+  { pattern: "https://lemmy.world/post/{0}", slots: ["dec"] },
+  { pattern: "https://www.reddit.com/r/{0}/s/{1}", slots: ["slug", "b64"] },
+  { pattern: "https://crates.io/crates/{0}", slots: ["slug"] },
+  { pattern: "https://x.com/{0}/status/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://huggingface.co/datasets/{0}/{1}", slots: ["text", "text"] },
+  { pattern: "https://www.youtube.com/playlist?list={0}", slots: ["b64"] },
+  { pattern: "https://i.redd.it/{0}.png", slots: ["slug"] },
+  { pattern: "https://www.anthropic.com/research/{0}", slots: ["b64"] },
+  { pattern: "https://www.youtube.com/@{0}", slots: ["text"] },
+  { pattern: "https://x.com/{0}", slots: ["slug"] },
+  { pattern: "https://www.bbc.com/news/{0}", slots: ["slug"] },
+  { pattern: "https://gitlab.com/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://learn.microsoft.com/en-us/{0}", slots: ["text"] },
+  { pattern: "https://www.twitch.tv/{0}", slots: ["slug"] },
+  { pattern: "https://github.com/{0}/{1}/commit/{2}", slots: ["slug", "slug", "hex"] },
+  { pattern: "https://www.instagram.com/p/{0}/", slots: ["b64"] },
+  { pattern: "https://vimeo.com/{0}", slots: ["dec"] },
+  { pattern: "https://addons.mozilla.org/en-US/firefox/addon/{0}/", slots: ["slug"] },
+  { pattern: "https://www.patreon.com/posts/{0}", slots: ["slug"] },
+  { pattern: "https://www.instagram.com/reel/{0}/", slots: ["b64"] },
+  { pattern: "https://pastebin.com/{0}", slots: ["b64"] },
+  { pattern: "https://myanimelist.net/anime/{0}", slots: ["dec"] },
+  { pattern: "https://imgur.com/a/{0}", slots: ["b64"] },
+  { pattern: "https://v.redd.it/{0}", slots: ["b64"] },
+  { pattern: "https://open.spotify.com/episode/{0}", slots: ["b64"] },
+  { pattern: "https://docs.google.com/forms/d/e/{0}/viewform", slots: ["b64"] },
+  { pattern: "https://stackoverflow.com/questions/{0}/{1}", slots: ["dec", "slug"] },
+  { pattern: "https://developer.mozilla.org/en-US/docs/{0}", slots: ["text"] },
+  { pattern: "https://www.youtube.com/watch?v={0}&t={1}", slots: ["b64", "dec"] },
+  { pattern: "https://play.google.com/store/apps/details?id={0}", slots: ["slug"] },
+  { pattern: "https://www.amazon.com/dp/{0}", slots: ["up36"] },
+  { pattern: "https://dev.to/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://www.facebook.com/share/p/{0}/", slots: ["b64"] },
+  { pattern: "https://www.tiktok.com/@{0}/video/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://www.imdb.com/title/{0}/", slots: ["slug"] },
+  { pattern: "https://www.youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
+  { pattern: "https://youtube.com/shorts/{0}", slots: ["b64"] },
+  { pattern: "https://www.instagram.com/{0}/", slots: ["slug"] },
+  { pattern: "https://math.stackexchange.com/questions/{0}/{1}", slots: ["dec", "slug"] },
+  { pattern: "https://m.youtube.com/watch?v={0}", slots: ["b64"] },
+  { pattern: "https://www.facebook.com/{0}/posts/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://open.spotify.com/track/{0}", slots: ["b64"] },
+  { pattern: "https://de.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://youtube.com/watch?v={0}", slots: ["b64"] },
+  { pattern: "https://discord.gg/{0}", slots: ["b64"] },
+  { pattern: "https://drive.google.com/file/d/{0}/view", slots: ["b64"] },
+  { pattern: "https://drive.google.com/drive/folders/{0}", slots: ["b64"] },
+  { pattern: "https://pkg.go.dev/{0}", slots: ["text"] },
+  { pattern: "https://docs.google.com/document/d/{0}/edit", slots: ["b64"] },
+  { pattern: "https://letterboxd.com/film/{0}/", slots: ["slug"] },
+  { pattern: "https://www.bbc.co.uk/news/{0}", slots: ["slug"] },
+  { pattern: "https://open.spotify.com/album/{0}", slots: ["b64"] },
+  { pattern: "https://open.spotify.com/playlist/{0}", slots: ["b64"] },
+  { pattern: "https://www.dropbox.com/scl/fi/{0}/{1}", slots: ["b64", "text"] },
+  { pattern: "https://www.netflix.com/title/{0}", slots: ["dec"] },
+  { pattern: "https://open.spotify.com/show/{0}", slots: ["b64"] },
+  { pattern: "https://soundcloud.com/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://www.tiktok.com/@{0}", slots: ["slug"] },
+  { pattern: "https://linktr.ee/{0}", slots: ["slug"] },
+  { pattern: "https://ko-fi.com/{0}", slots: ["slug"] },
+  { pattern: "https://www.kaggle.com/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://postimg.cc/{0}", slots: ["b64"] },
+  { pattern: "https://it.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://pt.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://a.co/d/{0}", slots: ["b64"] },
+  { pattern: "https://colab.research.google.com/drive/{0}", slots: ["b64"] },
+  { pattern: "https://www.youtube.com/live/{0}", slots: ["b64"] },
+  { pattern: "https://www.rottentomatoes.com/m/{0}", slots: ["slug"] },
+  { pattern: "https://www.reddit.com/user/{0}/", slots: ["slug"] },
+  { pattern: "https://unix.stackexchange.com/questions/{0}/{1}", slots: ["dec", "slug"] },
+  { pattern: "https://imgur.com/gallery/{0}", slots: ["b64"] },
   { pattern: "https://i.imgur.com/{0}.jpg", slots: ["b64"] },
   { pattern: "https://i.imgur.com/{0}.png", slots: ["b64"] },
-  { pattern: "https://imgur.com/a/{0}", slots: ["b64"] },
-  { pattern: "https://i.redd.it/{0}.jpg", slots: ["slug"] },
-  { pattern: "https://i.redd.it/{0}.png", slots: ["slug"] },
-  { pattern: "https://pbs.twimg.com/media/{0}.jpg", slots: ["b64"] },
-
-  // ---- shopping ---------------------------------------------------------
-  { pattern: "https://www.amazon.com/dp/{0}", slots: ["up36"] },
   { pattern: "https://www.amazon.co.uk/dp/{0}", slots: ["up36"] },
   { pattern: "https://www.amazon.de/dp/{0}", slots: ["up36"] },
   { pattern: "https://www.amazon.com/gp/product/{0}", slots: ["up36"] },
   { pattern: "https://www.ebay.com/itm/{0}", slots: ["dec"] },
   { pattern: "https://www.etsy.com/listing/{0}/{1}", slots: ["dec", "slug"] },
-
-  // ---- reference and code ----------------------------------------------
-  { pattern: "https://github.com/{0}/{1}", slots: ["slug", "slug"] },
-  { pattern: "https://github.com/{0}/{1}/issues/{2}", slots: ["slug", "slug", "dec"] },
-  { pattern: "https://github.com/{0}/{1}/pull/{2}", slots: ["slug", "slug", "dec"] },
-  { pattern: "https://en.wikipedia.org/wiki/{0}", slots: ["text"] },
-  { pattern: "https://arxiv.org/abs/{0}", slots: ["slug"] },
+  { pattern: "https://fr.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://music.youtube.com/watch?v={0}", slots: ["b64"] },
+  { pattern: "https://maps.app.goo.gl/{0}", slots: ["b64"] },
+  { pattern: "https://tinyurl.com/{0}", slots: ["b64"] },
+  { pattern: "https://fb.watch/{0}/", slots: ["b64"] },
+  { pattern: "https://forms.gle/{0}", slots: ["b64"] },
+  { pattern: "https://discord.com/invite/{0}", slots: ["b64"] },
+  { pattern: "https://t.me/{0}", slots: ["slug"] },
+  { pattern: "https://youtube.com/playlist?list={0}", slots: ["b64"] },
+  { pattern: "https://m.imdb.com/title/{0}/", slots: ["slug"] },
+  { pattern: "https://www.meetup.com/{0}/events/{1}/", slots: ["slug", "dec"] },
+  { pattern: "https://gitlab.com/{0}/{1}/-/merge_requests/{2}", slots: ["slug", "slug", "dec"] },
+  { pattern: "https://hub.docker.com/r/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://docs.python.org/3/library/{0}.html", slots: ["slug"] },
+  { pattern: "https://i.imgur.com/{0}.jpeg", slots: ["b64"] },
+  { pattern: "https://www.reddit.com/r/{0}/comments/{1}/", slots: ["slug", "slug"] },
+  { pattern: "https://old.reddit.com/r/{0}/comments/{1}/", slots: ["slug", "slug"] },
+  { pattern: "https://www.linkedin.com/posts/{0}", slots: ["slug"] },
+  { pattern: "https://i.redd.it/{0}.jpg", slots: ["slug"] },
+  { pattern: "https://pbs.twimg.com/media/{0}.jpg", slots: ["b64"] },
   { pattern: "https://doi.org/10.{0}", slots: ["slug"] },
-  { pattern: "https://open.spotify.com/track/{0}", slots: ["b64"] },
-  { pattern: "https://open.spotify.com/album/{0}", slots: ["b64"] },
-  { pattern: "https://news.ycombinator.com/item?id={0}", slots: ["dec"] },
-  { pattern: "https://stackoverflow.com/questions/{0}/{1}", slots: ["dec", "slug"] },
-
-  // ---- v7 additions ------------------------------------------------------
-  // The timestamped YouTube share — the most-shared link shape there is.
-  { pattern: "https://www.youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
-  { pattern: "https://www.youtube.com/watch?v={0}&t={1}", slots: ["b64", "dec"] },
   { pattern: "https://youtu.be/{0}?t={1}s", slots: ["b64", "dec"] },
   { pattern: "https://youtu.be/{0}?t={1}", slots: ["b64", "dec"] },
-  // Real article names carry capitals, parentheses and percent-escapes; the
-  // old slug slot silently missed nearly all of them.
-  { pattern: "https://de.wikipedia.org/wiki/{0}", slots: ["text"] },
-  { pattern: "https://fr.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://es.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://ru.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://ja.wikipedia.org/wiki/{0}", slots: ["text"] },
-  { pattern: "https://it.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://pl.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://nl.wikipedia.org/wiki/{0}", slots: ["text"] },
-  { pattern: "https://pt.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://zh.wikipedia.org/wiki/{0}", slots: ["text"] },
-  { pattern: "https://github.com/{0}/{1}/blob/{2}", slots: ["slug", "slug", "text"] },
-  { pattern: "https://github.com/{0}/{1}/tree/{2}", slots: ["slug", "slug", "text"] },
-  { pattern: "https://github.com/{0}/{1}/releases/tag/{2}", slots: ["slug", "slug", "text"] },
-  { pattern: "https://www.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
-  { pattern: "https://old.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
   { pattern: "https://stackoverflow.com/a/{0}", slots: ["dec"] },
   { pattern: "https://stackoverflow.com/q/{0}", slots: ["dec"] },
-  { pattern: "https://vimeo.com/{0}", slots: ["dec"] },
   { pattern: "https://www.twitch.tv/videos/{0}", slots: ["dec"] },
-  { pattern: "https://open.spotify.com/episode/{0}", slots: ["b64"] },
-  { pattern: "https://open.spotify.com/playlist/{0}", slots: ["b64"] },
-  { pattern: "https://commons.wikimedia.org/wiki/File:{0}", slots: ["text"] },
-
-  // ---- appended for wire v2: shapes the corpus and the news cycle carry --
   { pattern: "https://www.threads.net/@{0}/post/{1}", slots: ["slug", "b64"] },
   { pattern: "https://t.me/{0}/{1}", slots: ["slug", "dec"] },
-  { pattern: "https://medium.com/@{0}/{1}", slots: ["slug", "text"] },
-  { pattern: "https://dev.to/{0}/{1}", slots: ["slug", "slug"] },
-  { pattern: "https://www.npmjs.com/package/{0}", slots: ["text"] },
-  { pattern: "https://pypi.org/project/{0}/", slots: ["slug"] },
-  { pattern: "https://crates.io/crates/{0}", slots: ["slug"] },
-  { pattern: "https://mastodon.social/@{0}/{1}", slots: ["text", "dec"] },
-  { pattern: "https://lemmy.world/post/{0}", slots: ["dec"] },
   { pattern: "https://www.twitch.tv/{0}/clip/{1}", slots: ["slug", "text"] },
-  { pattern: "https://music.youtube.com/watch?v={0}", slots: ["b64"] },
-  { pattern: "https://maps.app.goo.gl/{0}", slots: ["b64"] },
-  // People paste "youtube.com/watch?v=…" without the www; the parser keeps
-  // the host as typed, so the bare spelling needs its own patterns.
-  { pattern: "https://youtube.com/watch?v={0}", slots: ["b64"] },
   { pattern: "https://youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
-  { pattern: "https://youtube.com/shorts/{0}", slots: ["b64"] },
-  // Short-link services people re-shorten from — a.co is Amazon's own,
-  // amzn.to its bitly, vm.tiktok the app's share button:
-  { pattern: "https://a.co/d/{0}", slots: ["b64"] },
   { pattern: "https://amzn.to/{0}", slots: ["b64"] },
   { pattern: "https://amzn.eu/d/{0}", slots: ["b64"] },
   { pattern: "https://vm.tiktok.com/{0}/", slots: ["b64"] },
-  // Proposed by tools/mine-templates.mjs from corpus coverage:
-  { pattern: "https://www.ft.com/content/{0}", slots: ["b64"] },
-  { pattern: "https://www.bbc.com/news/articles/{0}", slots: ["b64"] },
-  { pattern: "https://www.bbc.co.uk/news/articles/{0}", slots: ["b64"] },
-  { pattern: "https://www.nature.com/articles/{0}", slots: ["b64"] },
-  { pattern: "https://www.wired.com/story/{0}/", slots: ["b64"] },
-  { pattern: "https://zenodo.org/records/{0}", slots: ["dec"] },
-  { pattern: "https://www.phoronix.com/news/{0}", slots: ["b64"] },
-  { pattern: "https://spectrum.ieee.org/{0}", slots: ["b64"] },
-  { pattern: "https://apps.apple.com/us/app/{0}/{1}", slots: ["b64", "b64"] },
-
-  // ---- appended: the majority-of-the-internet sweep ----------------------
-  // Link shorteners. Expanding them isn't possible client-side, but people
-  // re-wrap them for the QR code, the preview mode and the integrity tag,
-  // and the token is all they carry.
   { pattern: "https://bit.ly/{0}", slots: ["b64"] },
-  { pattern: "https://tinyurl.com/{0}", slots: ["b64"] },
-  { pattern: "https://t.co/{0}", slots: ["b64"] },
   { pattern: "https://goo.gl/{0}", slots: ["b64"] },
   { pattern: "https://is.gd/{0}", slots: ["b64"] },
   { pattern: "https://buff.ly/{0}", slots: ["b64"] },
@@ -189,36 +253,18 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://rb.gy/{0}", slots: ["b64"] },
   { pattern: "https://lnkd.in/{0}", slots: ["b64"] },
   { pattern: "https://fb.me/{0}", slots: ["b64"] },
-  { pattern: "https://fb.watch/{0}/", slots: ["b64"] },
   { pattern: "https://we.tl/{0}", slots: ["b64"] },
-  { pattern: "https://forms.gle/{0}", slots: ["b64"] },
   { pattern: "https://photos.app.goo.gl/{0}", slots: ["b64"] },
   { pattern: "https://spotify.link/{0}", slots: ["b64"] },
   { pattern: "https://on.soundcloud.com/{0}", slots: ["b64"] },
-
-  // Chat, calls and invites.
   { pattern: "https://wa.me/{0}", slots: ["dec"] },
   { pattern: "https://chat.whatsapp.com/{0}", slots: ["b64"] },
-  { pattern: "https://discord.gg/{0}", slots: ["b64"] },
-  { pattern: "https://discord.com/invite/{0}", slots: ["b64"] },
   { pattern: "https://discord.com/channels/{0}/{1}/{2}", slots: ["dec", "dec", "dec"] },
-  { pattern: "https://t.me/{0}", slots: ["slug"] },
   { pattern: "https://meet.google.com/{0}", slots: ["slug"] },
   { pattern: "https://zoom.us/j/{0}", slots: ["dec"] },
-
-  // Documents and files — the links every workplace passes around.
-  { pattern: "https://docs.google.com/document/d/{0}/edit", slots: ["b64"] },
   { pattern: "https://docs.google.com/spreadsheets/d/{0}/edit", slots: ["b64"] },
   { pattern: "https://docs.google.com/presentation/d/{0}/edit", slots: ["b64"] },
-  { pattern: "https://docs.google.com/forms/d/e/{0}/viewform", slots: ["b64"] },
-  { pattern: "https://drive.google.com/file/d/{0}/view", slots: ["b64"] },
-  { pattern: "https://drive.google.com/drive/folders/{0}", slots: ["b64"] },
   { pattern: "https://www.dropbox.com/s/{0}/{1}", slots: ["b64", "text"] },
-  { pattern: "https://www.dropbox.com/scl/fi/{0}/{1}", slots: ["b64", "text"] },
-  { pattern: "https://pastebin.com/{0}", slots: ["b64"] },
-  { pattern: "https://colab.research.google.com/drive/{0}", slots: ["b64"] },
-
-  // Shopping, across the storefront TLDs people actually buy from.
   { pattern: "https://www.amazon.ca/dp/{0}", slots: ["up36"] },
   { pattern: "https://www.amazon.fr/dp/{0}", slots: ["up36"] },
   { pattern: "https://www.amazon.it/dp/{0}", slots: ["up36"] },
@@ -235,130 +281,40 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://www.bestbuy.com/site/{0}/{1}.p", slots: ["text", "dec"] },
   { pattern: "https://www.target.com/p/{0}/-/A-{1}", slots: ["text", "dec"] },
   { pattern: "https://www.airbnb.com/rooms/{0}", slots: ["dec"] },
-
-  // Watching, listening, playing.
-  { pattern: "https://www.youtube.com/playlist?list={0}", slots: ["b64"] },
-  { pattern: "https://youtube.com/playlist?list={0}", slots: ["b64"] },
-  { pattern: "https://www.youtube.com/live/{0}", slots: ["b64"] },
-  { pattern: "https://www.youtube.com/@{0}", slots: ["text"] },
-  { pattern: "https://www.imdb.com/title/{0}/", slots: ["slug"] },
-  { pattern: "https://m.imdb.com/title/{0}/", slots: ["slug"] },
-  { pattern: "https://www.netflix.com/title/{0}", slots: ["dec"] },
-  { pattern: "https://www.rottentomatoes.com/m/{0}", slots: ["slug"] },
-  { pattern: "https://letterboxd.com/film/{0}/", slots: ["slug"] },
-  { pattern: "https://www.goodreads.com/book/show/{0}", slots: ["text"] },
-  { pattern: "https://myanimelist.net/anime/{0}", slots: ["dec"] },
   { pattern: "https://open.spotify.com/artist/{0}", slots: ["b64"] },
-  { pattern: "https://open.spotify.com/show/{0}", slots: ["b64"] },
-  { pattern: "https://soundcloud.com/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://store.steampowered.com/app/{0}/", slots: ["dec"] },
-  { pattern: "https://store.steampowered.com/app/{0}/{1}/", slots: ["dec", "text"] },
-  { pattern: "https://play.google.com/store/apps/details?id={0}", slots: ["slug"] },
-  { pattern: "https://addons.mozilla.org/en-US/firefox/addon/{0}/", slots: ["slug"] },
   { pattern: "https://clips.twitch.tv/{0}", slots: ["b64"] },
-  { pattern: "https://www.twitch.tv/{0}", slots: ["slug"] },
   { pattern: "https://streamable.com/{0}", slots: ["b64"] },
   { pattern: "https://lichess.org/{0}", slots: ["b64"] },
   { pattern: "https://www.chess.com/game/live/{0}", slots: ["dec"] },
   { pattern: "https://www.strava.com/activities/{0}", slots: ["dec"] },
-
-  // Profiles and communities.
-  { pattern: "https://www.instagram.com/{0}/", slots: ["slug"] },
-  { pattern: "https://www.tiktok.com/@{0}", slots: ["slug"] },
-  { pattern: "https://x.com/{0}", slots: ["slug"] },
   { pattern: "https://www.linkedin.com/in/{0}/", slots: ["slug"] },
   { pattern: "https://www.linkedin.com/in/{0}", slots: ["slug"] },
-  { pattern: "https://www.reddit.com/r/{0}/s/{1}", slots: ["slug", "b64"] },
-  { pattern: "https://www.reddit.com/user/{0}/", slots: ["slug"] },
   { pattern: "https://redd.it/{0}", slots: ["b64"] },
-  { pattern: "https://v.redd.it/{0}", slots: ["b64"] },
   { pattern: "https://www.pinterest.com/pin/{0}/", slots: ["dec"] },
-  { pattern: "https://www.facebook.com/share/p/{0}/", slots: ["b64"] },
   { pattern: "https://www.facebook.com/watch/?v={0}", slots: ["dec"] },
   { pattern: "https://www.facebook.com/photo/?fbid={0}", slots: ["dec"] },
-  { pattern: "https://linktr.ee/{0}", slots: ["slug"] },
-  { pattern: "https://www.patreon.com/posts/{0}", slots: ["slug"] },
-  { pattern: "https://ko-fi.com/{0}", slots: ["slug"] },
   { pattern: "https://buymeacoffee.com/{0}", slots: ["slug"] },
   { pattern: "https://www.kickstarter.com/projects/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://www.gofundme.com/f/{0}", slots: ["slug"] },
-  { pattern: "https://www.meetup.com/{0}/events/{1}/", slots: ["slug", "dec"] },
   { pattern: "https://www.eventbrite.com/e/{0}", slots: ["slug"] },
-
-  // News in its date-and-slug shapes, plus the wayback machine.
-  { pattern: "https://www.nytimes.com/{0}/{1}/{2}/{3}/{4}.html",
-    slots: ["dec", "dec", "dec", "slug", "slug"] },
-  { pattern: "https://www.nytimes.com/{0}/{1}/{2}/{3}/{4}/{5}.html",
-    slots: ["dec", "dec", "dec", "slug", "slug", "slug"] },
-  { pattern: "https://www.theguardian.com/{0}/{1}/{2}/{3}/{4}",
-    slots: ["slug", "dec", "slug", "dec", "slug"] },
-  { pattern: "https://edition.cnn.com/{0}/{1}/{2}/{3}/{4}/index.html",
-    slots: ["dec", "dec", "dec", "slug", "slug"] },
-  { pattern: "https://www.cnn.com/{0}/{1}/{2}/{3}/{4}/index.html",
-    slots: ["dec", "dec", "dec", "slug", "slug"] },
-  { pattern: "https://apnews.com/article/{0}", slots: ["slug"] },
-  { pattern: "https://www.bbc.com/news/{0}", slots: ["slug"] },
-  { pattern: "https://www.bbc.co.uk/news/{0}", slots: ["slug"] },
-  { pattern: "https://web.archive.org/web/{0}/{1}", slots: ["dec", "text"] },
-  { pattern: "https://archive.org/details/{0}", slots: ["slug"] },
-
-  // Developers' daily links.
-  { pattern: "https://gist.github.com/{0}/{1}", slots: ["slug", "hex"] },
-  { pattern: "https://github.com/{0}/{1}/commit/{2}", slots: ["slug", "slug", "hex"] },
-  { pattern: "https://github.com/{0}/{1}/discussions/{2}", slots: ["slug", "slug", "dec"] },
+  { pattern: "https://edition.cnn.com/{0}/{1}/{2}/{3}/{4}/index.html", slots: ["dec", "dec", "dec", "slug", "slug"] },
+  { pattern: "https://www.cnn.com/{0}/{1}/{2}/{3}/{4}/index.html", slots: ["dec", "dec", "dec", "slug", "slug"] },
   { pattern: "https://github.com/{0}/{1}/actions/runs/{2}", slots: ["slug", "slug", "dec"] },
-  { pattern: "https://gitlab.com/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://gitlab.com/{0}/{1}/-/issues/{2}", slots: ["slug", "slug", "dec"] },
-  { pattern: "https://gitlab.com/{0}/{1}/-/merge_requests/{2}", slots: ["slug", "slug", "dec"] },
   { pattern: "https://bitbucket.org/{0}/{1}", slots: ["slug", "slug"] },
-  { pattern: "https://hub.docker.com/r/{0}/{1}", slots: ["slug", "slug"] },
-  { pattern: "https://huggingface.co/{0}/{1}", slots: ["text", "text"] },
-  { pattern: "https://huggingface.co/datasets/{0}/{1}", slots: ["text", "text"] },
   { pattern: "https://codepen.io/{0}/pen/{1}", slots: ["slug", "b64"] },
   { pattern: "https://godbolt.org/z/{0}", slots: ["b64"] },
   { pattern: "https://caniuse.com/{0}", slots: ["slug"] },
-  { pattern: "https://developer.mozilla.org/en-US/docs/{0}", slots: ["text"] },
-  { pattern: "https://learn.microsoft.com/en-us/{0}", slots: ["text"] },
-  { pattern: "https://docs.python.org/3/library/{0}.html", slots: ["slug"] },
-  { pattern: "https://pkg.go.dev/{0}", slots: ["text"] },
-  { pattern: "https://www.kaggle.com/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://leetcode.com/problems/{0}/", slots: ["slug"] },
   { pattern: "https://superuser.com/questions/{0}/{1}", slots: ["dec", "slug"] },
   { pattern: "https://serverfault.com/questions/{0}/{1}", slots: ["dec", "slug"] },
   { pattern: "https://askubuntu.com/questions/{0}/{1}", slots: ["dec", "slug"] },
-  { pattern: "https://unix.stackexchange.com/questions/{0}/{1}", slots: ["dec", "slug"] },
-  { pattern: "https://math.stackexchange.com/questions/{0}/{1}", slots: ["dec", "slug"] },
-
-  // Images and pastes.
-  { pattern: "https://imgur.com/gallery/{0}", slots: ["b64"] },
   { pattern: "https://i.imgur.com/{0}.gif", slots: ["b64"] },
-  { pattern: "https://i.imgur.com/{0}.jpeg", slots: ["b64"] },
   { pattern: "https://ibb.co/{0}", slots: ["b64"] },
-  { pattern: "https://postimg.cc/{0}", slots: ["b64"] },
   { pattern: "https://prnt.sc/{0}", slots: ["b64"] },
   { pattern: "https://gyazo.com/{0}", slots: ["hex"] },
   { pattern: "https://giphy.com/gifs/{0}", slots: ["slug"] },
-
-  // Proposed by tools/mine-templates.mjs from corpus coverage:
-  { pattern: "https://www.bloomberg.com/news/articles/{0}/{1}", slots: ["b64", "b64"] },
-  { pattern: "https://chromewebstore.google.com/detail/{0}/{1}", slots: ["b64", "b64"] },
-  { pattern: "https://www.lesswrong.com/posts/{0}/{1}", slots: ["b64", "b64"] },
-  { pattern: "https://www.theverge.com/{0}/{1}/{2}", slots: ["b64", "dec", "b64"] },
-  { pattern: "https://www.theverge.com/tech/{0}/{1}", slots: ["dec", "b64"] },
-  { pattern: "https://www.abc.net.au/news/{0}/{1}/{2}", slots: ["b64", "b64", "dec"] },
-  { pattern: "https://www.businessinsider.com/{0}", slots: ["b64"] },
-  { pattern: "https://openai.com/index/{0}/", slots: ["b64"] },
-  { pattern: "https://www.anthropic.com/news/{0}", slots: ["b64"] },
-  { pattern: "https://www.anthropic.com/research/{0}", slots: ["b64"] },
-  { pattern: "https://blog.cloudflare.com/{0}/", slots: ["b64"] },
-  { pattern: "https://thenewstack.io/{0}/", slots: ["b64"] },
-  { pattern: "https://lwn.net/{0}/{1}/", slots: ["b64", "dec"] },
-  { pattern: "https://lwn.net/{0}/{1}/{2}/", slots: ["b64", "dec", "b64"] },
-  { pattern: "https://lobste.rs/s/{0}/{1}", slots: ["b64", "b64"] },
-  { pattern: "https://www.science.org/content/article/{0}", slots: ["b64"] },
-  { pattern: "https://www.sciencedirect.com/science/article/pii/{0}", slots: ["b64"] },
-  { pattern: "https://www.bbc.com/future/article/{0}", slots: ["b64"] },
-  { pattern: "https://www.engadget.com/{0}/{1}/", slots: ["dec", "b64"] },
 ]);
 
 /** Longest slot value a template will hold; the length field is 6 bits. */
@@ -430,6 +386,29 @@ export const CHARSET_INDEX = Object.fromEntries(Object.entries(CHARSETS).map(([n
 ]));
 
 /**
+ * A slot value travels as ONE base-N integer, not one field per character,
+ * so `len` characters cost exactly ceil(len·log2 N) bits instead of
+ * len·ceil(log2 N). For base-64 and base-16 the two are the same; for
+ * digits that's 3.33 bits a character instead of 4, and a 10-character
+ * ASIN is 52 bits instead of 60. PACKED_BITS[name][len] is the exact
+ * width; PACKED_CAP[name][len] the first value that width can hold but
+ * the alphabet cannot, which the decoder must refuse.
+ */
+const PACKED_BITS = /** @type {Record<string, number[]>} */ ({});
+const PACKED_CAP = /** @type {Record<string, bigint[]>} */ ({});
+for (const [name, set] of Object.entries(CHARSETS)) {
+  const base = BigInt(set.chars.length);
+  const bits = [0];
+  const caps = [1n];
+  for (let len = 1; len <= MAX_SLOT; len++) {
+    caps.push(caps[len - 1] * base);
+    bits.push((caps[len] - 1n).toString(2).length);
+  }
+  PACKED_BITS[name] = bits;
+  PACKED_CAP[name] = caps;
+}
+
+/**
  * Try to express a URL as one of the templates.
  *
  * Returns null unless the captured values round-trip: every value has to fit
@@ -476,13 +455,14 @@ export function asTemplate(url) {
         if (!charset.index.has(character)) { usable = false; break; }
       }
       if (!usable) break;
-      bits += 6 + value.length * charset.set.bits;
+      bits += 6 + PACKED_BITS[template.slots[slot]][value.length];
     }
     if (!usable) continue;
 
     // The guard that makes this safe to use at all.
     if (fill(index, values) !== href) continue;
 
+    bits += indexBits(index);
     if (!best || bits < best.bits) best = { index, values, bits };
   }
   return best;
@@ -497,25 +477,30 @@ export function asTemplate(url) {
  * @returns {string} the finished payload
  */
 export function writeTemplate(w, { index, values }) {
-  // The index is open-ended: byte 255 means "add 255 and keep reading", so
-  // the table can grow past 256 entries forever without a format change —
-  // links made against early indexes never notice later growth.
-  let remaining = index;
-  while (remaining >= 255) {
-    w.push(255, 8);
-    remaining -= 255;
-  }
-  w.push(remaining, 8);
+  // The table is ordered by measured use, so the escape-coded index is 3
+  // bits for the most-shared shapes and open-ended past them — the table
+  // grows forever without a format change, and links made against early
+  // indexes never notice later growth.
+  writeIndex(w, index);
   const slots = COMPILED[index].slots;
   for (let slot = 0; slot < values.length; slot++) {
     if (slots[slot] === "text") {
       emitText(w, slotEncoder.encode(values[slot]));
       continue;
     }
-    const charset = CHARSET_INDEX[slots[slot]];
-    w.push(values[slot].length, 6);
-    for (const character of values[slot]) {
-      w.push(charset.index.get(character), charset.set.bits);
+    const { set, index: byChar } = CHARSET_INDEX[slots[slot]];
+    const value = values[slot];
+    w.push(value.length, 6);
+    // One base-N integer for the whole slot, written MSB-first in byte-sized
+    // pulls; exact by BigInt construction.
+    const base = BigInt(set.chars.length);
+    let packed = 0n;
+    for (const character of value) packed = packed * base + BigInt(byChar.get(character));
+    let width = PACKED_BITS[slots[slot]][value.length];
+    while (width > 0) {
+      const take = Math.min(8, width);
+      width -= take;
+      w.push(Number((packed >> BigInt(width)) & ((1n << BigInt(take)) - 1n)), take);
     }
   }
   return w.finish();
@@ -528,15 +513,7 @@ export function writeTemplate(w, { index, values }) {
  * @returns {string} the rebuilt URL
  */
 export function readTemplate(reader) {
-  // Open-ended index: 255 chains. Eight links bound the loop at over two
-  // thousand templates — far past plausible, cheap to refuse beyond.
-  let index = 0;
-  for (let hops = 0; ; hops++) {
-    if (hops > 8) throw new ClentError("This link is damaged.");
-    const byte = reader.read(8);
-    index += byte;
-    if (byte !== 255) break;
-  }
+  const index = readIndex(reader);
   const template = COMPILED[index];
   if (!template) throw new ClentError("This link uses a newer template than this page has.");
 
@@ -551,12 +528,22 @@ export function readTemplate(reader) {
     const charset = CHARSETS[name];
     const length = reader.read(6);
     if (length === 0) throw new ClentError("This link is damaged — an empty field.");
+    const base = BigInt(charset.chars.length);
+    let width = PACKED_BITS[name][length];
+    let packed = 0n;
+    while (width > 0) {
+      const take = Math.min(8, width);
+      width -= take;
+      packed = (packed << BigInt(take)) | BigInt(reader.read(take));
+    }
+    // The width can hold a few values past the alphabet's range; they are
+    // damage, never a silently substituted character.
+    if (packed >= PACKED_CAP[name][length])
+      throw new ClentError("This link is damaged.");
     let value = "";
     for (let i = 0; i < length; i++) {
-      const at = reader.read(charset.bits);
-      const character = charset.chars[at];
-      if (character === undefined) throw new ClentError("This link is damaged.");
-      value += character;
+      value = charset.chars[Number(packed % base)] + value;
+      packed /= base;
     }
     values.push(value);
   }

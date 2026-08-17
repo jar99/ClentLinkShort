@@ -24,3 +24,17 @@ export declare class BitReader {
   /** Bits not yet consumed, including whole characters not yet read. */
   readonly left: number;
 }
+
+/**
+ * Table indexes: 3 bits for values 0-6, the eighth value escaping into an
+ * open-ended chained byte tail, so frequency-ordered tables grow forever.
+ */
+
+/** Bits {@link writeIndex} would spend on this index. */
+export declare function indexBits(index: number): number;
+
+/** Write an escape-coded table index. */
+export declare function writeIndex(w: BitWriter, index: number): void;
+
+/** Read an escape-coded table index back. @throws {ClentError} on a runaway chain */
+export declare function readIndex(reader: BitReader): number;
