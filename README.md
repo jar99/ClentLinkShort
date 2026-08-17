@@ -240,7 +240,7 @@ Append `~` to a link to preview where it goes instead of going there.
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **Known URL shapes collapse to an ID.** About 40 templates cover YouTube, Amazon,
+2. **Known URL shapes collapse to an ID.** 62 templates cover YouTube, Amazon,
    imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv
    and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
    information; templated it is 15. Each slot is encoded at its own alphabet's width —
@@ -276,7 +276,7 @@ Append `~` to a link to preview where it goes instead of going there.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: text wins 95.7%, templates 3.9%, deflate 0.4%, raw 0.1%.
+On the corpus: host wins 75.2%, text 19.3%, templates 5.1%, deflate 0.4%, raw 0.1%.
 
 ## Tamper resistance
 
@@ -441,10 +441,22 @@ front of anyone who had merely clicked a link.
 
 ## Deploying
 
-Push to `main`. The workflow tests, builds and publishes `dist/`; set
-**Settings → Pages → Source** to **GitHub Actions**.
+Push to `main`. The workflow runs the full gate — tests, types, a browser pass
+against the built site — then publishes `dist/`; set **Settings → Pages →
+Source** to **GitHub Actions** once, by hand.
 
 `dist/404.html` is a copy of the app, so a mistyped path still resolves its fragment.
+
+**Deploying a fork on a different domain:** the links themselves adapt
+automatically — the prefix comes from `location` at runtime. Only the *prose*
+quoting break-even lengths is baked from `corpus/stats.json`, which was measured
+against this repository's 40-character address. To make those numbers true for
+your domain, re-measure and commit:
+
+```sh
+node tools/validate-corpus.mjs --origin https://your.domain/path/#
+git add corpus/stats.json && git commit -m "Re-measure for our origin"
+```
 
 ## Loading, no-JS and mobile
 

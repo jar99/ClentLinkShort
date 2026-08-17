@@ -134,16 +134,33 @@ function equal(a, b) {
 }
 
 /**
+ * Shortest tag verify() will accept, per kind. The comparison recomputes at
+ * the presented tag's length, so without a floor an empty tag would compare
+ * "" to "" and pass — a truncated tag must fail, not quietly verify at
+ * whatever strength is left.
+ */
+export const MIN_TAG = { [TAG_CHECK]: 4, [TAG_SIGNED]: 16 };
+/** Longest useful tag: 256 bits of SHA-256 at 6 bits a character. */
+const MAX_TAG = 43;
+
+/**
  * Check a tag against a payload.
+ *
+ * `ok` is three-valued: true (verified), false (failed — the link does not
+ * match its tag), or null (this runtime cannot check at all; the link is
+ * unverified, which is not the same claim as altered).
  *
  * @param {string} payload
  * @param {string} kind
  * @param {string} tag
  * @param {string} [passphrase] required for a signature
- * @returns {Promise<{ok: boolean, reason?: string}>}
+ * @returns {Promise<{ok: boolean|null, reason?: string}>}
  */
 export async function verify(payload, kind, tag, passphrase) {
-  if (!canSign) return { ok: false, reason: "This browser cannot check link integrity." };
+  if (!canSign) return { ok: null, reason: "This browser cannot check link integrity." };
+  if (tag.length < (MIN_TAG[kind] ?? Infinity) || tag.length > MAX_TAG) {
+    return { ok: false, reason: "This link's integrity tag is damaged." };
+  }
   try {
     if (kind === TAG_CHECK) {
       return { ok: equal(await checksum(payload, tag.length), tag) };

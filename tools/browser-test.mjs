@@ -16,6 +16,7 @@
 
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -278,6 +279,39 @@ try {
     check("an altered link is refused, not followed",
       victim.url().startsWith(BASE) && title === "This link has been altered", title);
     await victim.close();
+
+    // Strip the tag down to nothing: "#payload.c". An empty tag must fail —
+    // verify() recomputing at length 0 used to compare "" to "" and pass.
+    const bare = tagged.slice(0, tagged.lastIndexOf(".") + 2);
+    const clipped = await context.newPage();
+    await clipped.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "SHOULD NOT REACH" }));
+    await clipped.goto(bare);
+    await clipped.waitForSelector("#r-title");
+    const clippedTitle = (await clipped.textContent("#r-title")).trim();
+    check("an empty integrity tag fails, never quietly passes",
+      clipped.url().startsWith(BASE) && clippedTitle === "This link has been altered",
+      clippedTitle);
+    await clipped.close();
+  }
+
+  // ---- maker-side honesty notes ------------------------------------------
+  {
+    await page.evaluate(() => { document.querySelector(".advanced").open = true; });
+    await page.fill("#passphrase", "");
+    await page.fill("#url", "https://192.168.1.50/admin");
+    await page.waitForSelector(".maker-note", { timeout: 5000 }).catch(() => {});
+    const note = await page.textContent(".maker-note").catch(() => "");
+    check("making a risky link says the recipient will see a warning first",
+      /warning first/.test(note ?? ""), (note ?? "none").slice(0, 60));
+
+    await page.fill("#url", "https://example.com/ok");
+    await page.waitForFunction(() => !document.querySelector(".maker-note"),
+      { timeout: 5000 }).catch(() => {});
+    check("the note clears for an ordinary link",
+      await page.locator(".maker-note").count() === 0);
   }
 
   // ---- signed links -------------------------------------------------------
@@ -386,7 +420,8 @@ try {
   check("touch targets are big enough on mobile", small.length === 0,
     small.map((s) => `${s.el}:${Math.round(s.h)}px`).join(" "));
 
-  await page.screenshot({ path: path.join(ROOT, "dist", "_screenshot-mobile.png") })
+  // Out of dist/ on purpose: dist is exactly what deploys, nothing else.
+  await page.screenshot({ path: path.join(tmpdir(), "clent-screenshot-mobile.png") })
     .catch(() => {});
 } finally {
   await browser.close();

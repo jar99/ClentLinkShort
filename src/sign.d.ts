@@ -26,10 +26,16 @@ export declare function split(fragment: string): SplitFragment;
 /** Join a payload with a tag: `<payload>.<kind><tag>`. */
 export declare const join: (payload: string, kind: string, tag: string) => string;
 
-/** Check a tag against a payload. */
+/** Shortest tag verify() will accept, per kind — a truncated tag must fail. */
+export declare const MIN_TAG: Record<string, number>;
+
+/**
+ * Check a tag against a payload. `ok` is true (verified), false (failed) or
+ * null (this runtime cannot check — unverified, which is not "altered").
+ */
 export declare function verify(
   payload: string,
   kind: string,
   tag: string,
   passphrase?: string,
-): Promise<{ ok: boolean; reason?: string }>;
+): Promise<{ ok: boolean | null; reason?: string }>;

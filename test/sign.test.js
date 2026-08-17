@@ -65,6 +65,23 @@ test("a checksum catches truncation, which is how links really break", async () 
   }
 });
 
+test("a truncated or empty TAG fails, never quietly verifies weaker", async () => {
+  // verify() recomputes at the presented tag's length, so without a floor an
+  // empty tag would compare "" to "" and pass.
+  const tag = await checksum(PAYLOAD);
+  for (let cut = 0; cut < tag.length; cut++) {
+    assert.equal((await verify(PAYLOAD, TAG_CHECK, tag.slice(0, cut))).ok, false,
+      `a ${cut}-character checksum tag slipped through`);
+  }
+  const mac = await sign(PAYLOAD, "pass");
+  for (let cut = 0; cut < mac.length; cut++) {
+    assert.equal((await verify(PAYLOAD, TAG_SIGNED, mac.slice(0, cut), "pass")).ok, false,
+      `a ${cut}-character signature tag slipped through`);
+  }
+  // Absurdly long tags are refused too, not recomputed at silly widths.
+  assert.equal((await verify(PAYLOAD, TAG_CHECK, "A".repeat(64))).ok, false);
+});
+
 test("a signature needs the right passphrase", async () => {
   const tag = await sign(PAYLOAD, "correct horse");
   assert.equal((await verify(PAYLOAD, TAG_SIGNED, tag, "correct horse")).ok, true);

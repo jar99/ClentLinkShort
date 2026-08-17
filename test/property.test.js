@@ -31,10 +31,24 @@ function makeUrl(random) {
   };
 
   const scheme = random() < 0.85 ? "https" : "http";
-  const host = random() < 0.4
+  // Host shapes deliberately include the awkward ones: IP literals, IPv6
+  // brackets, punycode, and hosts long enough to press the decoder's cap —
+  // the class of input that found the encode-but-can't-decode host bug.
+  const roll = random();
+  const host = roll < 0.35
     ? pick(HOSTS)
-    : `${random() < 0.3 ? "www." : ""}${chars(1 + Math.floor(random() * 8), ALPHABETS[0])}` +
-      `.${pick(["com", "org", "net", "co.uk", "io", "example"])}`;
+    : roll < 0.8
+      ? `${random() < 0.3 ? "www." : ""}${chars(1 + Math.floor(random() * 8), ALPHABETS[0])}` +
+        `.${pick(["com", "org", "net", "co.uk", "io", "example"])}`
+      : roll < 0.86
+        ? `${Math.floor(random() * 256)}.${Math.floor(random() * 256)}.` +
+          `${Math.floor(random() * 256)}.${Math.floor(random() * 256)}`
+        : roll < 0.9
+          ? `[2001:db8::${Math.floor(random() * 65536).toString(16)}]`
+          : roll < 0.95
+            ? `xn--${chars(4 + Math.floor(random() * 8), ALPHABETS[0])}.com`
+            : Array.from({ length: 5 + Math.floor(random() * 5) },
+                () => chars(20 + Math.floor(random() * 40), ALPHABETS[0])).join(".");
   const port = random() < 0.1 ? `:${1 + Math.floor(random() * 65534)}` : "";
 
   let path = "";

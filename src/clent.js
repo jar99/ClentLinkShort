@@ -250,6 +250,7 @@ export async function shorten(input, options = {}) {
  * @property {string|null} templatePattern winning template's pattern, or null
  * @property {number} headerBits bits spent on the header, scheme and host index
  * @property {number} bodyBits bits spent on the body
+ * @property {number} hostFieldBits bits spent on the host field; 0 outside MODE_HOST
  * @property {Record<string, number|null>} candidates payload length per mode
  *
  * Everything the encoder decided, for callers that want to show their work.
@@ -340,10 +341,15 @@ export async function analyze(input, options = {}) {
         headerBits: 6, at, flags: scheme | extra,
         hostByte: null, schemeIndex: null, host,
       });
-      hostShapes.push({
-        headerBits: 6, at: tailAt, flags: scheme | extra,
-        host, hostFieldBits: hostBits(host),
-      });
+      // hostBits is Infinity for a host the decoder would refuse (too
+      // long); such a shape must not enter the race at all.
+      const fieldBits = hostBits(host);
+      if (Number.isFinite(fieldBits)) {
+        hostShapes.push({
+          headerBits: 6, at: tailAt, flags: scheme | extra,
+          host, hostFieldBits: fieldBits,
+        });
+      }
     }
   }
 
@@ -410,6 +416,7 @@ export async function analyze(input, options = {}) {
         templatePattern: TEMPLATES[template.index].pattern,
         headerBits: 14,
         bodyBits: payload.length * 6 - 14,
+        hostFieldBits: 0,
         candidates: { ...candidates, template: payload.length },
       };
     }
@@ -434,12 +441,13 @@ export async function analyze(input, options = {}) {
  * @param {URL} url
  * @param {number} mode
  * @param {string[]} removed
- * @param {{headerBits: number, hostByte?: number|null, host?: string|null}} shape
+ * @param {{headerBits: number, hostByte?: number|null, host?: string|null, hostFieldBits?: number}} shape
  * @param {Record<string, number|null>} candidates
  * @param {number|null} templateLength
  * @returns {Analysis}
  */
 function finishAnalysis(payload, url, mode, removed, shape, candidates, templateLength) {
+  const hostFieldBits = mode === MODE_HOST ? shape.hostFieldBits ?? 0 : 0;
   return {
     payload,
     url,
@@ -451,7 +459,8 @@ function finishAnalysis(payload, url, mode, removed, shape, candidates, template
     template: null,
     templatePattern: null,
     headerBits: shape.headerBits,
-    bodyBits: payload.length * 6 - shape.headerBits,
+    bodyBits: payload.length * 6 - shape.headerBits - hostFieldBits,
+    hostFieldBits,
     candidates: { ...candidates, template: templateLength },
   };
 }

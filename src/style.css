@@ -612,3 +612,5 @@ footer p { margin: 0 0 6px; }
   .stats { grid-template-columns: 1fr 1fr; }
   .bar-row, .mode-row { grid-template-columns: 2.8rem 1fr 3.4rem; }
 }
+
+.maker-note { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }

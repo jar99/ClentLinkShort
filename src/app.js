@@ -81,7 +81,13 @@ async function runRedirect() {
   let tagState = null;
   if (kind === TAG_CHECK) {
     const result = await verify(payload, kind, tag);
-    if (!result.ok) {
+    if (result.ok === null) {
+      // Cannot check ≠ altered. Show the destination with an "unverified"
+      // note instead of accusing a perfectly good link, but never
+      // auto-redirect past a check that could not run.
+      tagState = { kind, ok: null };
+      previewOnly = true;
+    } else if (!result.ok) {
       whenReady(() => {
         $("r-spinner").remove();
         $("r-title").textContent = "This link has been altered";
@@ -92,8 +98,9 @@ async function runRedirect() {
         $("r-go").remove();
       });
       return;
+    } else {
+      tagState = { kind, ok: true };
     }
-    tagState = { kind, ok: true };
   } else if (kind === TAG_SIGNED) {
     // A signature needs a passphrase, which means waiting for a human.
     tagState = { kind, ok: false, needsPassphrase: true };
@@ -127,8 +134,10 @@ async function runRedirect() {
 
     if (tagState?.kind === TAG_CHECK) {
       const note = document.createElement("p");
-      note.className = "tag-note ok";
-      note.textContent = "Integrity check passed — this link hasn't been altered.";
+      note.className = tagState.ok ? "tag-note ok" : "tag-note";
+      note.textContent = tagState.ok
+        ? "Integrity check passed — this link hasn't been altered."
+        : "This browser can't check the link's integrity tag, so it is unverified.";
       $("r-dest").after(note);
     }
 
@@ -187,16 +196,29 @@ async function runRedirect() {
  * Create view
  * -------------------------------------------------------------------------- */
 
-/** The page's own address, without any fragment, as the link prefix. */
-const origin = () => location.origin + location.pathname.replace(/index\.html$/, "");
+/**
+ * The page's own address, without any fragment, as the link prefix. The last
+ * path segment is dropped whatever it is, not just "index.html": on GitHub
+ * Pages a mistyped path serves this same app as 404.html, and links made
+ * from that page must not embed the typo.
+ */
+const origin = () => location.origin + location.pathname.replace(/[^/]*$/, "");
 
 const bits = (n) => `${n} bit${n === 1 ? "" : "s"}`;
 
 /** Render the "where every bit went" panel from an Analysis. */
 function renderBreakdown(result) {
-  const total = result.headerBits + result.bodyBits;
-  const hostBits = result.hostByte === null ? 0 : 8;
-  const headerBits = result.headerBits - hostBits;
+  const total = result.headerBits + result.hostFieldBits + result.bodyBits;
+  const hostBits = result.hostByte === null ? result.hostFieldBits : 8;
+  const headerBits = result.headerBits - (result.hostByte === null ? 0 : 8);
+
+  const hostNote = result.template !== null
+    ? "part of the recognised pattern"
+    : result.hostByte !== null
+      ? `${result.host}, dictionary entry ${result.hostByte}`
+      : result.hostFieldBits
+        ? `${result.host}, in its own code — the suffix is one symbol`
+        : "spelled inside the body text";
 
   const segments = [
     {
@@ -212,9 +234,7 @@ function renderBreakdown(result) {
       colour: "var(--seg-host)",
       bits: hostBits,
       name: "Host",
-      note: result.hostByte === null
-        ? "not in the dictionary, so it is spelled out in the body"
-        : `${result.host}, dictionary entry ${result.hostByte}`,
+      note: hostNote,
       cost: hostBits ? bits(hostBits) : "—",
     },
     {
@@ -224,7 +244,7 @@ function renderBreakdown(result) {
       name: "Body",
       note: result.template !== null
         ? `the IDs from ${result.templatePattern}`
-        : `path, query and fragment, as ${result.modeName}`,
+        : `path, query and fragment, as ${result.modeName === "host" ? "text" : result.modeName}`,
       cost: bits(result.bodyBits),
     },
   ];
@@ -379,6 +399,27 @@ function setUpCreate() {
         `${-saved} characters longer. This URL is already short enough that ` +
         "carrying it whole costs more than it saves.";
       verdict.className = "verdict lose";
+    }
+
+    // Honesty notes: a link that will always hit the warning interstitial,
+    // or one long enough that some apps and servers truncate it, should say
+    // so here, at creation time — not surprise the recipient.
+    const notes = [];
+    const risk = assess(analysis.url);
+    if (risk.reasons.length) {
+      notes.push("Anyone opening this link will see a warning first: " +
+        risk.reasons.map((reason) => reason.message).join(" "));
+    }
+    if (link.length > 2000) {
+      notes.push(`At ${link.length} characters, some chat apps and older ` +
+        "servers may truncate this link.");
+    }
+    document.querySelectorAll(".maker-note").forEach((el) => el.remove());
+    for (const text of notes) {
+      const note = document.createElement("p");
+      note.className = "maker-note";
+      note.textContent = text;
+      verdict.after(note);
     }
 
     renderBreakdown(analysis);

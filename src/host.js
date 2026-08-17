@@ -67,11 +67,14 @@ function bestTerminal(host) {
 
 /**
  * The number of bits emitHost() would write for this host, without writing
- * them.
+ * them. Infinity for a host the decoder would refuse — the shape must never
+ * enter the race, because winning it would produce a payload our own
+ * decoder rejects.
  * @param {string} host
  * @returns {number}
  */
 export function hostBits(host) {
+  if (host.length > MAX_HOST_CHARS) return Infinity;
   return bestTerminal(host).bits;
 }
 
@@ -82,6 +85,10 @@ export function hostBits(host) {
  * @param {string} host
  */
 export function emitHost(w, host) {
+  // Mirror of the decoder's cap: emitting past it would make a payload that
+  // decodeHost refuses, which is strictly worse than failing here.
+  if (host.length > MAX_HOST_CHARS)
+    throw new ClentError("That host is too long to encode.");
   const { symbol, absorbed } = bestTerminal(host);
   const upto = host.length - absorbed;
   for (let k = 0; k < upto; k++) {

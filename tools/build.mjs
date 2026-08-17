@@ -21,6 +21,7 @@ import path from "node:path";
 import { minifyJS, minifyCSS, minifyHTML } from "./minify.js";
 import { bundle } from "./bundle.js";
 import { HOSTS } from "../src/hosts.js";
+import { TEMPLATES } from "../src/templates.js";
 
 import { ROOT } from "./bundle.js";
 const SRC = path.join(ROOT, "src");
@@ -61,6 +62,7 @@ function substituteStats(html, stats) {
     originLength: String((stats.origin ?? "").length),
     linkShorter: `${stats.linkShorterPct.toFixed(1)}%`,
     hostCount: String(HOSTS.length),
+    templates: String(TEMPLATES.length),
     // The shortest prefix the validator measured, so the page cannot quote a
     // figure for a domain length nobody checked.
     shortBreakEven: String(
@@ -188,6 +190,7 @@ async function main() {
   html = minifyHTML(html);
   await writeFile(path.join(DIST, "index.html"), html);
   await writeFile(path.join(DIST, ".nojekyll"), "");
+  await writeFile(path.join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n");
 
   // GitHub Pages serves 404.html for unknown paths. Serving the app there too
   // means a mistyped path still resolves the fragment instead of dead-ending.

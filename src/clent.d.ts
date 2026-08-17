@@ -85,6 +85,8 @@ export interface Analysis {
   headerBits: number;
   /** Bits spent on the body. */
   bodyBits: number;
+  /** Bits spent on the host field; 0 outside the host mode. */
+  hostFieldBits: number;
   /** Best payload length per mode; null where a mode was unavailable. */
   candidates: {
     text: number | null;

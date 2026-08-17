@@ -67,6 +67,18 @@ test("www still folds to a header bit under the host mode", async () => {
   assert.ok(a.payload.length <= bare.length + 1);
 });
 
+test("a host past the decoder's cap still round-trips, via another mode", async () => {
+  // hostBits() must price such a host at Infinity so the host shape never
+  // wins — winning would produce a payload our own decoder refuses.
+  const label = "a-long-label-of-twenty-chars".slice(0, 20);
+  const host = Array.from({ length: 14 }, () => label).join(".") + ".com"; // ~294 chars
+  const url = `https://${host}/x`;
+  const a = await analyze(url, { stripTracking: false });
+  assert.notEqual(a.modeName, "host", "the host mode must not win past the cap");
+  assert.equal((await expand(a.payload)).href, url);
+  assert.equal(hostBits(host), Infinity);
+});
+
 test("host mode with the dictionary flag is refused", async () => {
   const w = new BitWriter();
   w.push(SCHEME_HTTPS | F_HOST | (MODE_HOST << 4), 6);

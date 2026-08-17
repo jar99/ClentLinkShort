@@ -1,12 +1,12 @@
 /**
  * Does the encoder actually produce the smallest link it could?
  *
- * `shorten()` measures the three body encodings, but it decides the rest by
- * rule: use the dictionary when the host is in it, strip `www.` when present,
- * fall back to verbatim only when it has to. Those rules are reasonable, and
- * reasonable is not the same as correct.
+ * `shorten()` prices every shape-and-mode combination arithmetically and
+ * builds only the winner, with two documented shortcuts around deflate. A
+ * pricing bug would just make links quietly longer, which no round-trip
+ * test can see.
  *
- * So the check here does not trust the rules. It builds a payload for every
+ * So the check here does not trust the pricing. It builds a payload for every
  * combination of every choice, confirms each one decodes back to the same URL,
  * and asserts the encoder's answer is no longer than the best of them.
  */

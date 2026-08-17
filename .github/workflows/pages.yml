@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Never cancel a deployment mid-flight; queued runs wait their turn.
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -26,12 +27,29 @@ jobs:
         with:
           node-version: 22
 
-      # Nothing to install. Tests gate the deploy: the site that ships is the
-      # one that just proved it round-trips 200k real URLs.
-      - name: Test
+      # The full gate runs here, not just the unit tests: a regression that
+      # only tsc or the browser suite can see must not ship. Corpus
+      # validation stays in ci.yml — it gates merges, not deploys.
+      - name: Unit, property, security and minifier tests
         run: node --test test/*.test.js
 
+      - name: JSDoc and declaration soundness
+        run: |
+          npm install --no-save typescript@7 @types/node
+          npx tsc -p tsconfig.json
+
       - name: Build
+        run: node tools/build.mjs
+
+      - name: End-to-end against the site that is about to ship
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+          node tools/browser-test.mjs dist
+
+      # The browser test and npm leave droppings; rebuild so the uploaded
+      # artifact is exactly what tools/build.mjs makes and nothing else.
+      - name: Rebuild clean
         run: node tools/build.mjs
 
       - uses: actions/configure-pages@v5

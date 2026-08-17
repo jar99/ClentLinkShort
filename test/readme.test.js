@@ -40,3 +40,30 @@ test("the README break-even table matches the measured stats", { skip }, async (
       `stats.json says ${prefix.shorterPct.toFixed(1)}%`);
   }
 });
+
+test("the README mode shares match the measured stats", { skip }, async () => {
+  const readme = await readFile(path.join(ROOT, "README.md"), "utf8");
+  const stats = JSON.parse(await readFile(statsFile, "utf8"));
+  assert.ok(stats.modes, "stats.json should carry per-mode counts");
+
+  // Quoted twice (the validation table and the encoding walkthrough); both
+  // must carry the measured share for the modes big enough to round to a
+  // tenth of a percent.
+  for (const [name, count] of Object.entries(stats.modes)) {
+    const pct = (100 * count) / stats.checked;
+    if (pct < 0.1) continue;
+    const quoted = readme.match(new RegExp(`${name}(?: wins)? ([\\d.]+)%`));
+    assert.ok(quoted, `README should quote the "${name}" mode share`);
+    assert.equal(Number(quoted[1]).toFixed(1), pct.toFixed(1),
+      `README says ${quoted[1]}% for "${name}"; stats.json says ${pct.toFixed(1)}%`);
+  }
+});
+
+test("the README template count matches the shipped table", async () => {
+  const readme = await readFile(path.join(ROOT, "README.md"), "utf8");
+  const { TEMPLATES } = await import("../src/templates.js");
+  const quoted = readme.match(/(\d+) templates cover/);
+  assert.ok(quoted, "README should quote the template count");
+  assert.equal(Number(quoted[1]), TEMPLATES.length,
+    `README says ${quoted[1]} templates; the table ships ${TEMPLATES.length}`);
+});

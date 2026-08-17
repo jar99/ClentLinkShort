@@ -16,6 +16,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>Clent — a link shortener that stores nothing</title>
 <meta name="description" content="Shorten links with no database, no accounts and no logging. The destination is compressed into the link itself, so nothing is ever stored and the link never expires.">
+<meta property="og:title" content="Clent — a link shortener that stores nothing">
+<meta property="og:description" content="The destination is compressed into the link itself. No database, no accounts, no logging — and the link never expires.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
 <script>
   // Choose the view before first paint so the creator UI never flashes
@@ -174,7 +178,7 @@
 
       <h3>Encodings tried</h3>
       <p class="muted small">
-        All three are built for every link. The shortest one is used.
+        Every encoding is priced for every link. The shortest one is used.
       </p>
       <div class="modes" id="modes"></div>
     </div>
@@ -220,7 +224,7 @@
     <p>
       A lot of shared links are one site's URL scheme with an ID dropped into it.
       <code>youtube.com/watch?v=dQw4w9WgXcQ</code> is 43 characters, of which 11
-      carry any information. About 40 shapes are recognised — YouTube, Amazon,
+      carry any information. {{templates}} shapes are recognised — YouTube, Amazon,
       imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify and more —
       and for those only the ID is stored, at the exact width its own alphabet
       needs.
@@ -274,12 +278,19 @@
         becomes 8 bits.
       </li>
       <li>
-        <b>The rest is encoded three ways, and the shortest is kept.</b> Text is
-        Huffman-coded: each character costs what its real frequency in URLs
-        earns it — <code>/</code> and <code>e</code> under 5 bits, rare ones
-        more — with a 128-entry table of whole runs like <code>.com</code>,
-        <code>article</code> and <code>/index</code> coded as single symbols.
-        The code was measured from the test corpus, not guessed.
+        <b>Every other domain is cheap without a dictionary entry.</b> The
+        hostname gets its own code whose ending symbols are real suffixes —
+        <code>.com</code>, <code>.co.uk</code>, <code>.github.io</code> — so
+        the part every domain shares costs a few bits, not four characters.
+        No table grows when someone shortens a domain nobody has seen.
+      </li>
+      <li>
+        <b>The rest is priced every legal way, and the shortest is kept.</b>
+        Text is Huffman-coded: each character costs what its real frequency in
+        URLs earns it — <code>/</code> and <code>e</code> under 5 bits, rare
+        ones more — with a 128-entry table of whole runs like
+        <code>articles/</code> and <code>index.php</code> coded as single
+        symbols. The code was measured from the test corpus, not guessed.
       </li>
       <li>
         <b>The payload goes after the <code>#</code>.</b> Browsers don't send that
@@ -291,7 +302,11 @@
 8 bits  host     dictionary index, when the host is known
   body  text     Huffman symbols: literals, tokens, escapes, END
         raw      UTF-8 bytes, 8 bits each
-        deflate  DEFLATE-raw bytes, 8 bits each</code></pre>
+        deflate  DEFLATE-raw bytes, 8 bits each
+        host     the hostname in its own code, suffix as one
+                 symbol, then the tail as text
+scheme "other"   a 4-bit scheme index: mailto:, tel:, ftp:…
+scheme template  8 bits of pattern index, then just the IDs</code></pre>
   </section>
 
   <section>

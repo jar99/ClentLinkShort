@@ -122,7 +122,7 @@ export async function check(raw, stats, { maxFailures = 50, origin = DEFAULT_ORI
   }
   if (actual !== expected) return record("round-trip mismatch", actual);
 
-  // The encoder builds every body mode and is supposed to keep the shortest.
+  // The encoder prices every candidate and is supposed to keep the shortest.
   // Cheap to verify on every single URL, so it is.
   const offered = Object.values(result.candidates).filter((n) => n !== null);
   if (result.payload.length !== Math.min(...offered)) {
