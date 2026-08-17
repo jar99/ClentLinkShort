@@ -71,6 +71,20 @@ try {
 
   // ---- creating a link ----------------------------------------------------
   await page.goto(BASE);
+
+  // A fresh visit must start pristine. The regression here was real: the
+  // DOMContentLoaded *event object* leaked into setUpCreate's prefill
+  // parameter, and every first-time visitor saw "[object Event]" in the box
+  // with an error underneath. Only the built page hits the listener path
+  // (its script runs in <head>), which is why dev mode never showed it.
+  await page.waitForTimeout(300);
+  const pristine = await page.inputValue("#url");
+  const errorShown = await page.locator("#error:not([hidden])").count();
+  check("a fresh visit starts with an empty box and no error",
+    pristine === "" && errorShown === 0, `value=${JSON.stringify(pristine)}`);
+  check("the page shows no visible GitHub link",
+    await page.locator("a[href*='github.com']").count() === 0);
+
   const LONG = "https://www.theguardian.com/world/2024/jan/15/some-long-article" +
     "-title-here?utm_source=twitter&utm_medium=social";
   await page.fill("#url", LONG);

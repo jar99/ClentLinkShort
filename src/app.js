@@ -314,6 +314,7 @@ function renderBreakdown(result) {
 
 /** @param {string} [prefill] URL handed over by the bookmarklet fragment */
 function setUpCreate(prefill = "") {
+  if (typeof prefill !== "string") prefill = "";
   const input = field("url");
   const error = $("error");
   const result = $("result");
@@ -527,7 +528,7 @@ if (location.hash.startsWith("#s=")) {
   // running forever with the error only in the console.
   runRedirect().catch(() => showLinkFailure("Something went wrong opening this link."));
 } else {
-  whenReady(setUpCreate);
+  whenReady(() => setUpCreate());
 }
 
 // Pasting a Clent link into an already-open tab only changes the fragment,
