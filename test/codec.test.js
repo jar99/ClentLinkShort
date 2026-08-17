@@ -188,12 +188,12 @@ test("token selection is optimal against the shipped cost model", async () => {
   // An independent shortest-path over the same published tables: for a set of
   // bodies, no split into tokens and literals may beat what emitText chose.
   const { textBits } = await import("../src/text.js");
-  const { CODE_LENGTHS, SYM_TOKEN, SYM_END, SYM_ESC, TOKEN_INDEX_BITS, TOKENS } =
+  const { CODE_LENGTHS, SYM_END, SYM_ESC, TOKEN_BASE, TOKENS } =
     await import("../src/textcode.js");
   const encoder = new TextEncoder();
 
   const literalCost = (byte) => CODE_LENGTHS[byte] || CODE_LENGTHS[SYM_ESC] + 8;
-  const tokenCost = CODE_LENGTHS[SYM_TOKEN] + TOKEN_INDEX_BITS;
+
 
   for (const body of [
     "article-news-media/index.html",
@@ -207,9 +207,12 @@ test("token selection is optimal against the shipped cost model", async () => {
     best[bytes.length] = CODE_LENGTHS[SYM_END];
     for (let i = bytes.length - 1; i >= 0; i--) {
       best[i] = literalCost(bytes[i]) + best[i + 1];
-      for (const token of TOKENS) {
-        if (body.startsWith(token, i)) {
-          best[i] = Math.min(best[i], tokenCost + best[i + token.length]);
+      for (let t = 0; t < TOKENS.length; t++) {
+        const token = TOKENS[t];
+        // Each token is its own symbol: its cost is its own code length.
+        if (CODE_LENGTHS[TOKEN_BASE + t] && body.startsWith(token, i)) {
+          best[i] = Math.min(best[i],
+            CODE_LENGTHS[TOKEN_BASE + t] + best[i + token.length]);
         }
       }
     }

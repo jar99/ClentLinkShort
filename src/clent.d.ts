@@ -22,8 +22,14 @@ export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
 
-/** Wire format version this build reads and writes. */
+/**
+ * Wire format version this build writes. Frozen: v1 links decode forever;
+ * future formats ride the VERSION_ESCAPE envelope.
+ */
 export declare const VERSION: 1;
+
+/** Reserved first-header value marking a payload from a future wire version. */
+export declare const VERSION_ESCAPE: 62;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;

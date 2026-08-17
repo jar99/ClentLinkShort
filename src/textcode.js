@@ -1,45 +1,58 @@
 /**
- * The text-mode code: canonical Huffman lengths over body bytes plus the
- * three control symbols, and the substring token dictionary, both mined from
- * the corpus by tools/mine-text.mjs.
+ * The text-mode code: canonical Huffman lengths over body bytes, the END
+ * and ESC controls, and ONE SYMBOL PER DICTIONARY TOKEN, all mined from the
+ * corpus by tools/mine-text.mjs.
  *
- * Symbols 0..255 are bytes; 256 = TOKEN (an index follows), 257 = END,
- * 258 = ESC (a raw 8-bit byte follows). A length of 0 means the byte has no
- * code and is written via ESC. Codes are canonical: assigned by ascending
- * length, ties by ascending symbol, so the lengths array IS the whole code.
+ * Tokens as first-class symbols is the load-bearing choice: a frequent run
+ * like "articles/" costs its measured frequency — a handful of bits — while
+ * a rare token pays for itself, and no fixed index tax sits on any of them.
  *
- * Table format for wire v1. APPEND-ONLY in spirit: any change to either
- * table changes what existing payloads decode to, so a change here is a wire
- * version bump, never a patch.
+ * Symbols 0..255 are bytes (length 0 = written via ESC); 256 = END,
+ * 257 = ESC (a raw 8-bit byte follows), 258+k = "append TOKENS[k]". Codes
+ * are canonical: assigned by ascending length, ties by ascending symbol, so
+ * the lengths array IS the whole code.
+ *
+ * Beta: re-mining replaces these tables and invalidates existing links.
+ * Once stability is declared, this file is frozen by test/compat.test.js
+ * and future formats ride the VERSION_ESCAPE envelope instead.
  *
  * @module textcode
  */
 
-/** Code length per symbol (one hex digit each); index 256 TOKEN, 257 END, 258 ESC. */
-export const CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000c0cf67f99faa56566567777679e0708d7878989a9bb99999c989baacbc0000405666476659756556a555577879000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000045f"].map((c) => parseInt(c, 16)));
+/** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k tokens. */
+export const CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000c0cf57f99f9956566567777669e0708d7878889a9ab99999b989aaacbb0000505666576659766656a555678879000b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005fffcacabd9caacfdfddd9aaecccccfddce988b99f9f99999a9abdabbbabbbbbcccbccccccdcddddddddcdededdd99c9999e9ad9aaaaaaaaacaaaaabababbcabccaaabbcaabababbbbbbabbbbcbbabbbbbbbbbbbbbbcbbbbccbcbbcbcabccabcbcbbdbbbbbbbcbbbbccccbbccbdcccccaacccccbccbccccccdccccdccccccccbcc"].map((c) => parseInt(c, 16)));
 
-export const SYM_TOKEN = 256, SYM_END = 257, SYM_ESC = 258;
-
-/** Width of a token index after the TOKEN symbol. */
-export const TOKEN_INDEX_BITS = 7;
+export const SYM_END = 256, SYM_ESC = 257, TOKEN_BASE = 258;
 
 /**
- * The substring dictionary, indexed as on the wire.
+ * The substring dictionary, indexed as on the wire (symbol TOKEN_BASE + k).
  * @type {readonly string[]}
  */
 export const TOKENS = Object.freeze([
-  "articles/", "index.php", "/cgi-bin/", "anthropic", "/article", "index.ht",
-  "content", "/2026/0", "/index.", "source", "search", "/blog/", "/news/",
-  "/searc", "2026-0", "archiv", "detail", "-with-", "rchive", "claude", "image",
-  ".php?", "story", "/post", "world", "roduc", "agent", "publi", "type=",
-  "wiki", ".htm", ".jpg", "/wik", "html", "comm", "edia", "iki/", "/com",
-  "info", "pedi", "tion", "medi", "ing-", "_con", "inal", "the-", ".asp",
-  "ment", "ogra", ".pdf", "atch", "-the", "auto", "/201", "-to-", "comp",
-  "page", "-of-", "view", "-ai-", "port", "play", "ture", "data", "book",
-  "ject", "tech", "work", "-is-", "mon", "ons", "mpa", "org", "cam", "amp",
-  "id=", "rig", "ign", "ori", "200", "and", "man", "que", "che", "000", "ile",
-  "for", "_de", "pro", "str", "ist", "rap", "ter", "ver", "ID=", "par", "cri",
-  "sta", "rit", "how", "scr", "ica", "100", "-co", "ang", "all", "-in", "nce",
-  "%20", "al-", "ine", "act", "cha", "per", "ack", "lin", "ide", "tes", "es-",
-  "ass", "olo", "mar", "pri", "ate", "lan", "res", "/ma", "on-"
+  "articles/", "index.php", "/cgi-bin/", "/article", "content", "/2026/0",
+  "/index.", "archive", "source", "search", "/blog/", "/searc", "2026-0",
+  "posts/", "-with-", "detail", "claude", "system", "google", "image", ".php?",
+  "/news", "news/", "story", "world", "/post", "agent", "publi", "ublic",
+  "type=", "build", "-2026", "glish", "wiki", ".htm", "/wik", "html", ".jpg",
+  "comm", "edia", "info", "iki/", "tion", "pedi", "/com", "_con", "medi",
+  "ing-", "inal", "ment", "the-", "ogra", ".asp", ".pdf", "-the", "atch",
+  "auto", "/201", "page", "-to-", "view", "-of-", "ture", "-ai-", "play",
+  "port", "data", "ject", "tech", "work", "open", "-is-", "/doc", "from",
+  "down", "News", "what", "tive", "lock", "load", "ight", "ener", "-new",
+  "ing/", "new-", "/ai-", "peci", "spec", "/05/", "/01/", "ons", "mon", "mpa",
+  "org", "ign", "ile", "cam", "amp", "_de", "id=", "rig", "ori", "and", "man",
+  "que", "che", "200", "ter", "ist", "all", "for", "ine", "ver", "nce", "pro",
+  "-co", "-in", "al-", "res", "es-", "rap", "how", "lin", "ang", "par", "ant",
+  "lle", "rit", "ate", "str", "cri", "tes", "000", "ID=", "per", "ide", "100",
+  "olo", "ica", "sta", "/en", "on-", "ann", "ack", "ook", "ers", "ass", "und",
+  "ill", "ian", "%20", "mar", "-de", "ble", "usi", "ain", "pri", "ame", "ode",
+  "pic", "ed-", "one", "ite", "-re", "web", "ber", "/p/", "ult", "ens", "app",
+  "min", "ess", "rea", "ext", "war", "ple", "us/", "you", "ram", "out", "ser",
+  "eur", "duc", "ran", "ave", "ity", "off", "act", "use", "/10", "acc", "hl=",
+  "ome", "s/1", "-wh", "ts-", "cha", "er-", "/re", "ell", "ari", "hin", "en-",
+  "/de", "oli", "dis", "int", "end", "ard", "ry/", "ary", "st-", "est", "lea",
+  "ace", "re-", "qui", "oni", "val", "ntr", "al_", "ani", "lan", "/ma", "ord",
+  "tro", "ole", "ale", "tal", "tin", "sec", "cie", "s/c", "ics", "tri", "ela",
+  "as-", "s/s", "mic", "500", "tha", "ath", "tle", "an-", "vel", "iss", "ini",
+  "cia", "ull", "not", "-be", "/ca", "alt", "ies", "ele", "-fi"
 ]);

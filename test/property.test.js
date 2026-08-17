@@ -7,7 +7,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shorten, expand, parse, HOSTS, B64, ClentError } from "../src/clent.js";
+import { shorten, expand, parse, HOSTS, B64, ENCODABLE, ClentError } from "../src/clent.js";
 
 const SEED = Number(process.env.CLENT_SEED) || 20240817;
 
@@ -146,7 +146,7 @@ test("random fragments are always rejected or safely decoded", async () => {
 
     try {
       const url = await expand(payload);
-      assert.match(url.protocol, /^(https?|mailto|ftps?|tel|sms|magnet|ipfs|ipns):$/,
+      assert.ok(ENCODABLE.has(url.protocol),
         `${payload} decoded to ${url.protocol}`);
     } catch (error) {
       assert.ok(error instanceof ClentError, `${payload} threw ${error?.name}`);

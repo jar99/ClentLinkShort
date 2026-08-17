@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { HOSTS } from "../src/hosts.js";
-import { TOKENS, CODE_LENGTHS, TOKEN_INDEX_BITS, SYM_TOKEN, SYM_END, SYM_ESC } from "../src/textcode.js";
+import { TOKENS, CODE_LENGTHS, TOKEN_BASE, SYM_END, SYM_ESC } from "../src/textcode.js";
 import { TEMPLATES, CHARSETS } from "../src/templates.js";
 import { ENCODABLE_ORDER, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE } from "../src/schemes.js";
 
@@ -23,9 +23,9 @@ test("HOSTS fits its 8-bit index and every entry is usable", () => {
   }
 });
 
-test("TOKENS fits its index width and every entry can pay for itself", () => {
-  assert.ok(TOKENS.length <= 1 << TOKEN_INDEX_BITS,
-    `${TOKENS.length} tokens do not fit ${TOKEN_INDEX_BITS} index bits`);
+test("TOKENS line up with their symbols and every entry can pay for itself", () => {
+  assert.equal(CODE_LENGTHS.length, TOKEN_BASE + TOKENS.length,
+    "one code length per byte, control and token symbol");
   assert.equal(new Set(TOKENS).size, TOKENS.length, "duplicate tokens waste slots");
   for (const token of TOKENS) {
     assert.ok(token.length >= 3, `"${token}" is too short to ever pay for its reference`);
@@ -35,7 +35,6 @@ test("TOKENS fits its index width and every entry can pay for itself", () => {
 });
 
 test("the text code is a valid canonical Huffman table", () => {
-  assert.equal(CODE_LENGTHS.length, 259, "256 bytes + TOKEN + END + ESC");
   // Kraft inequality: the lengths must describe a real prefix code.
   let kraft = 0;
   for (const length of CODE_LENGTHS) {
@@ -44,13 +43,14 @@ test("the text code is a valid canonical Huffman table", () => {
   }
   assert.ok(kraft <= 1 + 1e-9, `Kraft sum ${kraft} > 1: not decodable`);
   // The controls must always be codable.
-  for (const symbol of [SYM_TOKEN, SYM_END, SYM_ESC]) {
+  for (const symbol of [SYM_END, SYM_ESC]) {
     assert.ok(CODE_LENGTHS[symbol] > 0, `control symbol ${symbol} has no code`);
   }
 });
 
-test("TEMPLATES fits its 8-bit index and slots agree with their patterns", () => {
-  assert.ok(TEMPLATES.length <= 256, "the template index is 8 bits");
+test("TEMPLATES slots agree with their patterns", () => {
+  // No size cap: the index escapes past 255 by chaining, so the table can
+  // grow forever without a format change.
   for (const { pattern, slots } of TEMPLATES) {
     const holes = [...pattern.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
     assert.equal(holes.length, slots.length, `${pattern}: slot count`);

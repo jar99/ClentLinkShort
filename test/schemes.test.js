@@ -23,6 +23,9 @@ test("every scheme in the table round-trips through its index", async () => {
     "magnet:": "magnet:?xt=urn:btih:abcdef0123456789",
     "ipfs:": "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
     "ipns:": "ipns://k51qzi5uqu5dgutdk6i1ynyzg",
+    "geo:": "geo:37.786971,-122.399677",
+    "matrix:": "matrix:r/somewhere:example.org",
+    "xmpp:": "xmpp:someone@example.com",
   };
   for (const scheme of ENCODABLE_ORDER) {
     const url = samples[scheme];

@@ -139,6 +139,35 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://open.spotify.com/episode/{0}", slots: ["b64"] },
   { pattern: "https://open.spotify.com/playlist/{0}", slots: ["b64"] },
   { pattern: "https://commons.wikimedia.org/wiki/File:{0}", slots: ["text"] },
+
+  // ---- appended for wire v2: shapes the corpus and the news cycle carry --
+  { pattern: "https://www.threads.net/@{0}/post/{1}", slots: ["slug", "b64"] },
+  { pattern: "https://t.me/{0}/{1}", slots: ["slug", "dec"] },
+  { pattern: "https://medium.com/@{0}/{1}", slots: ["slug", "text"] },
+  { pattern: "https://dev.to/{0}/{1}", slots: ["slug", "slug"] },
+  { pattern: "https://www.npmjs.com/package/{0}", slots: ["text"] },
+  { pattern: "https://pypi.org/project/{0}/", slots: ["slug"] },
+  { pattern: "https://crates.io/crates/{0}", slots: ["slug"] },
+  { pattern: "https://mastodon.social/@{0}/{1}", slots: ["text", "dec"] },
+  { pattern: "https://lemmy.world/post/{0}", slots: ["dec"] },
+  { pattern: "https://www.twitch.tv/{0}/clip/{1}", slots: ["slug", "text"] },
+  { pattern: "https://music.youtube.com/watch?v={0}", slots: ["b64"] },
+  { pattern: "https://maps.app.goo.gl/{0}", slots: ["b64"] },
+  // People paste "youtube.com/watch?v=…" without the www; the parser keeps
+  // the host as typed, so the bare spelling needs its own patterns.
+  { pattern: "https://youtube.com/watch?v={0}", slots: ["b64"] },
+  { pattern: "https://youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
+  { pattern: "https://youtube.com/shorts/{0}", slots: ["b64"] },
+  // Proposed by tools/mine-templates.mjs from corpus coverage:
+  { pattern: "https://www.ft.com/content/{0}", slots: ["b64"] },
+  { pattern: "https://www.bbc.com/news/articles/{0}", slots: ["b64"] },
+  { pattern: "https://www.bbc.co.uk/news/articles/{0}", slots: ["b64"] },
+  { pattern: "https://www.nature.com/articles/{0}", slots: ["b64"] },
+  { pattern: "https://www.wired.com/story/{0}/", slots: ["b64"] },
+  { pattern: "https://zenodo.org/records/{0}", slots: ["dec"] },
+  { pattern: "https://www.phoronix.com/news/{0}", slots: ["b64"] },
+  { pattern: "https://spectrum.ieee.org/{0}", slots: ["b64"] },
+  { pattern: "https://apps.apple.com/us/app/{0}/{1}", slots: ["b64", "b64"] },
 ]);
 
 /** Longest slot value a template will hold; the length field is 6 bits. */
@@ -277,7 +306,15 @@ export function asTemplate(url) {
  * @returns {string} the finished payload
  */
 export function writeTemplate(w, { index, values }) {
-  w.push(index, 8);
+  // The index is open-ended: byte 255 means "add 255 and keep reading", so
+  // the table can grow past 256 entries forever without a format change —
+  // links made against early indexes never notice later growth.
+  let remaining = index;
+  while (remaining >= 255) {
+    w.push(255, 8);
+    remaining -= 255;
+  }
+  w.push(remaining, 8);
   const slots = COMPILED[index].slots;
   for (let slot = 0; slot < values.length; slot++) {
     if (slots[slot] === "text") {
@@ -300,7 +337,15 @@ export function writeTemplate(w, { index, values }) {
  * @returns {string} the rebuilt URL
  */
 export function readTemplate(reader) {
-  const index = reader.read(8);
+  // Open-ended index: 255 chains. Eight links bound the loop at over two
+  // thousand templates — far past plausible, cheap to refuse beyond.
+  let index = 0;
+  for (let hops = 0; ; hops++) {
+    if (hops > 8) throw new ClentError("This link is damaged.");
+    const byte = reader.read(8);
+    index += byte;
+    if (byte !== 255) break;
+  }
   const template = COMPILED[index];
   if (!template) throw new ClentError("This link uses a newer template than this page has.");
 

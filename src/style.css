@@ -575,12 +575,16 @@ textarea::placeholder { color: var(--ink-faint); }
 
 /* ── footer ──────────────────────────────────────────────────────────── */
 
+/* Outside <main>, so it needs the same column constraint the views have. */
 footer {
-  margin-top: 64px;
-  padding-top: 22px;
+  max-width: 640px;
+  margin: 24px auto 0;
+  padding: 22px 20px 40px;
   border-top: 1px solid var(--line);
+  text-align: center;
   font-size: .85rem;
   color: var(--ink-faint);
+  box-sizing: content-box;
 }
 
 footer p { margin: 0 0 6px; }
@@ -624,4 +628,12 @@ footer p { margin: 0 0 6px; }
 .qr-box figcaption { margin: 0; }
 
 .faq dt { font-weight: 600; margin: 14px 0 4px; }
-.faq dd { margin: 0; color: var(--muted); }
+.faq dd { margin: 0 0 12px; color: var(--muted); line-height: 1.5; }
+
+/* Below-the-fold sections don't hold up first paint; the browser lays them
+   out when they approach the viewport. The tool card is excluded — it IS
+   the first paint. */
+#create > section:not(.tool) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}

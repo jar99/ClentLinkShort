@@ -25,10 +25,10 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **58% of the URL it came from** (median). Every link also
+The encoded destination is **57% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
 longer than about **30 characters** before the whole link comes out shorter. That is
-most links people actually share: **75% of deep links** (anything past a bare
+most links people actually share: **78% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
@@ -36,8 +36,8 @@ Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~30 | 43.7% |
-| a github.io project page (40c) | ~120 | 8.2% |
+| `nul.im/#` (16c) | ~30 | 45.4% |
+| a github.io project page (40c) | ~110 | 8.8% |
 | payload alone, no prefix | ~10 | 99.9% |
 
 Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
@@ -53,12 +53,12 @@ encoder head-to-head over 3,999 corpus URLs:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **150,046 chars** | 151,216 chars |
+| Total payload, same 3,999 URLs | **147,141 chars** | 151,216 chars |
 | Decodes back byte-identical | **100%** | 83.4% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
-| `upload.wikimedia.org/...%22Agnese%22...` | **138** | 160 |
-| Shorter link, per URL | 28.5% | 61.4% |
+| `upload.wikimedia.org/...%22Agnese%22...` | **134** | 160 |
+| Shorter link, per URL | 34.4% | 55.3% |
 
 Read the last row with the others: ha.mr's per-URL edge is many 1–3-character wins on
 long-tail text, bought mostly by the wider output alphabet — and characters like
@@ -89,11 +89,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **64.6%** overall, median **57.9%** |
+| Payload vs input URL | **63.4%** overall, median **56.5%** |
 | Payload shorter than input | **99.9%** |
-| Host dictionary hit rate | **11.7%** |
+| Host dictionary hit rate | **11.2%** |
 | Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 75.2%, text 19.3%, template 5.1%, deflate 0.4%, raw 0.1% |
+| Winning body mode | host 75.5%, text 18.4%, template 5.7%, deflate 0.3%, raw 0.1% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -243,7 +243,7 @@ Append `~` to a link to preview where it goes instead of going there.
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **Known URL shapes collapse to an ID.** 62 templates cover YouTube, Amazon,
+2. **Known URL shapes collapse to an ID.**  86 templates cover YouTube, Amazon,
    imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv
    and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
    information; templated it is 15. Each slot is encoded at its own alphabet's width —
@@ -271,15 +271,17 @@ Append `~` to a link to preview where it goes instead of going there.
 6. **The rest is encoded every way it legally can be, and the shortest is kept:**
    - **text** is canonical-Huffman-coded: every byte costs what its measured
      frequency in real URLs earns it — `/` and `e` under 5 bits, capitals their own
-     longer codes, unknown bytes an escape — and a 128-entry substring dictionary
-     (`articles/`, `index.php`, `.jpg`, `-of-`…) rides in the same code as one more
-     symbol. Tokens must span at least 25 *distinct hosts* to be mined, so the
-     dictionary generalises instead of memorising one site's paths. The tables live
-     in `src/textcode.js`, mined from the corpus by `tools/mine-text.mjs`.
+     longer codes, unknown bytes an escape — and every entry of a 256-token
+     substring dictionary (`articles/`, `index.php`, `.jpg`…) is **its own
+     symbol in the same code**, so a frequent token costs a handful of bits and
+     a rare one pays its own way; no fixed index tax. Tokens must span at least
+     25 *distinct hosts* to be mined, so the dictionary generalises instead of
+     memorising one site's paths. The tables live in `src/textcode.js`, mined
+     from the corpus by `tools/mine-text.mjs`.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: host wins 75.2%, text 19.3%, templates 5.1%, deflate 0.4%, raw 0.1%.
+On the corpus: host wins 75.5%, text 18.4%, templates 5.7%, deflate 0.3%, raw 0.1%.
 
 ## Tamper resistance
 
@@ -368,8 +370,14 @@ Two details that are load-bearing:
 - URLs with `user:password@` are always stored under scheme 2. The compact forms have
   nowhere to keep userinfo and dropping it would repoint the link.
 
-`HOSTS`, `TOKENS` and `SUFFIXES` are **append-only**: an entry's index is its wire
-encoding, so reordering one repoints every link that used it.
+**Compatibility stance (beta):** while the beta runs, re-mining may replace the
+Huffman tables and invalidate earlier links — compression wins over compatibility,
+deliberately. The machinery for the stable era is already in place: indexed tables
+(`HOSTS`, `TEMPLATES`, schemes) grow append-only and the template index chains past
+255 so the table is unbounded; a reserved leading header (`VERSION_ESCAPE`) gives
+future wire formats their own envelope; and `test/compat.test.js` pins golden
+payloads plus table hashes. Declaring 1.0 means freezing that file — after that, a
+link made on any day decodes forever.
 
 ## Project layout
 

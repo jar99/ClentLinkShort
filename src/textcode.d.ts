@@ -1,14 +1,12 @@
-/** Mined text-mode tables: canonical Huffman lengths and the token dictionary. */
+/** Mined text-mode tables: canonical Huffman lengths, tokens as symbols. */
 
-/** Code length per symbol; index 256 TOKEN, 257 END, 258 ESC. 0 = uncoded. */
+/** Code length per symbol; 256 END, 257 ESC, 258+k = token k. 0 = uncoded. */
 export declare const CODE_LENGTHS: readonly number[];
 
-export declare const SYM_TOKEN: 256;
-export declare const SYM_END: 257;
-export declare const SYM_ESC: 258;
-
-/** Width of a token index after the TOKEN symbol. */
-export declare const TOKEN_INDEX_BITS: number;
+export declare const SYM_END: 256;
+export declare const SYM_ESC: 257;
+/** First token symbol; token k lives at TOKEN_BASE + k. */
+export declare const TOKEN_BASE: 258;
 
 /** The substring dictionary, indexed as on the wire. */
 export declare const TOKENS: readonly string[];

@@ -19,6 +19,8 @@
 export const ENCODABLE_ORDER = Object.freeze([
   "http:", "https:", "mailto:", "ftp:", "ftps:", "tel:", "sms:",
   "magnet:", "ipfs:", "ipns:",
+  // appended for wire v2 — two slots still free, 15 reserved forever
+  "geo:", "matrix:", "xmpp:",
 ]);
 
 /** @type {ReadonlyMap<string, number>} */

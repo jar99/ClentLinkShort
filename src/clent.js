@@ -100,8 +100,21 @@ export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
 
-/** Wire format version this build reads and writes. */
+/**
+ * Wire format version this build writes. Version 1 is FROZEN: its tables
+ * (textcode, hostcode, and the existing prefixes of hosts, templates and
+ * schemes) never change, so every link ever made keeps decoding. Future
+ * formats ride the VERSION_ESCAPE envelope instead of replacing this one;
+ * test/compat.test.js holds the contract in place.
+ */
 export const VERSION = 1;
+
+/**
+ * Reserved first-header value (a leading "-" character) marking a payload
+ * from a future wire version: 4 version bits follow it. Never a legal v1
+ * header; the v1 encoder never emits it.
+ */
+export const VERSION_ESCAPE = 62;
 
 export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_OTHER = 2,
   SCHEME_TEMPLATE = 3;
@@ -489,6 +502,19 @@ export async function expand(payload) {
 
   const reader = new BitReader(code);
   const header = reader.read(6);
+
+  // The forward-compatibility escape. Header value 62 (a leading "-") was
+  // never a legal v1 header — scheme 2 forbids the www/host bits — so it is
+  // reserved as the envelope for future wire versions: 4 version bits
+  // follow, then that version's own format. This decoder knows none yet;
+  // the promise is that it fails with the right message instead of
+  // misreading, and that v1 payloads decode forever.
+  if (header === VERSION_ESCAPE) {
+    reader.read(4);
+    throw new ClentError(
+      "This link was made by a newer version of Clent. Refresh this page and try again.");
+  }
+
   const flags = header & 0b1111;
   const mode = (header >> 4) & 0b11;
 

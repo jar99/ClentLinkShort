@@ -1,28 +1,27 @@
 /**
- * The text body mode: canonical-Huffman-coded bytes with a substring token
- * dictionary, mined from the corpus (tools/mine-text.mjs, table in
- * textcode.js).
+ * The text body mode: canonical-Huffman-coded bytes and dictionary tokens,
+ * mined from the corpus (tools/mine-text.mjs, table in textcode.js).
  *
- * Flat 6-bit text — one payload character per URL character — was the old
- * design, and it left real bits on the table: '/' , 'e' and 'a' are far more
- * common in URLs than 'Z' or '%'. Huffman coding the bytes takes the average
- * literal under 5 bits, capitals get ordinary (longer) codes instead of a
- * shift prefix, and the token dictionary rides in the same code as one more
- * symbol. Token selection is still a shortest-path problem, solved by the
- * same dynamic programme as before but with measured per-byte costs.
+ * Everything is one code. Bytes are symbols, and every dictionary token is
+ * its own symbol too, so a frequent run like "articles/" costs whatever its
+ * measured frequency earns it — seven or eight bits — while a rare token
+ * pays its own way instead of taxing the common ones. The old design spent
+ * a fixed marker-plus-index price on every token; making tokens first-class
+ * symbols is what "variable-length everything" means here, and it is the
+ * same shape the host code's suffix terminals already had.
  *
- * The plan for a body is computed backwards from the end, so the plan for a
- * long body is simultaneously the plan for every suffix of it — the encoder
- * exploits that to price all its candidate splits with one plan.
+ * Token selection is a shortest-path problem, solved by dynamic programming
+ * backwards from the end against the real per-symbol costs — and because
+ * the plan runs backwards, the plan for a long body is simultaneously the
+ * plan for every suffix of it. The encoder prices all its candidate splits
+ * with one plan.
  *
  * @module text
  */
 
 import { BitWriter, BitReader, ClentError } from "./bits.js";
 import { buildCode, pushCode, readSymbol } from "./huffman.js";
-import {
-  CODE_LENGTHS, SYM_TOKEN, SYM_END, SYM_ESC, TOKEN_INDEX_BITS, TOKENS,
-} from "./textcode.js";
+import { CODE_LENGTHS, SYM_END, SYM_ESC, TOKEN_BASE, TOKENS } from "./textcode.js";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -41,13 +40,13 @@ const TOKEN_BYTES = TOKENS.map((token) => textEncoder.encode(token));
 /** First byte -> token indices, so matching only considers plausible tokens. */
 const TOKEN_BY_FIRST = new Map();
 for (let i = 0; i < TOKEN_BYTES.length; i++) {
+  if (!LEN[TOKEN_BASE + i]) continue; // uncoded token: never emittable
   const first = TOKEN_BYTES[i][0];
   if (!TOKEN_BY_FIRST.has(first)) TOKEN_BY_FIRST.set(first, []);
   TOKEN_BY_FIRST.get(first).push(i);
 }
 
 const ESC_COST = LEN[SYM_ESC] + 8;
-const TOKEN_COST = LEN[SYM_TOKEN] + TOKEN_INDEX_BITS;
 
 /** Bits to write one literal byte: its own code, or ESC plus the raw byte. */
 function literalCost(byte) {
@@ -88,7 +87,7 @@ export function planText(bytes) {
         }
       }
       if (!matched) continue;
-      const candidate = TOKEN_COST + cost[i + token.length];
+      const candidate = LEN[TOKEN_BASE + index] + cost[i + token.length];
       if (candidate < best) {
         best = candidate;
         pick = index;
@@ -128,8 +127,7 @@ export function emitText(w, bytes, plan = planText(bytes), from = 0) {
   for (let i = from; i < bytes.length;) {
     const pick = choice[i];
     if (pick >= 0) {
-      pushCode(w, TEXT_CODE, SYM_TOKEN);
-      w.push(pick, TOKEN_INDEX_BITS);
+      pushCode(w, TEXT_CODE, TOKEN_BASE + pick);
       i += TOKEN_BYTES[pick].length;
       continue;
     }
@@ -147,7 +145,7 @@ export function emitText(w, bytes, plan = planText(bytes), from = 0) {
 /**
  * Read a Huffman-coded text body back into a string, stopping at END.
  *
- * Every malformed sequence — truncation, an unknown token index, a code that
+ * Every malformed sequence — truncation, an unknown symbol, a code that
  * matches nothing — is a ClentError, never a silently substituted byte.
  *
  * @param {BitReader} reader
@@ -161,8 +159,8 @@ export function decodeText(reader) {
     if (symbol === SYM_END) break;
     if (symbol === SYM_ESC) {
       bytes.push(reader.read(8));
-    } else if (symbol === SYM_TOKEN) {
-      const token = TOKEN_BYTES[reader.read(TOKEN_INDEX_BITS)];
+    } else if (symbol >= TOKEN_BASE) {
+      const token = TOKEN_BYTES[symbol - TOKEN_BASE];
       if (!token) throw new ClentError("This link uses an unknown token.");
       for (const byte of token) bytes.push(byte);
     } else {

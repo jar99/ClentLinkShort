@@ -21,7 +21,7 @@
  */
 
 /** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k terminals. */
-export const HOST_CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000000000f0000f750999aaaaaaaf000000000000000000000000000000000000f04655465548655445954456686800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fecefdfeaedfdbdecdeedcbcedddeededddeeeededdcddddcdecbcdd9deeddedbdddbd5aaac87ddcaececdbccdbbc8bbbbabaddbacaaccdaaeadd9bdedcecdcdf"].map((c) => parseInt(c, 16)));
+export const HOST_CODE_LENGTHS = Object.freeze([..."000000000000000000000000000000000000000f0000f760999aaaaaaaf000000000000000000000000000000000000f04655465648655445944456686700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008fecefdfebefdfdbdecfdeeffdcbcffefedddeedffefdddeffeeedeffdffdeecdfdfdfdcfdecebcddadfeeeefeddeeefdebedfeeddfbd5aaface8e7ddefcaecfcedebccdbbc8bebbbeaebeebeedcaceaaeeeeceeabeeeeadde9bededeefcecdcdf"].map((c) => parseInt(c, 16)));
 
 export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
 
@@ -32,19 +32,26 @@ export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
 export const SUFFIXES = Object.freeze([
   ".sourceforge.net", ".wikipedia.org", ".wordpress.com", ".bearblog.dev",
   ".blogspot.com", ".in-addr.arpa", ".stanford.edu", ".substack.com", ".harvard.edu",
-  ".google.com", ".medium.com", ".vercel.app", ".github.io", ".yahoo.com",
-  ".narod.ru", ".nasa.gov", ".free.fr", ".gouv.fr", ".mit.edu", ".com.ar",
-  ".com.au", ".com.br", ".com.cn", ".com.mx", ".com.tr", ".com.tw", ".com.ua",
-  ".com.vn", ".edu.au", ".edu.cn", ".edu.tw", ".gov.au", ".gov.br", ".gov.cn",
-  ".gov.in", ".gov.tr", ".gov.tw", ".gov.ua", ".gov.uk", ".gov.vn", ".online",
-  ".org.il", ".org.uk", ".social", ".ac.il", ".ac.jp", ".ac.th", ".ac.uk",
-  ".cloud", ".co.id", ".co.il", ".co.jp", ".co.kr", ".co.nz", ".co.th", ".co.uk",
-  ".co.za", ".go.jp", ".go.th", ".ne.jp", ".or.jp", ".space", ".blog", ".info",
-  ".live", ".site", ".tech", ".app", ".biz", ".com", ".dev", ".edu", ".gov",
-  ".int", ".net", ".org", ".pro", ".top", ".xyz", ".ai", ".ar", ".at", ".au",
-  ".be", ".br", ".ca", ".cc", ".ch", ".cl", ".cn", ".co", ".cz", ".de", ".dk",
-  ".es", ".eu", ".fi", ".fr", ".gr", ".hu", ".id", ".il", ".in", ".io", ".ir",
-  ".it", ".jp", ".kr", ".me", ".mx", ".nl", ".no", ".nz", ".pl", ".pt", ".ro",
-  ".ru", ".se", ".sk", ".th", ".tr", ".tv", ".tw", ".ua", ".uk", ".us", ".vn",
-  ".za"
+  ".netlify.app", ".google.com", ".medium.com", ".vercel.app", ".github.io",
+  ".yahoo.com", ".narod.ru", ".nasa.gov", ".digital", ".free.fr", ".gouv.fr",
+  ".mit.edu", ".network", ".casino", ".com.ar", ".com.au", ".com.br", ".com.cn",
+  ".com.co", ".com.hk", ".com.mx", ".com.my", ".com.pl", ".com.tr", ".com.tw",
+  ".com.ua", ".com.vn", ".edu.au", ".edu.cn", ".edu.pl", ".edu.tr", ".edu.tw",
+  ".gob.mx", ".gov.au", ".gov.br", ".gov.cn", ".gov.in", ".gov.my", ".gov.pl",
+  ".gov.tr", ".gov.tw", ".gov.ua", ".gov.uk", ".gov.vn", ".net.au", ".nic.in",
+  ".online", ".org.au", ".org.br", ".org.il", ".org.tr", ".org.ua", ".org.uk",
+  ".social", ".ac.id", ".ac.il", ".ac.in", ".ac.jp", ".ac.kr", ".ac.th", ".ac.uk",
+  ".click", ".cloud", ".co.id", ".co.il", ".co.in", ".co.jp", ".co.kr", ".co.nz",
+  ".co.th", ".co.uk", ".co.za", ".gc.ca", ".go.id", ".go.jp", ".go.kr", ".go.th",
+  ".lg.jp", ".media", ".ne.jp", ".or.jp", ".or.kr", ".space", ".store", ".world",
+  ".blog", ".club", ".info", ".link", ".live", ".mobi", ".news", ".shop",
+  ".site", ".tech", ".work", ".app", ".biz", ".com", ".dev", ".edu", ".fun",
+  ".gov", ".int", ".mil", ".net", ".one", ".org", ".pro", ".top", ".vip",
+  ".xxx", ".xyz", ".ai", ".ar", ".at", ".au", ".be", ".bg", ".br", ".by",
+  ".ca", ".cc", ".ch", ".cl", ".cn", ".co", ".cz", ".de", ".dk", ".ee", ".es",
+  ".eu", ".fi", ".fm", ".fr", ".gg", ".gr", ".hk", ".hr", ".hu", ".id", ".ie",
+  ".il", ".in", ".io", ".ir", ".is", ".it", ".jp", ".kr", ".kz", ".lt", ".lv",
+  ".me", ".mx", ".my", ".nl", ".no", ".nz", ".pe", ".ph", ".pk", ".pl", ".pt",
+  ".ro", ".rs", ".ru", ".se", ".sg", ".sh", ".si", ".sk", ".th", ".to", ".tr",
+  ".tv", ".tw", ".ua", ".uk", ".us", ".vn", ".za"
 ]);

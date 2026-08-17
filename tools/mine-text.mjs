@@ -26,8 +26,7 @@ import { ROOT } from "./bundle.js";
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
 const at = args.indexOf("--tokens");
-const TOKEN_COUNT = at === -1 ? 128 : Number(args[at + 1]);
-const TOKEN_INDEX_BITS = Math.ceil(Math.log2(TOKEN_COUNT));
+const TOKEN_COUNT = at === -1 ? 256 : Number(args[at + 1]);
 
 const SAMPLE = 60000;
 const HOLDOUT = 20000;
@@ -37,9 +36,12 @@ const MIN_HOSTS = 25;
 /** Cap code length so the canonical decoder stays a small table. */
 const MAX_CODE_LEN = 15;
 
-/** Symbols: 0..255 bytes, then the three controls. */
-const SYM_TOKEN = 256, SYM_END = 257, SYM_ESC = 258;
-const SYMBOLS = 259;
+/**
+ * Symbols: 0..255 bytes, END, ESC, then ONE SYMBOL PER TOKEN — a frequent
+ * token earns a short code, a rare one pays its own way. No fixed index.
+ */
+const SYM_END = 256, SYM_ESC = 257, TOKEN_BASE = 258;
+const SYMBOLS = TOKEN_BASE + TOKEN_COUNT;
 
 const encoder = new TextEncoder();
 
@@ -126,18 +128,21 @@ function huffmanLengths(freq) {
 const litCost = (lengths, byte) =>
   lengths[byte] || lengths[SYM_ESC] + 8;
 
+/** A token's cost: its own code length, or a middling estimate pre-fit. */
+const tokCost = (lengths, index) => lengths[TOKEN_BASE + index] || 10;
+
 function bodyBits(lengths, tokens, body) {
-  const tokenCost = lengths[SYM_TOKEN] + TOKEN_INDEX_BITS;
   let bits = lengths[SYM_END];
   let i = 0;
   outer: while (i < body.length) {
-    for (const t of tokens) {
-      if (t.bytes.length <= body.length - i) {
+    for (let t = 0; t < tokens.length; t++) {
+      const token = tokens[t];
+      if (token.bytes.length <= body.length - i) {
         let ok = true;
-        for (let k = 0; k < t.bytes.length; k++) {
-          if (body[i + k] !== t.bytes[k]) { ok = false; break; }
+        for (let k = 0; k < token.bytes.length; k++) {
+          if (body[i + k] !== token.bytes[k]) { ok = false; break; }
         }
-        if (ok) { bits += tokenCost; i += t.bytes.length; continue outer; }
+        if (ok) { bits += tokCost(lengths, t); i += token.bytes.length; continue outer; }
       }
     }
     bits += litCost(lengths, body[i++]);
@@ -145,20 +150,21 @@ function bodyBits(lengths, tokens, body) {
   return bits;
 }
 
-/** Byte + control frequencies over the sample, with tokens applied. */
+/** Per-symbol frequencies over the sample, tokens counted individually. */
 function countFrequencies(lengths, tokens) {
   const freq = new Float64Array(SYMBOLS);
   for (const { bytes: body } of sample) {
     freq[SYM_END]++;
     let i = 0;
     outer: while (i < body.length) {
-      for (const t of tokens) {
-        if (t.bytes.length <= body.length - i) {
+      for (let t = 0; t < tokens.length; t++) {
+        const token = tokens[t];
+        if (token.bytes.length <= body.length - i) {
           let ok = true;
-          for (let k = 0; k < t.bytes.length; k++) {
-            if (body[i + k] !== t.bytes[k]) { ok = false; break; }
+          for (let k = 0; k < token.bytes.length; k++) {
+            if (body[i + k] !== token.bytes[k]) { ok = false; break; }
           }
-          if (ok) { freq[SYM_TOKEN]++; i += t.bytes.length; continue outer; }
+          if (ok) { freq[TOKEN_BASE + t]++; i += token.bytes.length; continue outer; }
         }
       }
       freq[body[i++]]++;
@@ -181,7 +187,9 @@ function mineTokens(lengths) {
   const decoder = new TextDecoder();
   const tokens = [];
   const chosen = new Set();
-  const tokenCost = (lengths[SYM_TOKEN] || 8) + TOKEN_INDEX_BITS;
+  // Candidates have no code yet; a middling estimate keeps selection sane
+  // and the alternation loop replaces it with the real fitted length.
+  const tokenCost = 10;
   const BATCH = 32;
 
   while (tokens.length < TOKEN_COUNT) {
@@ -255,7 +263,7 @@ function mineTokens(lengths) {
 // Iteration zero: flat 6-bit-ish costs to bootstrap.
 let lengths = new Uint8Array(SYMBOLS).fill(0);
 for (let b = 32; b < 127; b++) lengths[b] = 6;
-lengths[SYM_TOKEN] = 6; lengths[SYM_END] = 6; lengths[SYM_ESC] = 6;
+lengths[SYM_END] = 6; lengths[SYM_ESC] = 6;
 
 let tokens = [];
 for (let iteration = 0; iteration < 3; iteration++) {
@@ -283,32 +291,33 @@ const lengthsLiteral = `[..."${[...lengths].map((v) => v.toString(16)).join("")}
 const tokensLiteral = tokens.map((t) => JSON.stringify(t.text)).join(", ");
 
 const file = `/**
- * The text-mode code: canonical Huffman lengths over body bytes plus the
- * three control symbols, and the substring token dictionary, both mined from
- * the corpus by tools/mine-text.mjs.
+ * The text-mode code: canonical Huffman lengths over body bytes, the END
+ * and ESC controls, and ONE SYMBOL PER DICTIONARY TOKEN, all mined from the
+ * corpus by tools/mine-text.mjs.
  *
- * Symbols 0..255 are bytes; 256 = TOKEN (an index follows), 257 = END,
- * 258 = ESC (a raw 8-bit byte follows). A length of 0 means the byte has no
- * code and is written via ESC. Codes are canonical: assigned by ascending
- * length, ties by ascending symbol, so the lengths array IS the whole code.
+ * Tokens as first-class symbols is the load-bearing choice: a frequent run
+ * like "articles/" costs its measured frequency — a handful of bits — while
+ * a rare token pays for itself, and no fixed index tax sits on any of them.
  *
- * Table format for wire v1. APPEND-ONLY in spirit: any change to either
- * table changes what existing payloads decode to, so a change here is a wire
- * version bump, never a patch.
+ * Symbols 0..255 are bytes (length 0 = written via ESC); 256 = END,
+ * 257 = ESC (a raw 8-bit byte follows), 258+k = "append TOKENS[k]". Codes
+ * are canonical: assigned by ascending length, ties by ascending symbol, so
+ * the lengths array IS the whole code.
+ *
+ * Beta: re-mining replaces these tables and invalidates existing links.
+ * Once stability is declared, this file is frozen by test/compat.test.js
+ * and future formats ride the VERSION_ESCAPE envelope instead.
  *
  * @module textcode
  */
 
-/** Code length per symbol (one hex digit each); index 256 TOKEN, 257 END, 258 ESC. */
+/** Code length per symbol (one hex digit each); 256 END, 257 ESC, 258+k tokens. */
 export const CODE_LENGTHS = Object.freeze(${lengthsLiteral});
 
-export const SYM_TOKEN = 256, SYM_END = 257, SYM_ESC = 258;
-
-/** Width of a token index after the TOKEN symbol. */
-export const TOKEN_INDEX_BITS = ${TOKEN_INDEX_BITS};
+export const SYM_END = 256, SYM_ESC = 257, TOKEN_BASE = 258;
 
 /**
- * The substring dictionary, indexed as on the wire.
+ * The substring dictionary, indexed as on the wire (symbol TOKEN_BASE + k).
  * @type {readonly string[]}
  */
 export const TOKENS = Object.freeze([
