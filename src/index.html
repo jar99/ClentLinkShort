@@ -21,17 +21,27 @@
 <meta property="og:description" content="The destination is compressed into the link itself. No database, no accounts, no tracking — and the link never expires.">
 <meta property="og:url" content="{{siteUrl}}">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Clent">
+<meta property="og:locale" content="en_US">
 <meta name="twitter:card" content="summary">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, no logs.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do the links expire?","acceptedAnswer":{"@type":"Answer","text":"No. The destination is inside the link itself, so there is nothing stored that could be deleted. A link keeps working as long as any copy of this page exists."}},{"@type":"Question","name":"What does the site see when a link is opened?","acceptedAnswer":{"@type":"Answer","text":"Only that the page was requested. The destination rides in the URL fragment, which browsers never send to servers, so no server ever sees where a link points."}},{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Free, open source under the MIT licence, no account, no ads, no tracking."}},{"@type":"Question","name":"Does it work offline?","acceptedAnswer":{"@type":"Answer","text":"After the first visit, yes. The page keeps a copy of itself, and links decode in the browser without any network."}}]}</script>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon.svg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
 <script>
-  // Choose the view before first paint so the creator UI never flashes
-  // in front of someone who only clicked a link. "#s=…" is the one fragment
+  // Choose the view before first paint so the creator UI never flashes in
+  // front of someone who only clicked a link. "#s=…" is the one fragment
   // that is not a payload: the bookmarklet's "open the maker prefilled".
-  if (location.hash.length > 1 && !location.hash.startsWith("#s="))
+  // The hidden attribute moves with the choice so only one <main> is ever
+  // exposed to the accessibility tree, as the spec asks.
+  if (location.hash.length > 1 && !location.hash.startsWith("#s=")) {
     document.documentElement.dataset.mode = "redirect";
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("redirect").hidden = false;
+      document.getElementById("create").hidden = true;
+    });
+  }
 </script>
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
@@ -39,7 +49,7 @@
 <body>
 
 <!-- ─────────────────────────────  redirect view  ───────────────────────── -->
-<main id="redirect">
+<main id="redirect" aria-label="Opening a link" hidden>
   <div class="card center">
     <div class="spinner" id="r-spinner" aria-hidden="true"></div>
     <h1 id="r-title">Redirecting</h1>
@@ -69,7 +79,7 @@
 </main>
 
 <!-- ─────────────────────────────   create view   ───────────────────────── -->
-<main id="create">
+<main id="create" aria-label="Make a link">
 
   <header class="hero">
     <div class="wordmark">
@@ -80,12 +90,11 @@
       </svg>
       <span>Clent</span>
     </div>
-    <h1>Links that carry their own&nbsp;destination.</h1>
+    <h1>The link shortener that stores&nbsp;nothing.</h1>
     <p class="lede">
-      A private, open-source link shortener. The whole URL is compressed into
-      the link itself, so nothing is stored anywhere: no database, no accounts,
-      no tracking, no logs — and no link that stops working because a service
-      shut down.
+      Free and open source. The whole URL is compressed into the link itself —
+      no database, no accounts, no tracking, and no link that dies because a
+      service shut down.
     </p>
   </header>
 
@@ -164,30 +173,44 @@
     </p>
   </section>
 
-  <section class="card note-card">
-    <h2>Is it actually shorter?</h2>
+  <section class="card note-card" aria-labelledby="h-shorter">
+    <h2 id="h-shorter">Is it actually shorter?</h2>
     <p>
-      For the links people actually share, yes. The encoded destination is
-      {{medianPct}} of the URL it came from, and this site's address adds only
-      {{originLength}} characters in front — so anything longer than about
-      {{breakEven}} characters comes out ahead.
+      For most links people share, yes. The destination compresses to
+      {{medianPct}} of its size, and this address adds {{originLength}}
+      characters in front — so a URL past about {{breakEven}} characters comes
+      out shorter. Bare homepages are the exception: there's nothing in them
+      to compress.
     </p>
-    <p>
-      Of the {{checked}} real URLs tested, {{linkShorter}} produce a shorter link
-      here, including {{deepShorter}} of deep links — article pages, products,
-      shares, anything past a bare homepage. Bare homepages are the one shape
-      that rarely wins: there is nothing in them to compress away. The counter
-      above tells you which kind you pasted.
-    </p>
+    <div class="stats">
+      <div class="stat">
+        <b>{{checked}}</b>
+        <span>real URLs tested</span>
+      </div>
+      <div class="stat">
+        <b>{{roundTrip}}</b>
+        <span>decoded back exactly</span>
+      </div>
+      <div class="stat">
+        <b>{{deepShorter}}</b>
+        <span>of deep links come out shorter</span>
+      </div>
+      <div class="stat">
+        <b>~{{breakEven}}</b>
+        <span>characters is the break-even point</span>
+      </div>
+    </div>
     <p class="muted small">
-      What you get regardless of length is a link that nothing is storing and
-      that will still work when this page is gone.
+      The corpus is Wikipedia citations in 30 languages, Hacker News
+      submissions and the Tranco ranking — messy, real links. Measured
+      {{generated}} by <code>npm run validate</code>; one mismatch fails the
+      build.
     </p>
   </section>
 
   <!-- ────────────────────  what the encoder decided  ──────────────────── -->
-  <section id="breakdown" hidden>
-    <h2>What's in the link</h2>
+  <section id="breakdown" aria-labelledby="h-breakdown" hidden>
+    <h2 id="h-breakdown">What's in the link</h2>
 
     <div class="card">
       <div class="bits" id="bits"></div>
@@ -201,50 +224,14 @@
     </div>
   </section>
 
-  <!-- ──────────────────────────  validation  ──────────────────────────── -->
-  <section>
-    <h2>Tested on real URLs</h2>
+  <section aria-labelledby="h-known">
+    <h2 id="h-known">Known links get much shorter</h2>
     <p>
-      The test corpus is {{checked}} URLs taken from Wikipedia citations across 30
-      language editions, Hacker News submissions, and the Tranco domain ranking.
-      Real URLs are messier than invented ones: doubled slashes, unencoded spaces,
-      mojibake, kilobyte query strings, session tokens, punycode.
-    </p>
-
-    <div class="stats">
-      <div class="stat">
-        <b>{{checked}}</b>
-        <span>URLs tested</span>
-      </div>
-      <div class="stat">
-        <b>{{roundTrip}}</b>
-        <span>decoded back to the exact original</span>
-      </div>
-      <div class="stat">
-        <b>{{medianPct}}</b>
-        <span>median payload size, against the URL it encodes</span>
-      </div>
-      <div class="stat">
-        <b>{{breakEven}}</b>
-        <span>characters a URL needs before this link is shorter</span>
-      </div>
-    </div>
-    <p class="muted small">
-      Measured {{generated}} by <code>npm run validate</code>. One mismatch fails the
-      build. The run also checks that no link could have been encoded smaller by any
-      other setting the encoder had available.
-    </p>
-  </section>
-
-  <section>
-    <h2>Known links get much shorter</h2>
-    <p>
-      A lot of shared links are one site's URL scheme with an ID dropped into it.
-      <code>youtube.com/watch?v=dQw4w9WgXcQ</code> is 43 characters, of which 11
-      carry any information. {{templates}} shapes are recognised — YouTube, Amazon,
-      imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify and more —
-      and for those only the ID is stored, at the exact width its own alphabet
-      needs.
+      Most shared links are one site's pattern with an ID in it.
+      <code>youtube.com/watch?v=dQw4w9WgXcQ</code> is 43 characters carrying
+      11 of information. {{templates}} such shapes are recognised, and for
+      those only the ID is stored — but only when putting it back reproduces
+      the URL exactly. A near miss falls back rather than guessing.
     </p>
     <div class="stats">
       <div class="stat"><b>43 → 15</b><span>youtube.com/watch?v=…</span></div>
@@ -252,146 +239,99 @@
       <div class="stat"><b>31 → 11</b><span>i.imgur.com/….jpg</span></div>
       <div class="stat"><b>40 → 15</b><span>instagram.com/p/…</span></div>
     </div>
-    <p class="muted small">
-      A shape is only used when substituting the captured ID back in reproduces
-      the original URL character for character. A near miss falls back to the
-      general encoder rather than guessing.
-    </p>
-  </section>
-
-  <section>
-    <h2>Tamper checks</h2>
-    <p>
-      Every link gets a four-character check by default. If a link is clipped by a
-      chat app or edited in transit, opening it says so instead of taking you
-      somewhere you weren't sent.
-    </p>
-    <p>
-      That check has no key, so anyone can recompute it — it catches accidents,
-      not attackers, and it isn't described as anything more. For more than that,
-      sign a link with a passphrase: 18 extra characters, and whoever opens it can
-      confirm it was made by someone who knows the same passphrase. That proves
-      membership of whoever shares that passphrase, not a particular person, and
-      says nothing about whether the destination is safe.
-    </p>
   </section>
 
   <!-- ──────────────────────────  how it works  ────────────────────────── -->
-  <section>
-    <h2>How it works</h2>
-    <ol class="steps">
-      <li>
-        <b>Tracking parameters are removed.</b> On a link that has them, this is
-        worth about a third of the payload. It's the one step that changes where the
-        link goes, so it's a switch rather than a default.
-      </li>
-      <li>
-        <b>The predictable parts become bits.</b> The scheme, a <code>www.</code>
-        prefix and a trailing slash cost twelve characters in a normal URL. Here
-        they're three bits in a 6-bit header.
-      </li>
-      <li>
-        <b>{{hostCount}} common hosts collapse to one byte.</b> <code>en.wikipedia.org</code>
-        becomes 8 bits.
-      </li>
-      <li>
-        <b>Every other domain is cheap without a dictionary entry.</b> The
-        hostname gets its own code whose ending symbols are real suffixes —
-        <code>.com</code>, <code>.co.uk</code>, <code>.github.io</code> — so
-        the part every domain shares costs a few bits, not four characters.
-        No table grows when someone shortens a domain nobody has seen.
-      </li>
-      <li>
-        <b>The rest is priced every legal way, and the shortest is kept.</b>
-        Text is Huffman-coded: each character costs what its real frequency in
-        URLs earns it — <code>/</code> and <code>e</code> under 5 bits, rare
-        ones more — with a 128-entry table of whole runs like
-        <code>articles/</code> and <code>index.php</code> coded as single
-        symbols. The code was measured from the test corpus, not guessed.
-      </li>
-      <li>
-        <b>The payload goes after the <code>#</code>.</b> Browsers don't send that
-        part to servers, so no server sees the destination.
-      </li>
-    </ol>
-
-    <pre class="wire"><code>6 bits  header   scheme · www · dictionary · body mode
-8 bits  host     dictionary index, when the host is known
-  body  text     Huffman symbols: literals, tokens, escapes, END
-        raw      UTF-8 bytes, 8 bits each
-        deflate  DEFLATE-raw bytes, 8 bits each
-        host     the hostname in its own code, suffix as one
-                 symbol, then the tail as text
-scheme "other"   a 4-bit scheme index: mailto:, tel:, ftp:…
-scheme template  8 bits of pattern index, then just the IDs</code></pre>
+  <section aria-labelledby="h-how">
+    <h2 id="h-how">How it works</h2>
+    <p>
+      The URL is compressed with codes measured from real links — common
+      characters cost a few bits, {{hostCount}} well-known hosts cost one
+      byte, and any other domain's suffix (<code>.com</code>,
+      <code>.co.uk</code>…) is a single symbol. Every legal encoding is
+      priced and the shortest wins. The result goes after the
+      <code>#</code> in the link, which browsers never send to servers —
+      that one fact is the whole privacy model.
+    </p>
+    <p class="muted small">
+      Tracking parameters (<code>utm_*</code> and friends) are stripped
+      first, unless you switch that off. The full wire format is documented
+      in the <a href="https://github.com/jar99/ClentLinkShort#readme">README</a>.
+    </p>
   </section>
 
-  <section>
-    <h2>Safety</h2>
+  <section aria-labelledby="h-safety">
+    <h2 id="h-safety">Safety</h2>
     <p>
-      A redirector is useful to a phisher: the link wears this domain, and you can't
-      see where it goes until you're already there. Two things are done about that.
+      A redirector is useful to a phisher, so this one is careful:
     </p>
     <ul class="limits">
       <li>
-        <b>Only <code>http</code> and <code>https</code> are followed automatically.</b>
-        <code>javascript:</code> and <code>data:</code> links are refused outright, both
-        when making a link and when opening one.
+        <b>Only <code>http</code> and <code>https</code> open automatically.</b>
+        <code>javascript:</code> and <code>data:</code> links are refused
+        outright.
       </li>
       <li>
-        <b>Links with a phishing shape stop and show you the destination first.</b>
-        An address like <code>paypal.com@evil.example</code> goes to
-        <code>evil.example</code>, not PayPal. So do names spelled with lookalike
-        characters, and links pointing at a bare IP address.
+        <b>Phishing-shaped links stop and show the destination first</b> —
+        <code>paypal.com@evil.example</code>, lookalike characters, bare IP
+        addresses.
+      </li>
+      <li>
+        <b>Every link carries a tamper check.</b> A link that got clipped or
+        edited says so instead of opening the wrong place. For proof of who
+        made a link, sign it with a shared passphrase under advanced options.
       </li>
     </ul>
-    <p class="muted small">
-      That isn't a judgement about whether a site is dangerous, which can't be known
-      from a URL. It's that ordinary links almost never look like that.
-    </p>
   </section>
 
   <!-- ───────────────────────────   limits   ──────────────────────────── -->
-  <section>
-    <h2>Limits</h2>
-    <p>
-      The page works offline after the first visit — a service worker keeps a
-      copy, and links decode without any network. The first visit, though,
-      needs a connection like any other page.
-    </p>
+  <section aria-labelledby="h-limits">
+    <h2 id="h-limits">Limits</h2>
     <ul class="limits">
-      <li>
-        <b>It isn't a shortener for most URLs.</b> See above: below about
-        {{breakEven}} characters the link comes out longer than what you pasted.
-      </li>
-      <li>
-        <b>Links can't be edited or revoked</b> after you share them.
-      </li>
-      <li>
-        <b>Every link includes this site's domain.</b> That's fixed overhead, and a
-        shorter domain would save more than any further work on the encoding.
-      </li>
-      <li>
-        <b>No click counts and no expiry.</b> Both need a server that remembers.
-      </li>
+      <li><b>Short URLs stay shorter than any link to here.</b> Below about
+        {{breakEven}} characters, compressing doesn't pay for the domain.</li>
+      <li><b>Links can't be edited or revoked</b> once shared — there's no
+        server to tell.</li>
+      <li><b>No click counts and no expiry.</b> Both need a server that
+        remembers.</li>
     </ul>
     <p class="muted small">
-      Add <code>~</code> to the end of any Clent link to see where it goes without
-      going there.
+      Add <code>~</code> to the end of any Clent link to see where it goes
+      without going there.
     </p>
   </section>
 
-  <footer>
-    <p>
-      No cookies, no localStorage, no analytics. The page makes one request, for
-      itself, and everything above runs in your browser.
-    </p>
-    <p>
-      <a href="https://github.com/jar99/ClentLinkShort">Source on GitHub</a>
-    </p>
-  </footer>
+  <section aria-labelledby="h-faq">
+    <h2 id="h-faq">Questions</h2>
+    <dl class="faq">
+      <dt>Do the links expire?</dt>
+      <dd>No. The destination is inside the link itself, so there is nothing
+        stored that could be deleted. A link keeps working as long as any
+        copy of this page exists.</dd>
+      <dt>What does the site see when a link is opened?</dt>
+      <dd>Only that the page was requested. The destination rides in the URL
+        fragment, which browsers never send to servers, so no server ever
+        sees where a link points.</dd>
+      <dt>Is it free?</dt>
+      <dd>Yes. Free, open source under the MIT licence, no account, no ads,
+        no tracking.</dd>
+      <dt>Does it work offline?</dt>
+      <dd>After the first visit, yes. The page keeps a copy of itself, and
+        links decode in the browser without any network.</dd>
+    </dl>
+  </section>
 
 </main>
+
+<footer>
+  <p>
+    No cookies, no localStorage, no analytics. The page makes one request,
+    for itself, and everything above runs in your browser.
+  </p>
+  <p>
+    <a href="https://github.com/jar99/ClentLinkShort">Source on GitHub</a>
+  </p>
+</footer>
 
 </body>
 </html>
