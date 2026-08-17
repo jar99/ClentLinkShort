@@ -25,22 +25,22 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **50% of the URL it came from** (median). Every link also
+The encoded destination is **51% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
 longer than about **20 characters** before the whole link comes out shorter. That is
 most links people actually share: **84% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
-Measured over 4,060,893 real URLs:
+Measured over 4,325,469 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~20 | 62.1% |
-| a github.io project page (40c) | ~105 | 4.1% |
+| `nul.im/#` (16c) | ~20 | 63.4% |
+| a github.io project page (40c) | ~105 | 5.7% |
 | payload alone, no prefix | ~10 | 99.7% |
 
-Bare homepages (28% of the corpus) are the one shape that rarely wins — there is
+Bare homepages (26% of the corpus) are the one shape that rarely wins — there is
 nothing to compress away. What you get regardless of length is a link nothing is
 storing, that can't be revoked or logged, and that still resolves when whoever made
 it has forgotten about it.
@@ -66,14 +66,14 @@ which is why Clent's default refuses them. (The opt-in dense style plays the sam
 alphabet game, base 87, while keeping the safe Base64url form the default and the
 canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
 slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
-page. Clent holds byte-exactness at 100% across the full 4,060,893 and fails loudly
+page. Clent holds byte-exactness at 100% across the full 4,325,469 and fails loudly
 otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and
 decode, phishing-shape interception, hash-pinned CSP, integrity tags and signing, and
 bounded decompression are all Clent-only.
 
 ## Validation
 
-`corpus/` holds 4,060,893 real URLs from seventeen sources, weighted towards the
+`corpus/` holds 4,325,469 real URLs from seventeen sources, weighted towards the
 kinds of link people actually share — collected by `npm run corpus:update`, which
 merges, checkpoints every two minutes, and can be re-run any time to grow the set
 without ever invalidating a link:
@@ -97,14 +97,14 @@ without ever invalidating a link:
 
 | | |
 | --- | --- |
-| URLs round-tripped | **4,060,893** |
+| URLs round-tripped | **4,325,469** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **56.4%** overall, median **50.0%** |
+| Payload vs input URL | **57.6%** overall, median **50.9%** |
 | Payload shorter than input | **99.7%** |
-| Host dictionary hit rate | **21.9%** |
-| Carried tracking parameters | **1.2%**, worth 30% of the payload on those |
-| Winning body mode | host 62.0%, text 23.1%, template 14.5%, deflate 0.4%, raw 0.0% |
+| Host dictionary hit rate | **22.9%** |
+| Carried tracking parameters | **2.2%**, worth 26% of the payload on those |
+| Winning body mode | host 59.7%, text 24.0%, template 15.8%, deflate 0.4%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -314,7 +314,7 @@ spelling.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: host wins 78.0%, text 15.6%, templates 6.0%, deflate 0.3%, raw 0.0%.
+On the corpus: host wins 59.7%, text 24.0%, templates 15.8%, deflate 0.4%, raw 0.0%.
 
 ## Tamper resistance
 

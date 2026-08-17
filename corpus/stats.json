@@ -1,57 +1,57 @@
 {
   "generated": "2026-08-17",
-  "corpusTotal": 4060893,
-  "checked": 4060893,
+  "corpusTotal": 4325469,
+  "checked": 4325469,
   "skipped": 0,
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.5642943903,
-  "payloadShorterPct": 99.7108764,
-  "medianRatio": 0.5,
-  "p90Ratio": 0.6774193548,
-  "linkSavingsMean": 0.0593501429,
-  "linkSavingsMedian": 0.1111111111,
-  "linkShorterPct": 62.09085046,
-  "bareShorterPct": 3.802350821,
-  "deepShorterPct": 84.5026298,
-  "bareCount": 1127776,
-  "deepCount": 2933117,
-  "deepSavingsMedian": 0.1836734694,
-  "deepSavingsMean": 0.1521113949,
+  "payloadRatio": 0.57607383,
+  "payloadShorterPct": 99.67487919,
+  "medianRatio": 0.5087719298,
+  "p90Ratio": 0.6833333333,
+  "linkSavingsMean": 0.06568953885,
+  "linkSavingsMedian": 0.1224489796,
+  "linkShorterPct": 63.42338831,
+  "bareShorterPct": 3.825164649,
+  "deepShorterPct": 84.5098362,
+  "bareCount": 1130435,
+  "deepCount": 3195034,
+  "deepSavingsMedian": 0.1860465116,
+  "deepSavingsMean": 0.1532158555,
   "breakEvenLength": 20,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
       "breakEven": 20,
-      "shorterPct": 62.09085046,
-      "medianSaving": 0.1111111111
+      "shorterPct": 63.42338831,
+      "medianSaving": 0.1224489796
     },
     {
       "label": "a github.io project page",
       "length": 40,
       "breakEven": 105,
-      "shorterPct": 4.07055788,
-      "medianSaving": -0.3928571429
+      "shorterPct": 5.675546397,
+      "medianSaving": -0.3777777778
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.7108764,
-      "medianSaving": 0.5
+      "shorterPct": 99.67487919,
+      "medianSaving": 0.4912280702
     }
   ],
   "modes": {
-    "text": 939381,
+    "text": 1038734,
     "raw": 30,
-    "deflate": 14566,
-    "host": 2516590,
-    "template": 590326
+    "deflate": 16856,
+    "host": 2584452,
+    "template": 685397
   },
-  "templatePct": 14.53685187,
-  "dictHitPct": 21.93027494,
-  "trackingPct": 1.212122555,
-  "trackingSavingPct": 29.94759161
+  "templatePct": 15.84561119,
+  "dictHitPct": 22.90031439,
+  "trackingPct": 2.167279433,
+  "trackingSavingPct": 26.42485821
 }

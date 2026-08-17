@@ -1,20 +1,110 @@
 {
   "generated": "2026-08-17",
-  "total": 4060893,
+  "total": 4325469,
   "counts": {
     "existing": 4060893,
-    "fandom": 0
+    "wikipedia": 11875,
+    "targeted": 24,
+    "hackernews": 223,
+    "mastodon": 32558,
+    "hncomments": 10,
+    "tranco": 401,
+    "commons": 85011,
+    "reddit": 239,
+    "fandom": 44403,
+    "googlenews": 2347,
+    "feeds": 181,
+    "lemmy": 617,
+    "archiveitems": 30015,
+    "crossref": 23283,
+    "npmjs": 13401,
+    "pypi": 19988
   },
   "quality": {
+    "wikipedia": {
+      "kept": 11875,
+      "duplicates": 141039,
+      "rejected": 1086
+    },
+    "targeted": {
+      "kept": 24,
+      "duplicates": 254209,
+      "rejected": 2
+    },
+    "hackernews": {
+      "kept": 223,
+      "duplicates": 311681,
+      "rejected": 96
+    },
+    "mastodon": {
+      "kept": 32558,
+      "duplicates": 163590,
+      "rejected": 11
+    },
+    "hncomments": {
+      "kept": 10,
+      "duplicates": 51934,
+      "rejected": 97
+    },
+    "tranco": {
+      "kept": 401,
+      "duplicates": 207679,
+      "rejected": 0
+    },
+    "commons": {
+      "kept": 85011,
+      "duplicates": 44989,
+      "rejected": 0
+    },
+    "reddit": {
+      "kept": 239,
+      "duplicates": 1555,
+      "rejected": 0
+    },
     "fandom": {
-      "kept": 0,
-      "duplicates": 0,
+      "kept": 44403,
+      "duplicates": 59597,
+      "rejected": 0
+    },
+    "googlenews": {
+      "kept": 2347,
+      "duplicates": 11452,
+      "rejected": 3025
+    },
+    "feeds": {
+      "kept": 181,
+      "duplicates": 1352,
+      "rejected": 100
+    },
+    "lemmy": {
+      "kept": 617,
+      "duplicates": 45540,
+      "rejected": 8
+    },
+    "archiveitems": {
+      "kept": 30015,
+      "duplicates": 19985,
+      "rejected": 0
+    },
+    "crossref": {
+      "kept": 23283,
+      "duplicates": 28617,
+      "rejected": 100
+    },
+    "npmjs": {
+      "kept": 13401,
+      "duplicates": 16594,
+      "rejected": 0
+    },
+    "pypi": {
+      "kept": 19988,
+      "duplicates": 6012,
       "rejected": 0
     }
   },
   "rankedDomains": 1000000,
-  "sha256": "56017e03cb6a01a03d98fec7c5baff2a88b80041187d26ee2e8db6c0b86efbaf",
-  "bytes": 209854858,
+  "sha256": "51a37e90bb81d436bc18c78a9c357a750668753f06f950d1b51b5c6116046882",
+  "bytes": 237928457,
   "sources": {
     "wikipedia": "{lang}.wikipedia.org exturlusage, 40 editions — cited links",
     "hackernews": "hn.algolia.com search_by_date, stories — submitted links",
