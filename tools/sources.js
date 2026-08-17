@@ -180,19 +180,23 @@ export async function* hackernews(target, { get, progress }) {
  * rebuttals. Shared-in-conversation links, a different population from
  * submitted stories, from the same generous API.
  */
-export async function* hncomments(target, { get, progress }) {
+export async function* hncomments(target, { get, progress, deadline = 600000 }) {
   const WALKERS = 4;
   const now = Math.floor(Date.now() / 1000);
   const epoch = 1160000000;
   const slice = Math.ceil((now - epoch) / WALKERS);
   const perWalker = Math.ceil(target / WALKERS);
+  // Link density in comments is low — a walker chasing a big quota would
+  // page for hours. The source is deadline-budgeted: it contributes what
+  // ten minutes of polite paging finds, which is plenty of shapes.
+  const until = Date.now() + deadline;
 
   yield* channel(target, "hn-comments", progress,
     Array.from({ length: WALKERS }, (_, k) => async (push, stopped) => {
       const floor = now - (k + 1) * slice;
       let before = now - k * slice;
       let seen = 0;
-      while (seen < perWalker && !stopped()) {
+      while (seen < perWalker && !stopped() && Date.now() < until) {
         let body;
         try {
           body = await get("https://hn.algolia.com/api/v1/search_by_date?tags=comment" +
@@ -826,13 +830,16 @@ export async function* npmjs(target, { get, progress }) {
   while (seen < target) {
     let body;
     try {
+      // No skip parameter — the replicate endpoint rejects it. The repeated
+      // boundary row is dropped here instead.
       body = await get("https://replicate.npmjs.com/_all_docs?limit=5000" +
-        (startkey ? `&startkey=${encodeURIComponent(JSON.stringify(startkey))}&skip=1` : ""),
+        (startkey ? `&startkey=${encodeURIComponent(JSON.stringify(startkey))}` : ""),
       { retries: 1 });
     } catch {
       return;
     }
-    const rows = body?.rows ?? [];
+    let rows = body?.rows ?? [];
+    if (startkey && rows.length && rows[0]?.id === startkey) rows = rows.slice(1);
     if (!rows.length) return;
     for (const row of rows) {
       if (row.id && !row.id.startsWith("_")) {
