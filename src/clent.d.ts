@@ -10,36 +10,36 @@
 
 export { B64, BitWriter, BitReader, ClentError } from "./bits.js";
 export { canCompress, deflate, inflate, MAX_INFLATED } from "./deflate.js";
-export { emitText, decodeText, textBits } from "./text.js";
+export { planText, emitText, decodeText, textBits } from "./text.js";
+export { hostBits, emitHost, decodeHost } from "./host.js";
 export { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
 export { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
 export { HOSTS } from "./hosts.js";
 export { TOKENS } from "./textcode.js";
+export { SUFFIXES } from "./hostcode.js";
 export { TEMPLATES } from "./templates.js";
 export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
 
 /** Wire format version this build reads and writes. */
-export declare const VERSION: 7;
+export declare const VERSION: 1;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;
 export declare const SCHEME_OTHER: 2;
 export declare const SCHEME_TEMPLATE: 3;
-/** @deprecated v5 name for SCHEME_OTHER. */
-export declare const SCHEME_VERBATIM: 2;
 
 export declare const MODE_TEXT: 0;
-/** @deprecated v6 name for MODE_TEXT. */
-export declare const MODE_TEXT6: 0;
 export declare const MODE_RAW: 1;
 export declare const MODE_DEFLATE: 2;
+/** The host-field body mode: hostname in its own code, tail as text. */
+export declare const MODE_HOST: 3;
 /** Analysis-level marker for a template win; never a wire value. */
-export declare const MODE_TEMPLATE: 3;
+export declare const MODE_TEMPLATE: 4;
 
-export type Mode = 0 | 1 | 2 | 3;
-export type ModeName = "text" | "raw" | "deflate" | "template";
+export type Mode = 0 | 1 | 2 | 3 | 4;
+export type ModeName = "text" | "raw" | "deflate" | "host" | "template";
 
 /** Human-readable mode names, indexed by mode. */
 export declare const MODE_NAMES: readonly ModeName[];
@@ -53,6 +53,8 @@ export declare const F_HOST: 8;
 export declare const MAX_URL: 8192;
 /** Longest payload expand() will read. */
 export declare const MAX_PAYLOAD: 16384;
+/** Deflate is skipped when the best other candidate is under this length. */
+export declare const DEFLATE_FLOOR: 18;
 
 export interface ShortenOptions {
   /** Remove utm_*, fbclid, gclid and friends. Defaults to true. */
@@ -88,6 +90,7 @@ export interface Analysis {
     text: number | null;
     raw: number | null;
     deflate: number | null;
+    host: number | null;
     template: number | null;
   };
 }
@@ -126,7 +129,7 @@ export declare function parse(input: string): URL;
 /**
  * Assemble one complete candidate payload. Exposed for tests and the
  * optimality oracle. schemeIndex is required exactly when flags carry
- * SCHEME_OTHER.
+ * SCHEME_OTHER; host is required exactly when mode is MODE_HOST.
  */
 export declare function build(
   flags: number,
@@ -134,4 +137,5 @@ export declare function build(
   hostByte: number | null,
   bytes: Uint8Array,
   schemeIndex?: number | null,
+  host?: string | null,
 ): string;

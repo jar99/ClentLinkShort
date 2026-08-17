@@ -23,7 +23,7 @@
 import {
   build, shorten, parse, stripTracking, BitWriter,
   SCHEME_HTTPS, SCHEME_HTTP, SCHEME_OTHER, SCHEME_TEMPLATE, SCHEME_IN_BODY,
-  F_WWW, F_HOST, MODE_TEXT6, MODE_RAW, MODE_DEFLATE, MODE_NAMES,
+  F_WWW, F_HOST, MODE_TEXT, MODE_RAW, MODE_DEFLATE, MODE_HOST, MODE_NAMES,
 } from "../src/clent.js";
 import { deflate } from "../src/deflate.js";
 import { HOST_INDEX } from "../src/hosts.js";
@@ -31,7 +31,7 @@ import { SCHEME_INDEX } from "../src/schemes.js";
 import { asTemplate, writeTemplate } from "../src/templates.js";
 
 const encoder = new TextEncoder();
-const MODES = [MODE_TEXT6, MODE_RAW, MODE_DEFLATE];
+const MODES = [MODE_TEXT, MODE_RAW, MODE_DEFLATE];
 
 /**
  * @typedef {object} Candidate
@@ -75,10 +75,23 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
     (url.protocol === "http:" || url.protocol === "https:") &&
     !url.username && !url.password;
 
+  /** @type {Array<{flags: number, host: string, body: string, how: string}>} */
+  const hostShapes = [];
+
   if (compactable) {
     const scheme = url.protocol === "http:" ? SCHEME_HTTP : SCHEME_HTTPS;
     let tail = url.href.slice(url.origin.length);
     if (tail === "/") tail = "";
+
+    // The scheme-index form again, with the lone "/" dropped the way the
+    // compact forms drop it — URL normalisation restores it on decode, and
+    // the encoder prices exactly this variant.
+    if (schemeIndex !== undefined) {
+      shapes.push({
+        flags: SCHEME_OTHER, hostByte: null, schemeIndex,
+        body: "//" + url.host + tail, how: `scheme index ${schemeIndex}, bare slash dropped`,
+      });
+    }
 
     // Both spellings of the host, where "www." is present.
     const spellings = [{ host: url.host, wwwFlag: 0, how: "keep www" }];
@@ -98,10 +111,23 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
           body: tail, how: `${how}, dictionary #${index}`,
         });
       }
+      hostShapes.push({
+        flags: scheme | wwwFlag, host, body: tail, how: `${how}, host field`,
+      });
     }
   }
 
   const candidates = [];
+
+  // The host-field mode: hostname in its own suffix-terminal code, tail as
+  // text. The encoder prices this arithmetically; the oracle builds it.
+  for (const shape of hostShapes) {
+    candidates.push({
+      payload: build(shape.flags, MODE_HOST, null, encoder.encode(shape.body),
+        null, shape.host),
+      how: `${shape.how} + ${MODE_NAMES[MODE_HOST]}`,
+    });
+  }
   for (const shape of shapes) {
     const bytes = encoder.encode(shape.body);
     // Unlike the encoder, deflate every shape: this is the loop that polices

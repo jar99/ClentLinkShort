@@ -16,8 +16,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const MODULES = [
-  "clent", "bits", "deflate", "text", "textcode", "tracking", "risk",
-  "hosts", "schemes", "templates", "sign",
+  "clent", "bits", "huffman", "deflate", "text", "textcode", "host",
+  "hostcode", "tracking", "risk", "hosts", "schemes", "templates", "sign",
 ];
 
 /**

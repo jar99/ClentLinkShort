@@ -8,7 +8,7 @@
  * code and is written via ESC. Codes are canonical: assigned by ascending
  * length, ties by ascending symbol, so the lengths array IS the whole code.
  *
- * Table format for wire v7. APPEND-ONLY in spirit: any change to either
+ * Table format for wire v1. APPEND-ONLY in spirit: any change to either
  * table changes what existing payloads decode to, so a change here is a wire
  * version bump, never a patch.
  *
@@ -16,7 +16,7 @@
  */
 
 /** Code length per symbol; index 256 TOKEN, 257 END, 258 ESC. */
-export const CODE_LENGTHS = Object.freeze([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14,0,12,15,7,8,15,10,11,15,10,10,5,5,5,6,6,6,7,7,7,7,7,7,7,11,15,0,8,0,9,13,8,9,9,9,9,9,9,10,9,11,11,9,9,10,10,9,12,10,9,10,11,10,11,12,12,12,0,0,0,0,5,0,4,6,5,6,4,6,6,6,4,8,7,5,6,5,4,6,9,5,5,5,5,7,7,8,7,8,0,0,0,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,15]);
+export const CODE_LENGTHS = Object.freeze([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,0,12,15,6,7,15,9,9,15,10,10,5,6,5,6,6,5,6,7,7,7,7,6,7,9,14,0,7,0,8,13,7,8,7,8,9,8,9,10,9,11,11,9,9,9,9,9,12,9,8,9,11,10,10,12,11,12,0,0,0,0,4,0,5,6,6,6,4,7,6,6,5,9,7,5,6,5,5,6,10,5,5,5,5,7,7,8,7,9,0,0,0,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,5,15]);
 
 export const SYM_TOKEN = 256, SYM_END = 257, SYM_ESC = 258;
 
@@ -28,27 +28,18 @@ export const TOKEN_INDEX_BITS = 7;
  * @type {readonly string[]}
  */
 export const TOKENS = Object.freeze([
-  "?utm_source=", ".jpg?utm_sou", "jpg?utm_sour", "wiki/File:%2", "s.wikimedia.",
-  "=commons.wik", "org&utm_camp", "rg&utm_campa", "=imageinfo&u", "/wiki/File:%",
-  "iki/File:%22", "&utm_campaig", "utm_source=c", "dia.org&utm_", ".org&utm_cam",
-  "g&utm_campai", "n=imageinfo&", "geinfo&utm_c", "nfo&utm_cont", "&utm_content",
-  "utm_content=", "tm_campaign=", "ce=commons.w", "kimedia.org&", "media.org&ut",
-  "edia.org&utm", "ia.org&utm_c", "a.org&utm_ca", "mageinfo&utm", "ageinfo&utm_",
-  "info&utm_con", "/wikipedia/c", "wikipedia/co", "kipedia/comm", "ikipedia/com",
-  "pedia/common", "dia/commons/", "ipedia/commo", "edia/commons", "content=orig",
-  "ntent=origin", "_content=ori", "ontent=origi", "tent=origina", "ent=original",
-  "uscrit_autog", "it_autograph", "t_autographe", "manuscrit_au", "anuscrit_aut",
-  "nuscrit_auto", "scrit_autogr", "rit_autograp", "crit_autogra", "cklist/2011/",
-  "klist/2011/s", "hecklist/201", "ecklist/2011", "checklist/20", "rch/all/key/",
-  "nnual-checkl", "-checklist/2", "list/2011/se", "st/2011/sear", "t/2011/searc",
-  "arch/all/key", "annual-check", "nual-checkli", "ual-checklis", "talogueoflif",
-  "catalogueofl", "alogueoflife", "atalogueofli", "ccompagnemen", "d%27orchestr",
-  "/wiki/File:!", "vec_accompag", "ec_accompagn", "c_accompagne", "tographe%29",
-  "_-_btv1b10", "-_btv1b108", "-_btv1b100", "-_btv1b525", "_btv1b1007", ".wikipedia",
-  "/watch?v=", "tographe)", "orchestre", ".substack", "_-_btv1b5", "_orchestr",
-  "/2026/0", "article", "/articl", "search", "/index", "/blog/", ".co.uk",
-  "google", "_pour_", "2026-0", "%C3%A", ".html", "C3%A9", "%D0%B", ".org/",
-  ").jpg", ".php?", "%D1%8", "-the-", "world", "%C3%B", ".com", "_%28", "%22_",
-  "_of_", "%2C_", "news", "/%22", "tion", "ing-", ".net", ".gov", "_de_",
-  "ment", "id=", "200"
+  "articles/", "index.php", "/cgi-bin/", "anthropic", "/article", "index.ht",
+  "content", "/2026/0", "/index.", "source", "search", "/blog/", "/news/",
+  "/searc", "2026-0", "archiv", "detail", "-with-", "rchive", "claude", "image",
+  ".php?", "story", "/post", "world", "roduc", "agent", "publi", "type=",
+  "wiki", ".htm", ".jpg", "/wik", "html", "comm", "edia", "iki/", "/com",
+  "info", "pedi", "tion", "medi", "ing-", "_con", "inal", "the-", ".asp",
+  "ment", "ogra", ".pdf", "atch", "-the", "auto", "/201", "-to-", "comp",
+  "page", "-of-", "view", "-ai-", "port", "play", "ture", "data", "book",
+  "ject", "tech", "work", "-is-", "mon", "ons", "mpa", "org", "cam", "amp",
+  "id=", "rig", "ign", "ori", "200", "and", "man", "que", "che", "000", "ile",
+  "for", "_de", "pro", "str", "ist", "rap", "ter", "ver", "ID=", "par", "cri",
+  "sta", "rit", "how", "scr", "ica", "100", "-co", "ang", "all", "-in", "nce",
+  "%20", "al-", "ine", "act", "cha", "per", "ack", "lin", "ide", "tes", "es-",
+  "ass", "olo", "mar", "pri", "ate", "lan", "res", "/ma", "on-"
 ]);

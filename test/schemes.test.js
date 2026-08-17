@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 import {
   shorten, expand, analyze, parse, build, BitWriter, ClentError,
-  SCHEME_OTHER, SCHEME_IN_BODY, MODE_TEXT6, MODE_RAW,
+  SCHEME_OTHER, SCHEME_IN_BODY, MODE_TEXT, MODE_RAW,
   ENCODABLE_ORDER, SCHEME_BITS, F_WWW, F_HOST,
 } from "../src/clent.js";
 
@@ -37,7 +37,7 @@ test("the scheme index beats spelling the scheme out", async () => {
   for (const url of ["mailto:a@b.example", "tel:+15551234567", "ftp://h.example/f"]) {
     const viaIndex = await shorten(url, { stripTracking: false });
     const body = new TextEncoder().encode(url);
-    const spelled = build(SCHEME_OTHER, MODE_TEXT6, null, body, SCHEME_IN_BODY);
+    const spelled = build(SCHEME_OTHER, MODE_TEXT, null, body, SCHEME_IN_BODY);
     assert.ok(viaIndex.length < spelled.length,
       `${url}: index form ${viaIndex.length} should beat spelled form ${spelled.length}`);
     // Both must decode identically.
@@ -67,7 +67,7 @@ test("unknown scheme indices are rejected, not guessed", async () => {
 
 test("the spelled-scheme escape hatch works and stays gated", async () => {
   // A valid URL through index 15 decodes...
-  const good = build(SCHEME_OTHER, MODE_TEXT6, null,
+  const good = build(SCHEME_OTHER, MODE_TEXT, null,
     new TextEncoder().encode("https://example.com/x"), SCHEME_IN_BODY);
   assert.equal((await expand(good)).href, "https://example.com/x");
 

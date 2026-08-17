@@ -87,7 +87,7 @@ try {
   const modeRows = await page.locator(".mode-row").count();
   const winners = await page.locator(".mode-row.won").count();
   check("the bit breakdown renders", segments >= 2, `${segments} segments`);
-  check("all four encodings are shown", modeRows === 4, `${modeRows} rows`);
+  check("all five encodings are shown", modeRows === 5, `${modeRows} rows`);
   check("exactly one mode is marked as the winner", winners === 1, `${winners} marked`);
 
   // ---- following a link ---------------------------------------------------
@@ -347,7 +347,7 @@ try {
       { timeout: 5000 }).then(() => true).catch(() => false);
     const rows = await page.locator(".mode-row").count();
     check("the breakdown shows the template row as the winner",
-      rows === 4 && won, `${rows} rows, template won: ${won}`);
+      rows === 5 && won, `${rows} rows, template won: ${won}`);
   }
 
   // ---- works with JavaScript switched off ---------------------------------

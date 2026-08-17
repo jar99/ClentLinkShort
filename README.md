@@ -13,7 +13,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 113 tests, no dependencies
+npm test              # 125 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -24,19 +24,19 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **61% of the URL it came from** (median). Every link also
+The encoded destination is **58% of the URL it came from** (median). Every link also
 carries this site's address — 40 characters before the payload starts — so a URL has
-to be longer than about **130 characters** before the whole link wins on this domain.
+to be longer than about **120 characters** before the whole link wins on this domain.
 Popular shapes do far better: a timestamped YouTube share is 49 characters in, 17 out.
 
 Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `jar99.github.io/ClentLinkShort/#` (40c) | ~130 | 7.9% |
-| `jar99.github.io/l/#` (27c) | ~90 | 14.0% |
-| `clent.link/#` (20c) | ~65 | 22.6% |
-| payload alone, no prefix | ~10 | 99.7% |
+| `jar99.github.io/ClentLinkShort/#` (40c) | ~120 | 8.2% |
+| `jar99.github.io/l/#` (27c) | ~75 | 17.3% |
+| `clent.link/#` (20c) | ~50 | 30.0% |
+| payload alone, no prefix | ~10 | 99.9% |
 
 The domain still matters more than the codec does. What you get regardless of length
 is a link nothing is storing, that can't be revoked or logged, and that still resolves
@@ -50,12 +50,12 @@ encoder head-to-head over 3,999 corpus URLs:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **150,717 chars** | 151,216 chars |
+| Total payload, same 3,999 URLs | **150,046 chars** | 151,216 chars |
 | Decodes back byte-identical | **100%** | 83.4% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
-| `upload.wikimedia.org/...%22Agnese%22...` | **82** | 160 |
-| Shorter link, per URL | 14.7% | 81.0% |
+| `upload.wikimedia.org/...%22Agnese%22...` | **138** | 160 |
+| Shorter link, per URL | 28.5% | 61.4% |
 
 Read the last row with the others: ha.mr's per-URL edge is many 1–3-character wins on
 long-tail text, bought mostly by the wider output alphabet — and characters like
@@ -86,11 +86,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **76.0%** overall, median **68.2%** |
-| Payload shorter than input | **99.1%** |
-| Host dictionary hit rate | **16.8%** |
-| Carried tracking parameters | **3.6%**, worth 25% of the payload on those |
-| Winning body mode | text 95.7%, template 3.9%, deflate 0.4%, raw 0.1% |
+| Payload vs input URL | **64.6%** overall, median **57.9%** |
+| Payload shorter than input | **99.9%** |
+| Host dictionary hit rate | **11.7%** |
+| Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
+| Winning body mode | host 75.2%, text 19.3%, template 5.1%, deflate 0.4%, raw 0.1% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -110,9 +110,10 @@ The page quotes these figures but doesn't hard-code them: the build substitutes 
 Yes, and this is checked rather than assumed.
 
 `tools/optimality.js` builds a payload for every combination of every choice the
-encoder has — both spellings of the host, dictionary or spelled out, verbatim, crossed
-with all three body modes, about a dozen per URL. It confirms each one decodes back to
-the same URL, then asserts the encoder's answer is no longer than the best of them.
+encoder has — both spellings of the host, dictionary, host field or spelled out,
+verbatim, crossed with every body mode, over a dozen per URL. It confirms each one
+decodes back to the same URL, then asserts the encoder's answer is no longer than the
+best of them.
 
 It found a real bug. The encoder used to strip a `www.` prefix on sight, which looks
 free: four characters traded for a header bit that was already paid for. Once the token
@@ -257,15 +258,21 @@ Append `~` to a link to preview where it goes instead of going there.
 4. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts
    included, chosen by category rather than mined — corpus frequency measures what
    Wikipedia cites, not what people shorten.
-5. **The rest is encoded three ways and the shortest is kept:**
+5. **Every other domain stays cheap without a dictionary entry.** The hostname gets
+   its own Huffman code whose *terminal* symbols are registrable suffixes — `.com`,
+   `.org`, `.co.uk`, `.github.io`, 128 of them mined across distinct names
+   (`src/hostcode.js`, `tools/mine-host.mjs`). `.com` — the ending of two in five
+   unknown hosts — costs a couple of bits instead of four spelled characters, and a
+   host whose ending isn't listed just ends with the plain END symbol. Nothing about
+   this needs updating when someone shortens a domain nobody has seen before.
+6. **The rest is encoded every way it legally can be, and the shortest is kept:**
    - **text** is canonical-Huffman-coded: every byte costs what its measured
      frequency in real URLs earns it — `/` and `e` under 5 bits, capitals their own
      longer codes, unknown bytes an escape — and a 128-entry substring dictionary
-     (`.com`, `article`, `/index`, `wiki`…) rides in the same code as one more
-     symbol. The tables live in `src/textcode.js`, mined from the corpus by
-     `tools/mine-text.mjs`; on held-out URLs the mode averages **0.78 payload
-     characters per body character**, against 1.0 for the old flat 6-bit code and
-     1.33 for bytes-then-Base64.
+     (`articles/`, `index.php`, `.jpg`, `-of-`…) rides in the same code as one more
+     symbol. Tokens must span at least 25 *distinct hosts* to be mined, so the
+     dictionary generalises instead of memorising one site's paths. The tables live
+     in `src/textcode.js`, mined from the corpus by `tools/mine-text.mjs`.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
@@ -309,27 +316,34 @@ Substack, TikTok, Pinterest, Booking and others — along with the rest of their
 site-specific tracking. `?ref=Matt.+6:1` on a Bible site survives; `?ref=sr_1_3` on
 Amazon does not.
 
-### Wire format v7
+### Wire format v1
 
 ```
 6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = other,
                                     3 = template
                   bit  2    "www." was stripped
                   bit  3    host came from the dictionary
-                  bits 4-5  body mode: 0 = text, 1 = raw, 2 = deflate
+                  bits 4-5  body mode: 0 = text, 1 = raw, 2 = deflate,
+                                       3 = host
 8 bits   host     dictionary index — only when bit 3 is set
 body     text     canonical-Huffman symbols (table in src/textcode.js):
                   literal bytes, TOKEN + 7-bit index into 128 mined
                   substrings, ESC + raw byte, END
          raw      UTF-8 bytes, 8 bits each
          deflate  DEFLATE-raw bytes, 8 bits each
+         host     the hostname in its own code (table in src/hostcode.js):
+                  name characters, then one terminal symbol that both
+                  appends a registrable suffix (".com", ".co.uk",
+                  ".github.io" — 128 of them) and ends the field; the tail
+                  follows as text
 
-under scheme 2 ("other"): bits 2-3 must be zero, then a 4-bit index into the
-         scheme table — mailto:, ftp:, tel: and the rest cost 4 bits instead
-         of being spelled out. Index 15 is reserved: the scheme is spelled in
-         the body, so future tables can carry schemes this one has never
-         heard of. URLs with user:password@ ride this path too, and no
-         longer pay 8 characters for "https://".
+under scheme 2 ("other"): bits 2-3 must be zero, the mode must not be 3,
+         then a 4-bit index into the scheme table — mailto:, ftp:, tel: and
+         the rest cost 4 bits instead of being spelled out. Index 15 is
+         reserved: the scheme is spelled in the body, so future tables can
+         carry schemes this one has never heard of. URLs with
+         user:password@ ride this path too, and don't pay 8 characters for
+         "https://".
 
 under scheme 3: 8 bits of template index, then each slot as 6 bits of length
          followed by its characters at the slot alphabet's own width
@@ -340,26 +354,30 @@ optional tag, outside the payload:
          #<payload>.h<tag>   HMAC under a passphrase
 ```
 
-The body is `host + /path?query#frag`, or just the tail when the host is
-dictionary-encoded, or everything after the scheme under scheme 2.
+The body is the tail (`/path?query#frag`) when the host rides the dictionary
+or its own field, `host + tail` when it is spelled into the text, or
+everything after the scheme under scheme 2.
 
 Two details that are load-bearing:
 
 - The tail comes from `url.href`, not `pathname + search + hash` — the latter drops a
   trailing empty `?` or `#`, which changes the destination. Caught by fuzzing.
-- URLs with `user:password@` are always stored verbatim. The compact form has nowhere
-  to keep userinfo and dropping it would repoint the link.
+- URLs with `user:password@` are always stored under scheme 2. The compact forms have
+  nowhere to keep userinfo and dropping it would repoint the link.
 
-Both `HOSTS` and `TOKENS` are **append-only**: an entry's index is its wire encoding,
-so reordering one repoints every link that used it.
+`HOSTS`, `TOKENS` and `SUFFIXES` are **append-only**: an entry's index is its wire
+encoding, so reordering one repoints every link that used it.
 
 ## Project layout
 
 ```
 src/clent.js      codec core and public API — one import serves everything
 src/bits.js       bit stream + ClentError
+src/huffman.js    canonical Huffman machinery, shared by both codes
 src/text.js       Huffman text mode, token DP, strict decoder
 src/textcode.js   its mined code + tokens   (data, append-only)
+src/host.js       the host field: suffix-terminal code for any domain
+src/hostcode.js   its mined code + suffixes (data, append-only)
 src/deflate.js    bounded DEFLATE (16 KB inflate cap)
 src/tracking.js   tracking-parameter policy
 src/risk.js       phishing-shape assessment
@@ -372,10 +390,11 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             113 tests on node:test
+test/             125 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
-  schemes         the v6 scheme table, reserved indices, escape hatch
+  schemes         the scheme table, reserved indices, escape hatch
+  host            the host field, suffix terminals, refused flag combos
   security        hostile fragments, scheme allowlists, exhaustive sweeps
   robustness      size caps, decompression bombs, unassigned symbols
   property        generated URLs, truncation, bit-flips, random payloads
@@ -389,7 +408,8 @@ test/             113 tests on node:test
   readme          this file's quoted numbers against corpus/stats.json
 
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
-                  optimality, bundle, minify, build, serve, browser-test
+                  optimality, mine-text, mine-host, bundle, minify, build,
+                  serve, browser-test
 ```
 
 ## Build and delivery

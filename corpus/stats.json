@@ -6,58 +6,59 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://jar99.github.io/ClentLinkShort/#",
-  "payloadRatio": 0.6442568339632354,
-  "payloadShorterPct": 99.71767950567514,
-  "medianRatio": 0.6086956521739131,
-  "p90Ratio": 0.7727272727272727,
-  "linkSavingsMean": -0.7872417341805602,
-  "linkSavingsMedian": -0.6666666666666667,
-  "linkShorterPct": 7.907303218111993,
+  "payloadRatio": 0.6455463582786901,
+  "payloadShorterPct": 99.90682491936474,
+  "medianRatio": 0.5789473684210527,
+  "p90Ratio": 0.7333333333333333,
+  "linkSavingsMean": -0.7454417212782278,
+  "linkSavingsMedian": -0.6153846153846154,
+  "linkShorterPct": 8.174094532330976,
   "bareShorterPct": 0.00036059946054320705,
-  "deepShorterPct": 13.888002443860755,
+  "deepShorterPct": 14.356590923348417,
   "bareCount": 277316,
   "deepCount": 366633,
-  "deepSavingsMedian": -0.3500000000000001,
-  "deepSavingsMean": -0.3305195775606818,
-  "breakEvenLength": 130,
+  "deepSavingsMedian": -0.30000000000000004,
+  "deepSavingsMean": -0.3084670240659401,
+  "breakEvenLength": 120,
   "prefixes": [
     {
       "label": "this site",
       "length": 40,
-      "breakEven": 130,
-      "shorterPct": 7.907303218111993,
-      "medianSaving": -0.6666666666666667
+      "breakEven": 120,
+      "shorterPct": 8.174094532330976,
+      "medianSaving": -0.6153846153846154
     },
     {
       "label": "short path on the same host",
       "length": 27,
-      "breakEven": 90,
-      "shorterPct": 13.953589492335572,
-      "medianSaving": -0.34285714285714275
+      "breakEven": 75,
+      "shorterPct": 17.304631267382977,
+      "medianSaving": -0.29166666666666674
     },
     {
       "label": "a short custom domain",
       "length": 20,
-      "breakEven": 65,
-      "shorterPct": 22.6353329223277,
-      "medianSaving": -0.1777777777777778
+      "breakEven": 50,
+      "shorterPct": 29.965727099506328,
+      "medianSaving": -0.1212121212121211
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.71767950567514,
-      "medianSaving": 0.3913043478260869
+      "shorterPct": 99.90682491936474,
+      "medianSaving": 0.42105263157894735
     }
   ],
   "modes": {
-    "text": 616318,
-    "raw": 363,
-    "deflate": 2304,
-    "template": 24964
+    "text": 124181,
+    "raw": 345,
+    "deflate": 2342,
+    "host": 484429,
+    "template": 32652
   },
-  "templatePct": 3.8767045216313716,
-  "dictHitPct": 12.888598320674463,
+  "templatePct": 5.070587888171268,
+  "dictHitPct": 11.694714954134566,
   "trackingPct": 3.6207836334865027,
-  "trackingSavingPct": 12.305348825075965
+  "trackingSavingPct": 26.215423466754924
 }

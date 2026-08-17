@@ -22,7 +22,6 @@ import path from "node:path";
 
 import { readCorpus } from "./corpus.js";
 import { ROOT } from "./bundle.js";
-import { HOSTS } from "../src/hosts.js";
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
@@ -48,18 +47,20 @@ const encoder = new TextEncoder();
  * Corpus bodies, as the encoder sees them
  * -------------------------------------------------------------------------- */
 
-const DICT = new Set(HOSTS);
+// In wire v1 the host almost always rides its own field (the host mode or
+// the dictionary), so what the text code actually encodes is the tail. The
+// host still travels alongside each body: token generality is judged by how
+// many distinct hosts a substring spans, and that must come from the URL,
+// not from the body text.
 const bodies = [];
 {
   let n = 0;
   for await (const url of readCorpus(SAMPLE + HOLDOUT)) {
     try {
       const p = new URL(url);
-      let host = p.host;
-      if (host.startsWith("www.")) host = host.slice(4);
       let tail = p.href.slice(p.origin.length);
       if (tail === "/") tail = "";
-      bodies.push(encoder.encode(DICT.has(host) ? tail : host + tail));
+      bodies.push({ bytes: encoder.encode(tail), host: p.host });
     } catch { /* not this tool's problem */ }
     if (++n >= SAMPLE + HOLDOUT) break;
   }
@@ -147,7 +148,7 @@ function bodyBits(lengths, tokens, body) {
 /** Byte + control frequencies over the sample, with tokens applied. */
 function countFrequencies(lengths, tokens) {
   const freq = new Float64Array(SYMBOLS);
-  for (const body of sample) {
+  for (const { bytes: body } of sample) {
     freq[SYM_END]++;
     let i = 0;
     outer: while (i < body.length) {
@@ -185,11 +186,10 @@ function mineTokens(lengths) {
 
   while (tokens.length < TOKEN_COUNT) {
     const counts = new Map();
+    /** substring -> Set of distinct hosts it appeared under (size-capped) */
     const hosts = new Map();
-    for (const body of sample.slice(0, 12000)) {
-      const text = decoder.decode(body);
-      const host = text.split(/[/?#]/)[0] || "(tail)";
-      const seenHere = new Set();
+    for (const { bytes, host } of sample.slice(0, 12000)) {
+      const text = decoder.decode(bytes);
       // Residue after current tokens, greedy longest-match.
       let i = 0;
       const runs = [];
@@ -212,11 +212,12 @@ function mineTokens(lengths) {
             const g = r.slice(j, j + n);
             if (chosen.has(g)) continue;
             counts.set(g, (counts.get(g) || 0) + 1);
-            if (!seenHere.has(g)) {
-              seenHere.add(g);
-              if (!hosts.has(g)) hosts.set(g, 0);
-              if (hosts.get(g) < MIN_HOSTS + 1) hosts.set(g, hosts.get(g) + 1);
-            }
+            // Distinct hosts, actually distinct: the old counter incremented
+            // once per BODY, which let one prolific site vote its own quirks
+            // into the dictionary. The set is size-capped at the threshold.
+            let seen = hosts.get(g);
+            if (!seen) hosts.set(g, (seen = new Set()));
+            if (seen.size <= MIN_HOSTS) seen.add(host);
           }
         }
       }
@@ -224,7 +225,7 @@ function mineTokens(lengths) {
 
     const scored = [];
     for (const [g, n] of counts) {
-      if (n < 20 || (hosts.get(g) ?? 0) < MIN_HOSTS) continue;
+      if (n < 20 || (hosts.get(g)?.size ?? 0) < MIN_HOSTS) continue;
       let saved = -tokenCost;
       for (const ch of encoder.encode(g)) saved += litCost(lengths, ch);
       if (saved > 0) scored.push([g, n * saved]);
@@ -260,15 +261,15 @@ let tokens = [];
 for (let iteration = 0; iteration < 3; iteration++) {
   tokens = mineTokens(lengths);
   lengths = huffmanLengths(countFrequencies(lengths, tokens));
-  const bits = sample.reduce((sum, b) => sum + bodyBits(lengths, tokens, b), 0);
+  const bits = sample.reduce((sum, b) => sum + bodyBits(lengths, tokens, b.bytes), 0);
   console.error(`iteration ${iteration}: ${tokens.length} tokens, ` +
     `${(bits / sample.length).toFixed(1)} bits/body on the sample`);
 }
 
 let heldBits = 0, heldChars = 0;
-for (const body of holdout) {
-  heldBits += bodyBits(lengths, tokens, body);
-  heldChars += body.length;
+for (const { bytes } of holdout) {
+  heldBits += bodyBits(lengths, tokens, bytes);
+  heldChars += bytes.length;
 }
 console.error(`holdout: ${(heldBits / holdout.length).toFixed(1)} bits/body, ` +
   `${(heldBits / 6 / heldChars).toFixed(3)} payload chars per body char ` +
@@ -291,7 +292,7 @@ const file = `/**
  * code and is written via ESC. Codes are canonical: assigned by ascending
  * length, ties by ascending symbol, so the lengths array IS the whole code.
  *
- * Table format for wire v7. APPEND-ONLY in spirit: any change to either
+ * Table format for wire v1. APPEND-ONLY in spirit: any change to either
  * table changes what existing payloads decode to, so a change here is a wire
  * version bump, never a patch.
  *

@@ -100,8 +100,9 @@ test("a bare dictionary host costs almost nothing", async () => {
 });
 
 test("the shortest body mode wins", async () => {
-  // Ordinary lowercase text is squarely the text mode's home ground.
-  const lower = await analyze("https://example.com/a/lowercase/path/of/words", { stripTracking: false });
+  // Ordinary lowercase text is squarely the text mode's home ground; a
+  // dictionary host keeps the host field out of the race.
+  const lower = await analyze("https://github.com/a/lowercase/path/of/words", { stripTracking: false });
   assert.equal(lower.mode, MODE_TEXT);
   assert.ok(lower.candidates.text < lower.candidates.raw);
 

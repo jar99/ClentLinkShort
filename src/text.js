@@ -11,10 +11,15 @@
  * symbol. Token selection is still a shortest-path problem, solved by the
  * same dynamic programme as before but with measured per-byte costs.
  *
+ * The plan for a body is computed backwards from the end, so the plan for a
+ * long body is simultaneously the plan for every suffix of it — the encoder
+ * exploits that to price all its candidate splits with one plan.
+ *
  * @module text
  */
 
 import { BitWriter, BitReader, ClentError } from "./bits.js";
+import { buildCode, pushCode, readSymbol } from "./huffman.js";
 import {
   CODE_LENGTHS, SYM_TOKEN, SYM_END, SYM_ESC, TOKEN_INDEX_BITS, TOKENS,
 } from "./textcode.js";
@@ -25,42 +30,11 @@ const textDecoder = new TextDecoder();
 /** Decoded text may never exceed this; the URL gate is far below it anyway. */
 const MAX_TEXT_BYTES = 32768;
 
-/* -------------------------------------------------------------------------- *
- * Canonical code construction
- *
- * The lengths array IS the code: canonical assignment orders symbols by
- * (length, symbol) and hands out consecutive codes per length, so encoder
- * and decoder derive identical tables from the one shipped list.
- * -------------------------------------------------------------------------- */
+const TEXT_CODE = buildCode(CODE_LENGTHS);
+const LEN = TEXT_CODE.len;
 
-const MAX_LEN = 15;
-
-/** @type {Int32Array} code value per symbol (-1 = not coded) */
-const CODE = new Int32Array(CODE_LENGTHS.length).fill(-1);
-/** @type {Uint8Array} code length per symbol (0 = not coded) */
-const LEN = Uint8Array.from(CODE_LENGTHS);
-
-/** Symbols in canonical order, and per-length decode windows. */
-const ORDERED = [];
-const FIRST_CODE = new Int32Array(MAX_LEN + 1);
-const FIRST_INDEX = new Int32Array(MAX_LEN + 1);
-{
-  for (let length = 1; length <= MAX_LEN; length++) {
-    for (let symbol = 0; symbol < LEN.length; symbol++) {
-      if (LEN[symbol] === length) ORDERED.push(symbol);
-    }
-  }
-  let code = 0;
-  let at = 0;
-  for (let length = 1; length <= MAX_LEN; length++) {
-    code <<= 1;
-    FIRST_CODE[length] = code;
-    FIRST_INDEX[length] = at;
-    for (; at < ORDERED.length && LEN[ORDERED[at]] === length; at++) {
-      CODE[ORDERED[at]] = code++;
-    }
-  }
-}
+/** Bits the terminating END symbol costs; part of every body's price. */
+export const END_BITS = LEN[SYM_END];
 
 /** @type {Uint8Array[]} tokens as bytes, indexed as on the wire */
 const TOKEN_BYTES = TOKENS.map((token) => textEncoder.encode(token));
@@ -80,37 +54,23 @@ function literalCost(byte) {
   return LEN[byte] || ESC_COST;
 }
 
-/** Write one symbol's canonical code. BitWriter takes at most 8 bits a push. */
-function pushCode(w, symbol) {
-  const length = LEN[symbol];
-  const code = CODE[symbol];
-  if (length > 8) {
-    w.push(code >> 8, length - 8);
-    w.push(code & 255, 8);
-  } else {
-    w.push(code, length);
-  }
-}
-
 /**
- * The number of bits emitText() would write for these bytes, without writing
- * them. Used by the template scorer.
- * @param {Uint8Array} bytes
- * @returns {number}
+ * @typedef {object} TextPlan
+ * @property {Int32Array} cost cost[i] = bits to write bytes[i..] (END excluded)
+ * @property {Int32Array} choice -1 = literal at i, else the token index to emit
  */
-export function textBits(bytes) {
-  return planText(bytes).cost[0] + LEN[SYM_END];
-}
 
 /**
  * The token-or-literal plan for a body, by dynamic programming backwards from
- * the end: optimal against the measured costs, not greedy.
+ * the end: optimal against the measured costs, not greedy. Because it runs
+ * backwards, `cost[i]` and `choice[i]` are also the complete plan for the
+ * suffix starting at `i`.
  * @param {Uint8Array} bytes
+ * @returns {TextPlan}
  */
-function planText(bytes) {
+export function planText(bytes) {
   const n = bytes.length;
   const cost = new Int32Array(n + 1);
-  /** -1 = emit a literal here, otherwise the token index to emit. */
   const choice = new Int32Array(n + 1).fill(-1);
 
   for (let i = n - 1; i >= 0; i--) {
@@ -142,49 +102,46 @@ function planText(bytes) {
 }
 
 /**
+ * The number of bits emitText() would write for these bytes, without writing
+ * them. Used by the template scorer.
+ * @param {Uint8Array} bytes
+ * @returns {number}
+ */
+export function textBits(bytes) {
+  return planText(bytes).cost[0] + END_BITS;
+}
+
+/**
  * Write a body as Huffman-coded text, terminated by END.
+ *
+ * With `plan` and `from` given, writes the suffix `bytes[from..]` of an
+ * already-planned longer body instead of re-planning.
+ *
  * @param {BitWriter} w
  * @param {Uint8Array} bytes
+ * @param {TextPlan} [plan]
+ * @param {number} [from]
  */
-export function emitText(w, bytes) {
-  const { choice } = planText(bytes);
+export function emitText(w, bytes, plan = planText(bytes), from = 0) {
+  const { choice } = plan;
 
-  for (let i = 0; i < bytes.length;) {
+  for (let i = from; i < bytes.length;) {
     const pick = choice[i];
     if (pick >= 0) {
-      pushCode(w, SYM_TOKEN);
+      pushCode(w, TEXT_CODE, SYM_TOKEN);
       w.push(pick, TOKEN_INDEX_BITS);
       i += TOKEN_BYTES[pick].length;
       continue;
     }
     const byte = bytes[i++];
     if (LEN[byte]) {
-      pushCode(w, byte);
+      pushCode(w, TEXT_CODE, byte);
     } else {
-      pushCode(w, SYM_ESC);
+      pushCode(w, TEXT_CODE, SYM_ESC);
       w.push(byte, 8);
     }
   }
-  pushCode(w, SYM_END);
-}
-
-/**
- * Read one canonical symbol.
- * @param {BitReader} reader
- * @returns {number}
- */
-function readSymbol(reader) {
-  let code = 0;
-  for (let length = 1; length <= MAX_LEN; length++) {
-    code = (code << 1) | reader.read(1);
-    const offset = code - FIRST_CODE[length];
-    const count = (length < MAX_LEN ? FIRST_INDEX[length + 1] : ORDERED.length) -
-      FIRST_INDEX[length];
-    if (offset >= 0 && offset < count) {
-      return ORDERED[FIRST_INDEX[length] + offset];
-    }
-  }
-  throw new ClentError("This link is damaged.");
+  pushCode(w, TEXT_CODE, SYM_END);
 }
 
 /**
@@ -200,7 +157,7 @@ export function decodeText(reader) {
   /** @type {number[]} */
   const bytes = [];
   for (;;) {
-    const symbol = readSymbol(reader);
+    const symbol = readSymbol(reader, TEXT_CODE);
     if (symbol === SYM_END) break;
     if (symbol === SYM_ESC) {
       bytes.push(reader.read(8));
