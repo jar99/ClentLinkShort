@@ -600,6 +600,12 @@ footer {
 
 footer p { margin: 0 0 6px; }
 
+footer .stamp {
+  margin-top: 10px;
+  font-size: .75rem;
+  font-family: var(--mono);
+}
+
 /* ── narrow screens ──────────────────────────────────────────────────── */
 
 @media (max-width: 30rem) {

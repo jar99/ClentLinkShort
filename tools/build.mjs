@@ -16,6 +16,7 @@
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
 import { createHash } from "node:crypto";
+import { execSync } from "node:child_process";
 import path from "node:path";
 
 import { minifyJS, minifyCSS, minifyHTML } from "./minify.js";
@@ -48,8 +49,28 @@ async function readCorpusStats() {
   }
 }
 
-function substituteStats(html, stats) {
+/**
+ * What build is this? Version from package.json, the commit it was built
+ * from, and when — so a live page can be matched to a commit at a glance.
+ * Outside a git checkout the commit reads "untracked" rather than failing
+ * the build.
+ */
+async function buildStamp() {
+  const pkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8"));
+  let commit = "untracked";
+  try {
+    commit = execSync("git rev-parse --short HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
+      .toString().trim();
+  } catch { /* not a git checkout */ }
+  const built = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  return { version: pkg.version ?? "0.0.0", commit, built };
+}
+
+function substituteStats(html, stats, stamp) {
   const values = {
+    version: stamp.version,
+    commit: stamp.commit,
+    built: stamp.built,
     siteUrl: (stats.origin ?? "").replace(/#$/, ""),
     checked: stats.checked.toLocaleString("en-US"),
     roundTrip: stats.failures === 0 ? "100%" : `${(100 * stats.checked /
@@ -157,8 +178,9 @@ async function main() {
   await mkdir(DIST, { recursive: true });
 
   const stats = await readCorpusStats();
+  const stamp = await buildStamp();
   const htmlSource = substituteStats(
-    await readFile(path.join(SRC, "index.html"), "utf8"), stats);
+    await readFile(path.join(SRC, "index.html"), "utf8"), stats, stamp);
 
   // The canonical site address comes from the measured origin — the one
   // place it is already written down — with the fragment marker dropped.

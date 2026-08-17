@@ -283,6 +283,22 @@ const FEEDS = [
   "https://slickdeals.net/newsearch.php?mode=frontpage&searcharea=deals&searchin=first&rss=1",
   "https://feeds.feedburner.com/SlickdealsnetFP",
   "https://www.dealnews.com/rss.xml",
+  // newsletters — substack and substack-shaped, the URLs people forward
+  "https://astralcodexten.substack.com/feed",
+  "https://www.slowboring.com/feed",
+  "https://newsletter.pragmaticengineer.com/feed",
+  "https://www.platformer.news/rss/",
+  "https://www.garbageday.email/feed",
+  "https://simonwillison.net/atom/everything/",
+  "https://stratechery.com/feed/",
+  // youtube channel feeds — real watch?v= URLs, straight from the source
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCX6OQ3DkcsbYNE6H8uQQuVA",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCHnyfMqiRRG1u-2MsSQLbXA",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCBJycsmduvYEL83R_U4JriQ",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCsXVk37bltHxD1rDPwtNM8Q",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCYO_jab_esuFRV4b17AJtAw",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UC6107grRI4m0o2-emgoDnAA",
+  "https://www.youtube.com/feeds/videos.xml?channel_id=UCXuqSBlHAE6Xw-yeJA0Tunw",
 ];
 
 /**
@@ -423,5 +439,165 @@ export async function* commons(target, { get, progress, sleep, deadline = 150000
     cont = body?.continue?.aicontinue;
     if (!cont) return;
     await sleep(150); // stay under the rate limit rather than discover it
+  }
+}
+
+/* -------------------------------------------------------------------------- *
+ * Really-shared links: Reddit and Mastodon
+ *
+ * These are links people put in front of other people TODAY — outbound
+ * submissions, link cards, and the posts' own permalinks. This is the
+ * closest a scripted run gets to "what would someone paste into a
+ * shortener": youtube videos, x.com posts, instagram reels, news, shops.
+ * (Twitter/X and Instagram have no scriptable public read API; their URL
+ * shapes arrive here as the TARGETS of Reddit and Mastodon shares.)
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Listing feeds, rotated: r/all newest plus the big time-window tops. RSS,
+ * not the JSON API — Reddit answers the JSON endpoints from datacenter IPs
+ * with a plain 403, but serves the same listings as Atom feeds.
+ */
+const REDDIT_LISTINGS = [
+  "r/all/new/.rss?limit=100",
+  "r/all/top/.rss?t=day&limit=100",
+  "r/all/top/.rss?t=week&limit=100",
+  "r/all/top/.rss?t=month&limit=100",
+  "r/all/top/.rss?t=year&limit=100",
+  "r/popular/hot/.rss?limit=100",
+];
+
+/**
+ * Reddit serves these feeds to curl but answers Node's fetch with 403 (it
+ * discriminates by HTTP client, not by request), so this one source shells
+ * out to curl — a plain, honestly-identified feed client asking for a feed.
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function curlText(url) {
+  const { execFile } = await import("node:child_process");
+  return new Promise((resolve, reject) => {
+    execFile("curl", [
+      "-s", "--fail", "--max-time", "30",
+      "-A", "clent-corpus/2.1 (+https://github.com/jar99/ClentLinkShort)",
+      url,
+    ], { maxBuffer: 8 * 1024 * 1024 }, (error, stdout) =>
+      error ? reject(error) : resolve(stdout));
+  });
+}
+
+/**
+ * Reddit link posts: each entry's permalink plus every URL written in its
+ * body — for a link post that includes the submitted destination. Deadline-
+ * budgeted and politely paced; it contributes shapes, not volume.
+ */
+export async function* reddit(target, { progress, sleep, deadline = 900000 }) {
+  const until = Date.now() + deadline;
+  let seen = 0;
+  let failures = 0;
+  for (let round = 0; seen < target && failures < 6 && Date.now() < until; round++) {
+    const listing = REDDIT_LISTINGS[round % REDDIT_LISTINGS.length];
+    let after = "";
+    for (let page = 0; page < 10 && seen < target && Date.now() < until; page++) {
+      let xml;
+      try {
+        xml = await curlText(`https://www.reddit.com/${listing}` +
+          (after ? `&after=${after}` : ""));
+      } catch {
+        failures++;
+        await sleep(10000); // back off hard; the limiter is per-IP
+        break;
+      }
+      // Atom: permalinks ride <link href>, outbound destinations ride the
+      // entry body's escaped HTML; ids page the listing like the JSON API.
+      let inPage = 0;
+      for (const match of xml.matchAll(/<link href="([^"]+)"/g)) {
+        yield unescapeXml(match[1]);
+        seen++;
+        inPage++;
+      }
+      for (const match of xml.matchAll(/<content[^>]*>([\s\S]*?)<\/content>/g)) {
+        for (const found of unescapeXml(match[1]).matchAll(/href="(https?:\/\/[^"]+)"/g)) {
+          yield unescapeXml(found[1]);
+          seen++;
+        }
+      }
+      progress("reddit", seen, target);
+      const ids = [...xml.matchAll(/<id>(t3_[a-z0-9]+)<\/id>/g)];
+      after = ids.length ? ids[ids.length - 1][1] : "";
+      if (!after || !inPage) break;
+      await sleep(2500); // ~24 requests a minute keeps the limiter quiet
+    }
+  }
+}
+
+/** Big general-purpose instances; together they see most of the fediverse. */
+const MASTODON = [
+  "mastodon.social", "fosstodon.org", "mstdn.social", "mas.to",
+  "hachyderm.io", "mastodon.online", "infosec.exchange", "mastodon.world",
+];
+
+/**
+ * Mastodon public timelines: each status contributes its own permalink, its
+ * link-card target when it has one, and any URL written in the post body.
+ * All instances page concurrently — they are separate servers with separate
+ * rate limits — through the same tiny channel wikipedia uses.
+ */
+export async function* mastodon(target, { get, progress, sleep }) {
+  const perInstance = Math.ceil(target / MASTODON.length);
+  /** @type {string[]} */
+  const queue = [];
+  /** @type {(() => void)|null} */
+  let wake = null;
+  let running = MASTODON.length;
+  let stop = false;
+  const notify = () => { if (wake) { wake(); wake = null; } };
+
+  for (const instance of MASTODON) {
+    (async () => {
+      let maxId = "";
+      let fromInstance = 0;
+      while (fromInstance < perInstance && !stop) {
+        let statuses;
+        try {
+          statuses = await get(`https://${instance}/api/v1/timelines/public` +
+            `?limit=40${maxId ? `&max_id=${maxId}` : ""}`, { retries: 1 });
+        } catch {
+          break; // one instance down is fine; seven others are paging
+        }
+        if (!Array.isArray(statuses) || !statuses.length) break;
+        for (const status of statuses) {
+          if (status?.url) { queue.push(status.url); fromInstance++; }
+          if (status?.card?.url) { queue.push(status.card.url); fromInstance++; }
+          const content = String(status?.content ?? "");
+          for (const match of content.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
+            queue.push(match[1].replace(/&amp;/g, "&"));
+            fromInstance++;
+          }
+        }
+        notify();
+        maxId = statuses[statuses.length - 1]?.id ?? "";
+        if (!maxId) break;
+        await sleep(400); // well inside 300 requests per 5 minutes
+      }
+      running--;
+      notify();
+    })();
+  }
+
+  let total = 0;
+  while (running > 0 || queue.length) {
+    if (!queue.length) {
+      await new Promise((resolve) => { wake = resolve; });
+      continue;
+    }
+    while (queue.length) {
+      yield queue.shift();
+      if (++total >= target) {
+        stop = true;
+        return;
+      }
+    }
+    progress("mastodon", total, target);
   }
 }

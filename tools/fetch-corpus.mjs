@@ -25,7 +25,7 @@ import { ROOT } from "./bundle.js";
 import { readLines } from "./corpus.js";
 import {
   wikipedia, hackernews, gdelt, stackexchange, trancoDomains,
-  feeds, lemmy, commons,
+  feeds, lemmy, commons, reddit, mastodon,
 } from "./sources.js";
 
 const OUT = path.join(ROOT, "corpus");
@@ -37,9 +37,12 @@ const flag = (name, fallback) => {
   return at === -1 ? fallback : args[at + 1];
 };
 const TOTAL = Number(flag("count", 500000));
-const ONLY = flag("source", null);
+const ONLY = flag("source", null); // one name, or a comma-separated list
 const SKIP_RANKS = args.includes("--skip-ranks");
 const REFRESH_RANKS = args.includes("--refresh-ranks");
+// Union with the existing corpus instead of replacing it: top-up runs add
+// new sources' URLs without refetching everything already collected.
+const MERGE = args.includes("--merge");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -180,17 +183,30 @@ async function main() {
     feeds: (n) => feeds(n, context),
     lemmy: (n) => lemmy(n, context),
     commons: (n) => commons(n, context),
+    reddit: (n) => reddit(n, context),
+    mastodon: (n) => mastodon(n, context),
     tranco: (n) => trancoDomains(n, ranks),
   };
 
-  const wanted = ONLY ? { [ONLY]: 1 } : plan;
-  if (ONLY && !generators[ONLY]) {
-    console.error(`Unknown source "${ONLY}". Known: ${Object.keys(generators).join(", ")}`);
-    process.exit(1);
+  const only = ONLY ? ONLY.split(",").map((name) => name.trim()) : null;
+  const wanted = only
+    ? Object.fromEntries(only.map((name) => [name, 1 / only.length]))
+    : plan;
+  for (const name of Object.keys(wanted)) {
+    if (!generators[name]) {
+      console.error(`Unknown source "${name}". Known: ${Object.keys(generators).join(", ")}`);
+      process.exit(1);
+    }
   }
 
   const seen = new Set();
   const counts = {};
+
+  if (MERGE && existsSync(path.join(OUT, "urls.txt.br"))) {
+    for await (const line of readLines(path.join(OUT, "urls.txt.br"))) seen.add(line);
+    counts.existing = seen.size;
+    console.log(`  existing       ${seen.size.toLocaleString()} URLs merged in`);
+  }
 
   // All sources at once: the run takes as long as its slowest source, not
   // the sum of them. The shared dedup set is safe — generators only hand
@@ -240,6 +256,8 @@ async function main() {
       lemmy: "8 Lemmy instances, /api/v3/post/list — social, news, deals, images",
       feeds: "36 RSS/Atom feeds — news and shopping deals",
       commons: "commons.wikimedia.org/w/api.php?action=query&list=allimages — image shares",
+      reddit: "reddit.com listing JSON — submitted links and permalinks",
+      mastodon: "8 instances, /api/v1/timelines/public — posts, cards, body links",
       gdelt: "api.gdeltproject.org/api/v2/doc/doc",
       stackexchange: "api.stackexchange.com/2.3/questions?filter=withbody",
       tranco: "tranco-list.eu — ranked domains, sampled across the full range",

@@ -1,6 +1,6 @@
 {
   "name": "clent",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "description": "A stateless URL shortener codec — the destination is packed into the link, so nothing is ever stored",
   "type": "module",
   "license": "MIT",
