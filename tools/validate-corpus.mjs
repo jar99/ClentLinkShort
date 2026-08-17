@@ -57,8 +57,7 @@ const pct = (num, den) => (den ? (100 * num) / den : 0);
 // of the domain visible instead of hiding it in one average.
 const PREFIXES = [
   ["this site", ORIGIN],
-  ["short path on the same host", "https://jar99.github.io/l/#"],
-  ["a short custom domain", "https://clent.link/#"],
+  ["a github.io project page", "https://jar99.github.io/ClentLinkShort/#"],
   ["payload alone, no prefix", ""],
 ];
 const prefixTable = PREFIXES.map(([label, prefix]) => ({

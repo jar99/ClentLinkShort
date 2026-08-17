@@ -5,42 +5,35 @@
   "skipped": 0,
   "failures": 0,
   "suboptimal": 0,
-  "origin": "https://jar99.github.io/ClentLinkShort/#",
+  "origin": "https://nul.im/#",
   "payloadRatio": 0.6455463582786901,
   "payloadShorterPct": 99.90682491936474,
   "medianRatio": 0.5789473684210527,
   "p90Ratio": 0.7333333333333333,
-  "linkSavingsMean": -0.7454417212782278,
-  "linkSavingsMedian": -0.6153846153846154,
-  "linkShorterPct": 8.174094532330976,
-  "bareShorterPct": 0.00036059946054320705,
-  "deepShorterPct": 14.356590923348417,
+  "linkSavingsMean": -0.04676367042958653,
+  "linkSavingsMedian": -0.026315789473684292,
+  "linkShorterPct": 43.71495258164855,
+  "bareShorterPct": 1.8844927807988,
+  "deepShorterPct": 75.3549189516492,
   "bareCount": 277316,
   "deepCount": 366633,
-  "deepSavingsMedian": -0.30000000000000004,
-  "deepSavingsMean": -0.3084670240659401,
-  "breakEvenLength": 120,
+  "deepSavingsMedian": 0.0821917808219178,
+  "deepSavingsMean": 0.08527559921254177,
+  "breakEvenLength": 30,
   "prefixes": [
     {
       "label": "this site",
+      "length": 16,
+      "breakEven": 30,
+      "shorterPct": 43.71495258164855,
+      "medianSaving": -0.026315789473684292
+    },
+    {
+      "label": "a github.io project page",
       "length": 40,
       "breakEven": 120,
       "shorterPct": 8.174094532330976,
       "medianSaving": -0.6153846153846154
-    },
-    {
-      "label": "short path on the same host",
-      "length": 27,
-      "breakEven": 75,
-      "shorterPct": 17.304631267382977,
-      "medianSaving": -0.29166666666666674
-    },
-    {
-      "label": "a short custom domain",
-      "length": 20,
-      "breakEven": 50,
-      "shorterPct": 29.965727099506328,
-      "medianSaving": -0.1212121212121211
     },
     {
       "label": "payload alone, no prefix",

@@ -20,8 +20,9 @@ export const hasRanks = () => existsSync(RANKS_FILE);
 /**
  * The link prefix savings are measured against. Real savings depend on the
  * domain the site is served from, so it is stated rather than assumed away.
+ * This is also where the build learns the site's canonical address.
  */
-export const DEFAULT_ORIGIN = "https://jar99.github.io/ClentLinkShort/#";
+export const DEFAULT_ORIGIN = "https://nul.im/#";
 
 /** Stream lines out of a brotli-compressed text file. */
 export async function* readLines(file, limit = Infinity) {

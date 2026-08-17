@@ -1,19 +1,20 @@
 # Clent
 
-Links that carry their own destination. No database, no backend, no accounts, no logs
-— the whole URL is compressed into the link itself, so there is nothing to store and
-nothing that can stop working later.
+A privacy-focused, open-source link shortener, live at **[nul.im](https://nul.im)**.
+No database, no backend, no accounts, no logs — the whole URL is compressed into the
+link itself, so there is nothing to store and nothing that can stop working later.
+MIT-licensed; fork it and it runs on any static host.
 
 ```
-https://<user>.github.io/<repo>/#F8oJgxOaSY3d9ZKAA
-                                └── the destination is in here
+https://nul.im/#F8oJgxOaSY3d9ZKAA
+               └── the destination is in here
 ```
 
 The payload sits in the fragment, which browsers don't send to servers. No server
 sees where anyone is going.
 
 ```sh
-npm test              # 125 tests, no dependencies
+npm test              # 129 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -25,22 +26,24 @@ npm run coverage      # how much of the ranked web the corpus reaches
 More often than before, and the numbers are measured, not hoped.
 
 The encoded destination is **58% of the URL it came from** (median). Every link also
-carries this site's address — 40 characters before the payload starts — so a URL has
-to be longer than about **120 characters** before the whole link wins on this domain.
-Popular shapes do far better: a timestamped YouTube share is 49 characters in, 17 out.
+carries the site's address — 16 characters on `nul.im` — so a URL only has to be
+longer than about **30 characters** before the whole link comes out shorter. That is
+most links people actually share: **75% of deep links** (anything past a bare
+homepage) shrink, and popular shapes do far better still — a timestamped YouTube
+share is 49 characters in, 17 out.
 
 Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `jar99.github.io/ClentLinkShort/#` (40c) | ~120 | 8.2% |
-| `jar99.github.io/l/#` (27c) | ~75 | 17.3% |
-| `clent.link/#` (20c) | ~50 | 30.0% |
+| `nul.im/#` (16c) | ~30 | 43.7% |
+| a github.io project page (40c) | ~120 | 8.2% |
 | payload alone, no prefix | ~10 | 99.9% |
 
-The domain still matters more than the codec does. What you get regardless of length
-is a link nothing is storing, that can't be revoked or logged, and that still resolves
-when whoever made it has forgotten about it.
+Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
+nothing to compress away. What you get regardless of length is a link nothing is
+storing, that can't be revoked or logged, and that still resolves when whoever made
+it has forgotten about it.
 
 ## Compared to ha.mr
 
@@ -390,7 +393,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             125 tests on node:test
+test/             129 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -446,6 +449,17 @@ against the built site — then publishes `dist/`; set **Settings → Pages →
 Source** to **GitHub Actions** once, by hand.
 
 `dist/404.html` is a copy of the app, so a mistyped path still resolves its fragment.
+
+**Custom domain (`nul.im`):** the build emits `dist/CNAME` from the measured
+origin in `corpus/stats.json`, so Pages picks the domain up automatically. Two
+one-time steps remain at the registrar and on GitHub:
+
+1. DNS: apex `A` records for `nul.im` → `185.199.108.153`, `185.199.109.153`,
+   `185.199.110.153`, `185.199.111.153` (and optionally `AAAA` →
+   `2606:50c0:8000::153` … `:8003::153`), or an `ALIAS`/`ANAME` to
+   `jar99.github.io` if the registrar supports it.
+2. Repo **Settings → Pages**: set the custom domain to `nul.im` and tick
+   **Enforce HTTPS** once the certificate is issued.
 
 **Deploying a fork on a different domain:** the links themselves adapt
 automatically — the prefix comes from `location` at runtime. Only the *prose*

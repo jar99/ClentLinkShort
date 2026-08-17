@@ -50,6 +50,7 @@ async function readCorpusStats() {
 
 function substituteStats(html, stats) {
   const values = {
+    siteUrl: (stats.origin ?? "").replace(/#$/, ""),
     checked: stats.checked.toLocaleString("en-US"),
     roundTrip: stats.failures === 0 ? "100%" : `${(100 * stats.checked /
       (stats.checked + stats.failures)).toFixed(2)}%`,
@@ -148,9 +149,14 @@ async function main() {
   await rm(DIST, { recursive: true, force: true });
   await mkdir(DIST, { recursive: true });
 
+  const stats = await readCorpusStats();
   const htmlSource = substituteStats(
-    await readFile(path.join(SRC, "index.html"), "utf8"),
-    await readCorpusStats());
+    await readFile(path.join(SRC, "index.html"), "utf8"), stats);
+
+  // The canonical site address comes from the measured origin — the one
+  // place it is already written down — with the fragment marker dropped.
+  const siteUrl = new URL((stats.origin ?? "https://example.invalid/#")
+    .replace(/#$/, ""));
   const cssSource = await readFile(path.join(SRC, "style.css"), "utf8");
   const { code, files } = await bundle(path.join(SRC, "app.js"));
 
@@ -190,7 +196,19 @@ async function main() {
   html = minifyHTML(html);
   await writeFile(path.join(DIST, "index.html"), html);
   await writeFile(path.join(DIST, ".nojekyll"), "");
-  await writeFile(path.join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n");
+  await writeFile(path.join(DIST, "robots.txt"),
+    `User-agent: *\nAllow: /\nSitemap: ${siteUrl.href}sitemap.xml\n`);
+  await writeFile(path.join(DIST, "sitemap.xml"),
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    `  <url><loc>${siteUrl.href}</loc></url>\n` +
+    "</urlset>\n");
+
+  // A custom domain needs a CNAME file in the artifact; a github.io origin
+  // must not have one, so forks that revert the origin lose it automatically.
+  if (!siteUrl.host.endsWith(".github.io")) {
+    await writeFile(path.join(DIST, "CNAME"), siteUrl.host + "\n");
+  }
 
   // GitHub Pages serves 404.html for unknown paths. Serving the app there too
   // means a mistyped path still resolves the fragment instead of dead-ending.

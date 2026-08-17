@@ -14,12 +14,15 @@
   headers, so clickjacking protection is the one thing not available here.
 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
-<title>Clent — a link shortener that stores nothing</title>
-<meta name="description" content="Shorten links with no database, no accounts and no logging. The destination is compressed into the link itself, so nothing is ever stored and the link never expires.">
-<meta property="og:title" content="Clent — a link shortener that stores nothing">
-<meta property="og:description" content="The destination is compressed into the link itself. No database, no accounts, no logging — and the link never expires.">
+<title>Clent — private, open-source link shortener</title>
+<meta name="description" content="A free, open-source link shortener that stores nothing. The destination is compressed into the link itself — no database, no accounts, no tracking, no logs, and links never expire.">
+<link rel="canonical" href="{{siteUrl}}">
+<meta property="og:title" content="Clent — private, open-source link shortener">
+<meta property="og:description" content="The destination is compressed into the link itself. No database, no accounts, no tracking — and the link never expires.">
+<meta property="og:url" content="{{siteUrl}}">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, no logs.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
 <script>
   // Choose the view before first paint so the creator UI never flashes
@@ -75,9 +78,10 @@
     </div>
     <h1>Links that carry their own&nbsp;destination.</h1>
     <p class="lede">
-      The whole URL is compressed into the link itself, so nothing is stored
-      anywhere. No database, no accounts, no logs, and no link that stops working
-      because a service shut down.
+      A private, open-source link shortener. The whole URL is compressed into
+      the link itself, so nothing is stored anywhere: no database, no accounts,
+      no tracking, no logs — and no link that stops working because a service
+      shut down.
     </p>
   </header>
 
