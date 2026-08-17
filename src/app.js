@@ -10,6 +10,9 @@ import {
   analyze, expand, isFollowable, assess, canCompress, MODE_NAMES,
   RISK_BLOCK, ClentError,
 } from "./clent.js";
+import {
+  checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
+} from "./sign.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -47,9 +50,36 @@ async function runRedirect() {
     fragment = fragment.slice(1);
   }
 
+  const { payload, kind, tag } = split(fragment);
+
+  // An integrity check is verified before the destination is shown, let alone
+  // followed: if the payload was altered, whatever it decodes to is not what
+  // was shared, and showing it would just be a confident wrong answer.
+  let tagState = null;
+  if (kind === TAG_CHECK) {
+    const result = await verify(payload, kind, tag);
+    if (!result.ok) {
+      whenReady(() => {
+        $("r-spinner").remove();
+        $("r-title").textContent = "This link has been altered";
+        $("r-note").textContent = result.reason ??
+          "Its integrity check doesn't match, so it isn't the link that was shared. " +
+          "It may have been clipped in transit, or edited.";
+        $("r-dest").remove();
+        $("r-go").remove();
+      });
+      return;
+    }
+    tagState = { kind, ok: true };
+  } else if (kind === TAG_SIGNED) {
+    // A signature needs a passphrase, which means waiting for a human.
+    tagState = { kind, ok: false, needsPassphrase: true };
+    previewOnly = true;
+  }
+
   let url;
   try {
-    url = await expand(fragment);
+    url = await expand(payload);
   } catch (error) {
     const message = error instanceof ClentError ? error.message : "This link is damaged.";
     whenReady(() => {
@@ -79,6 +109,33 @@ async function runRedirect() {
     $("r-dest").textContent = url.href;
     $("r-go").href = url.href;
 
+    if (tagState?.kind === TAG_CHECK) {
+      const note = document.createElement("p");
+      note.className = "tag-note ok";
+      note.textContent = "Integrity check passed — this link hasn't been altered.";
+      $("r-dest").after(note);
+    }
+
+    if (tagState?.needsPassphrase) {
+      const box = $("r-passphrase");
+      box.hidden = false;
+      const check = async () => {
+        const result = await verify(payload, TAG_SIGNED, tag, $("r-pass").value);
+        const existing = box.querySelector(".tag-note");
+        if (existing) existing.remove();
+        const note = document.createElement("p");
+        note.className = `tag-note ${result.ok ? "ok" : "bad"}`;
+        note.textContent = result.ok
+          ? "Signature verified — made by someone who knows this passphrase."
+          : "Signature does not match this passphrase.";
+        box.append(note);
+      };
+      $("r-check").addEventListener("click", check);
+      $("r-pass").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") check();
+      });
+    }
+
     if (risk.reasons.length) {
       const list = $("r-warnings");
       list.hidden = false;
@@ -98,6 +155,10 @@ async function runRedirect() {
       $("r-note").textContent =
         `It opens an external app (${url.protocol.replace(":", "")}). ` +
         "Continue only if you trust it.";
+    } else if (tagState?.needsPassphrase) {
+      $("r-title").textContent = "This link is signed";
+      $("r-note").textContent =
+        "Nothing has been loaded yet. Check the signature, or continue without it.";
     } else {
       $("r-title").textContent = "Where this link goes";
       $("r-note").textContent =
@@ -218,6 +279,11 @@ function setUpCreate() {
   const result = $("result");
   const breakdown = $("breakdown");
 
+  if (!canSign) {
+    $("tamper").checked = false;
+    $("tamper").disabled = true;
+  }
+
   if (!canCompress) {
     $("clean-note").textContent =
       "utm_*, fbclid, gclid · this browser can't DEFLATE, so links will be longer";
@@ -249,7 +315,22 @@ function setUpCreate() {
     }
 
     error.hidden = true;
-    const link = origin() + "#" + analysis.payload +
+
+    // Tags are computed over the payload, so they never change where the link
+    // goes — stripping one leaves a working link, it just stops being checkable.
+    let fragment = analysis.payload;
+    const passphrase = $("passphrase").value.trim();
+    try {
+      if (passphrase) {
+        fragment = join(fragment, TAG_SIGNED, await sign(analysis.payload, passphrase));
+      } else if ($("tamper").checked && canSign) {
+        fragment = join(fragment, TAG_CHECK, await checksum(analysis.payload));
+      }
+    } catch {
+      // Hashing unavailable: a plain link is still a working link.
+    }
+
+    const link = origin() + "#" + fragment +
       ($("preview").checked ? PREVIEW_SUFFIX : "");
     $("short").value = link;
     result.hidden = false;
@@ -294,7 +375,8 @@ function setUpCreate() {
 
   input.addEventListener("input", schedule);
   input.addEventListener("paste", () => setTimeout(update, 0));
-  for (const id of ["clean", "preview"]) $(id).addEventListener("change", update);
+  for (const id of ["clean", "preview", "tamper"]) $(id).addEventListener("change", update);
+  $("passphrase").addEventListener("input", schedule);
 
   $("copy").addEventListener("click", async () => {
     const button = $("copy");

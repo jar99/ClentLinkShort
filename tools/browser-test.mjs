@@ -74,7 +74,10 @@ try {
   await page.waitForSelector("#result:not([hidden])");
 
   const link = await page.inputValue("#short");
-  check("a link is generated", /#[A-Za-z0-9_-]+$/.test(link), link.slice(0, 60));
+  // Links carry an integrity tag by default, so the fragment is
+  // <payload>.c<tag> rather than a bare payload.
+  check("a link is generated", /#[A-Za-z0-9_-]+(\.[ch][A-Za-z0-9_-]+)?$/.test(link),
+    link.slice(0, 60));
   check("the link is shorter than the input",
     link.length < LONG.length, `${LONG.length} -> ${link.length}`);
 
@@ -230,6 +233,93 @@ try {
     check(`a ${label} destination is not followed silently`, stayed && warned > 0,
       `stayed=${stayed} warnings=${warned}`);
     await victim.close();
+  }
+
+  // ---- integrity tag ------------------------------------------------------
+  {
+    const stale = await page.inputValue("#short").catch(() => "");
+    await page.fill("#url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    await page.waitForFunction((previous) => {
+      const field = document.getElementById("short");
+      return field && field.value && field.value !== previous;
+    }, stale, { timeout: 5000 });
+    const tagged = await page.inputValue("#short");
+    check("links carry an integrity tag by default", /#[A-Za-z0-9_-]+\.c[A-Za-z0-9_-]+$/
+      .test(tagged), tagged.slice(-28));
+
+    // A template should have made this one small.
+    const payload = tagged.split("#")[1].split(".")[0];
+    check("a YouTube link uses a template", payload.length <= 18, `${payload.length} chars`);
+
+    const follower = await context.newPage();
+    await follower.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "DEST" }));
+    await follower.goto(tagged);
+    await follower.waitForURL((url) => !url.href.startsWith(BASE), { timeout: 5000 })
+      .catch(() => {});
+    check("a tagged link still follows to the destination",
+      follower.url() === "https://www.youtube.com/watch?v=dQw4w9WgXcQ", follower.url());
+    await follower.close();
+
+    // Flip one character of the payload; the tag must catch it.
+    const at = tagged.indexOf("#") + 2;
+    const swapped = tagged[at] === "A" ? "B" : "A";
+    const altered = tagged.slice(0, at) + swapped + tagged.slice(at + 1);
+    const victim = await context.newPage();
+    await victim.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "SHOULD NOT REACH" }));
+    await victim.goto(altered);
+    await victim.waitForSelector("#r-title");
+    const title = (await victim.textContent("#r-title")).trim();
+    check("an altered link is refused, not followed",
+      victim.url().startsWith(BASE) && title === "This link has been altered", title);
+    await victim.close();
+  }
+
+  // ---- signed links -------------------------------------------------------
+  {
+    // The passphrase field is behind a <details>, which has to be open before
+    // Playwright will type into it — same as for a person.
+    await page.evaluate(() => { document.querySelector(".advanced").open = true; });
+    await page.fill("#passphrase", "team-secret");
+    const stale = await page.inputValue("#short");
+    await page.fill("#url", "https://example.com/signed/target");
+    await page.waitForFunction((previous) => {
+      const field = document.getElementById("short");
+      return field && field.value && field.value !== previous;
+    }, stale, { timeout: 5000 });
+    const signed = await page.inputValue("#short");
+    check("a passphrase produces a signed link",
+      /#[A-Za-z0-9_-]+\.h[A-Za-z0-9_-]{16}$/.test(signed), signed.slice(-24));
+
+    const reader = await context.newPage();
+    await reader.route("**/*", (route) =>
+      route.request().url().startsWith(BASE)
+        ? route.continue()
+        : route.fulfill({ status: 200, body: "DEST" }));
+    await reader.goto(signed);
+    await reader.waitForSelector("#r-passphrase:not([hidden])");
+    check("a signed link waits instead of redirecting", reader.url().startsWith(BASE));
+
+    await reader.fill("#r-pass", "wrong");
+    await reader.click("#r-check");
+    await reader.waitForSelector("#r-passphrase .tag-note");
+    check("the wrong passphrase is rejected",
+      (await reader.textContent("#r-passphrase .tag-note")).includes("does not match"));
+
+    await reader.fill("#r-pass", "team-secret");
+    await reader.click("#r-check");
+    await reader.waitForFunction(() =>
+      document.querySelector("#r-passphrase .tag-note")?.textContent.includes("verified"));
+    check("the right passphrase verifies",
+      (await reader.textContent("#r-passphrase .tag-note")).includes("verified"));
+    await reader.close();
+
+    await page.fill("#passphrase", "");
   }
 
   // ---- works with JavaScript switched off ---------------------------------

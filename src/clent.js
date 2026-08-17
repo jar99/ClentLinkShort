@@ -7,16 +7,22 @@
  * Zero dependencies. Runs unmodified in browsers and in Node >= 18.
  *
  * ---------------------------------------------------------------------------
- * Wire format v4
+ * Wire format v5
  *
  * A continuous bit stream written straight into the Base64url alphabet at
  * 6 bits per character. Nothing rounds up to a byte, so nothing is wasted.
  *
- *   6 bits  header  bits 0-1  scheme: 0 https://, 1 http://, 2 verbatim
+ *   6 bits  header  bits 0-1  scheme: 0 https://, 1 http://, 2 verbatim,
+ *                                     3 template
  *                   bit  2    "www." was stripped from the host
  *                   bit  3    host came from the dictionary
  *                   bits 4-5  body mode: 0 text6, 1 raw, 2 deflate
  *   8 bits  host dictionary index, present only when bit 3 is set
+ *
+ * Under scheme 3 the layout is different: 8 bits of template index, then each
+ * slot as 6 bits of length followed by its characters at whatever width that
+ * slot's alphabet needs. A YouTube ID costs 6 bits a character rather than
+ * the ~9 the general text encoder averages once shift symbols are counted.
  *   body    text6   6-bit symbols, terminated by END
  *           raw     UTF-8 bytes, 8 bits each
  *           deflate DEFLATE-raw bytes, 8 bits each
@@ -34,13 +40,15 @@
 
 import { HOSTS, HOST_INDEX } from "./hosts.js";
 import { TOKENS } from "./tokens.js";
+import { CHARSETS, COMPILED, BY_HOST, TEMPLATES, MAX_SLOT, fill } from "./templates.js";
 
-export { HOSTS, TOKENS };
+export { HOSTS, TOKENS, TEMPLATES };
 
 /** Wire format version this build reads and writes. */
-export const VERSION = 4;
+export const VERSION = 5;
 
-export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2;
+export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2,
+  SCHEME_TEMPLATE = 3;
 export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
 
 /** @type {readonly string[]} Human-readable body mode names, indexed by mode. */
@@ -123,6 +131,27 @@ export const TRACKING_BY_HOST = Object.freeze([
   { host: /(?:^|\.)(?:ebay|etsy)\.[a-z.]+$/i, params: /^(?:_from|hash|var|ref)$/i },
   { host: /(?:^|\.)(?:walmart|target|bestbuy)\.com$/i, params: /^(?:from|selectedSellerId|sid)$/i },
   { host: /(?:^|\.)aliexpress\.[a-z.]+$/i, params: /^(?:sk|aff_[\w]+|terminal_id|algo_[\w]+)$/i },
+
+  // `ref` is the one people ask for most, and it cannot go in the global list.
+  // Measured over the corpus it appears on 0.05% of URLs, and the values are
+  // things like "Luuk.+23:26-49", "Matt.+6:1" and "495-99-8" — Bible verses,
+  // CAS registry numbers, page selectors. Removing it globally would break
+  // those links to save a handful of characters on the sites where it really
+  // is tracking. So it is removed on those sites, by name.
+  {
+    host: /(?:^|\.)(?:temu|shein|wayfair|newegg|chewy|nordstrom|macys|costco|otto|zalando|asos|johnlewis|argos|ikea|homedepot|lowes|sephora|rakuten|mercadolibre|alibaba|taobao|banggood|wish)\.[a-z.]+$/i,
+    params: /^(?:ref|refer|referrer|source|from|channel|spm_id|_pid)$/i,
+  },
+  {
+    host: /(?:^|\.)(?:tiktok|snapchat|pinterest|threads|bsky|mastodon\.social|tumblr|vk|weibo)\.[a-z.]+$/i,
+    params: /^(?:ref|ref_src|source|invite|from)$/i,
+  },
+  {
+    host: /(?:^|\.)(?:substack|medium|patreon|kickstarter|gofundme|eventbrite)\.[a-z.]+$/i,
+    params: /^(?:ref|source|utm|r|triedRedirect)$/i,
+  },
+  { host: /(?:^|\.)(?:booking|expedia|airbnb|tripadvisor)\.[a-z.]+$/i,
+    params: /^(?:aid|label|sid|source_impression_id|federated_search_id|search_mode)$/i },
 ]);
 
 /* -------------------------------------------------------------------------- *
@@ -335,6 +364,109 @@ export function parse(input) {
   return url;
 }
 
+/* -------------------------------------------------------------------------- *
+ * Templates
+ * -------------------------------------------------------------------------- */
+
+/** Index of each charset's characters, for encoding. */
+const CHARSET_INDEX = Object.fromEntries(Object.entries(CHARSETS).map(([name, set]) => [
+  name, { set, index: new Map([...set.chars].map((c, i) => [c, i])) },
+]));
+
+/**
+ * Try to express a URL as one of the templates.
+ *
+ * Returns null unless the captured values round-trip: every value has to fit
+ * its declared alphabet, be short enough for the 6-bit length field, and
+ * substituting them back must reproduce the URL exactly. Approximate matches
+ * are worse than useless here — they would resolve to a different page.
+ *
+ * @param {string} href
+ * @returns {{index: number, values: string[], bits: number}|null}
+ */
+function asTemplate(url) {
+  // Only templates for this exact host can match, so most URLs do no regex
+  // work at all.
+  if (url.protocol !== "https:") return null;
+  const family = BY_HOST.get(url.host);
+  if (!family) return null;
+
+  const href = url.href;
+  let best = null;
+
+  for (const template of family) {
+    const index = template.index;
+    const found = template.match.exec(href);
+    if (!found) continue;
+
+    const values = found.slice(1);
+    let bits = 0;
+    let usable = true;
+
+    for (let slot = 0; slot < values.length; slot++) {
+      const value = values[slot];
+      const charset = CHARSET_INDEX[template.slots[slot]];
+      if (!value || value.length > MAX_SLOT) { usable = false; break; }
+      for (const character of value) {
+        if (!charset.index.has(character)) { usable = false; break; }
+      }
+      if (!usable) break;
+      bits += 6 + value.length * charset.set.bits;
+    }
+    if (!usable) continue;
+
+    // The guard that makes this safe to use at all.
+    if (fill(index, values) !== href) continue;
+
+    if (!best || bits < best.bits) best = { index, values, bits };
+  }
+  return best;
+}
+
+/**
+ * @param {BitWriter} w
+ * @param {{index: number, values: string[]}} template
+ */
+function writeTemplate(w, { index, values }) {
+  w.push(SCHEME_TEMPLATE, 6); // mode bits stay 0: slots are self-describing
+  w.push(index, 8);
+  const slots = COMPILED[index].slots;
+  for (let slot = 0; slot < values.length; slot++) {
+    const charset = CHARSET_INDEX[slots[slot]];
+    w.push(values[slot].length, 6);
+    for (const character of values[slot]) {
+      w.push(charset.index.get(character), charset.set.bits);
+    }
+  }
+  return w.finish();
+}
+
+/**
+ * @param {BitReader} reader
+ * @returns {string} the rebuilt URL
+ */
+function readTemplate(reader) {
+  const index = reader.read(8);
+  const template = COMPILED[index];
+  if (!template) throw new ClentError("This link uses a newer template than this page has.");
+
+  const values = [];
+  for (const name of template.slots) {
+    const charset = CHARSETS[name];
+    const length = reader.read(6);
+    if (length === 0) throw new ClentError("This link is damaged — an empty field.");
+    let value = "";
+    for (let i = 0; i < length; i++) {
+      const at = reader.read(charset.bits);
+      const character = charset.chars[at];
+      if (character === undefined) throw new ClentError("This link is damaged.");
+      value += character;
+    }
+    values.push(value);
+  }
+  return fill(index, values);
+}
+
 /**
  * Every way this URL could legitimately be split for the wire format.
  *
@@ -536,12 +668,35 @@ export async function analyze(input, options = {}) {
   const shapes = shapesFor(url);
   /** @type {{payload: string, shape: shapes[0], mode: number}|null} */
   let winner = null;
+
+  // A template, when one fits, is just another candidate: it wins on length
+  // or it does not get used.
+  const template = asTemplate(url);
+  const templateCandidate = template
+    ? { payload: writeTemplate(new BitWriter(), template), index: template.index }
+    : null;
   /** Best length seen per mode, across all shapes. */
   const candidates = { text6: null, raw: null, deflate: null };
 
-  for (const shape of shapes) {
-    const bytes = encoder.encode(shape.body);
-    const zipped = await deflate(bytes);
+  // Deflate costs about three quarters of the time spent encoding, so it runs
+  // once rather than once per shape. The shortest body is the one it is run
+  // on: every other shape's body is that one with a host spelled out in front
+  // of it, and compressing a longer string to beat a shorter one that is its
+  // own suffix does not happen. This is the single place in the encoder that
+  // trades a rule for a measurement, so tools/optimality.js — which builds
+  // every shape and every mode without this shortcut — is what keeps it
+  // honest, and it runs over the corpus.
+  const encoded = shapes.map((shape) => encoder.encode(shape.body));
+  let shortest = 0;
+  for (let i = 1; i < encoded.length; i++) {
+    if (encoded[i].length < encoded[shortest].length) shortest = i;
+  }
+  const zippedShortest = await deflate(encoded[shortest]);
+
+  for (let index = 0; index < shapes.length; index++) {
+    const shape = shapes[index];
+    const bytes = encoded[index];
+    const zipped = index === shortest ? zippedShortest : null;
 
     for (const mode of [MODE_TEXT6, MODE_RAW, MODE_DEFLATE]) {
       if (mode === MODE_DEFLATE && !zipped) continue;
@@ -558,6 +713,23 @@ export async function analyze(input, options = {}) {
     }
   }
 
+  if (templateCandidate && templateCandidate.payload.length < winner.payload.length) {
+    return {
+      payload: templateCandidate.payload,
+      url,
+      mode: MODE_TEXT6,
+      modeName: "template",
+      removed,
+      host: url.host,
+      hostByte: null,
+      template: templateCandidate.index,
+      templatePattern: TEMPLATES[templateCandidate.index].pattern,
+      headerBits: 14,
+      bodyBits: templateCandidate.payload.length * 6 - 14,
+      candidates: { ...candidates, template: templateCandidate.payload.length },
+    };
+  }
+
   const { payload, shape, mode } = winner;
   const headerBits = 6 + (shape.hostByte === null ? 0 : 8);
   return {
@@ -568,9 +740,14 @@ export async function analyze(input, options = {}) {
     removed,
     host: shape.host,
     hostByte: shape.hostByte,
+    template: null,
+    templatePattern: null,
     headerBits,
     bodyBits: payload.length * 6 - headerBits,
-    candidates,
+    candidates: {
+      ...candidates,
+      template: templateCandidate ? templateCandidate.payload.length : null,
+    },
   };
 }
 
@@ -599,6 +776,12 @@ export async function expand(payload) {
   const header = reader.read(6);
   const flags = header & 0b1111;
   const mode = (header >> 4) & 0b11;
+
+  // Templates have their own layout after the header, so they branch first.
+  if ((flags & SCHEME_MASK) === SCHEME_TEMPLATE) {
+    return finish(readTemplate(reader));
+  }
+
   const hostIndex = flags & F_HOST ? reader.read(8) : null;
 
   let body;
@@ -662,6 +845,16 @@ export async function expand(payload) {
     throw new ClentError("This link uses an unknown format.");
   }
 
+  return finish(href);
+}
+
+/**
+ * Final gate for every decode path, template or not: it has to parse, and it
+ * has to have a scheme we are willing to hand to a browser.
+ * @param {string} href
+ * @returns {URL}
+ */
+function finish(href) {
   let url;
   try {
     url = new URL(href);

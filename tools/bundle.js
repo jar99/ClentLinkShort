@@ -67,5 +67,48 @@ export async function bundle(entry) {
     return `/* ${path.relative(ROOT, file)} */\n${stripped}`;
   });
 
+  assertNoCollisions(order, chunks);
   return { code: chunks.join("\n"), files: order };
+}
+
+/**
+ * Top-level declarations, by name, per module.
+ *
+ * A heuristic, and deliberately a conservative one: it matches declarations
+ * starting in column zero, which in this codebase means top level, because
+ * everything nested is indented. It can miss a declaration it should catch;
+ * it will not invent one that is not there.
+ */
+const TOP_LEVEL =
+  /^(?:export\s+)?(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+
+/**
+ * Refuse to emit a bundle whose modules would trip over each other.
+ *
+ * Concatenating modules puts every top-level name in one scope. Two modules
+ * each declaring `const encoder` is perfectly legal as modules and a
+ * SyntaxError as a bundle — and the failure appears in the browser, not here,
+ * long after the build reported success. This turns that into a build error.
+ *
+ * @param {string[]} files
+ * @param {string[]} chunks
+ */
+function assertNoCollisions(files, chunks) {
+  /** @type {Map<string, string>} name -> the file that declared it first */
+  const declared = new Map();
+  const clashes = [];
+
+  chunks.forEach((chunk, i) => {
+    const file = path.relative(ROOT, files[i]);
+    for (const [, name] of chunk.matchAll(TOP_LEVEL)) {
+      const previous = declared.get(name);
+      if (previous && previous !== file) clashes.push({ name, previous, file });
+      else declared.set(name, file);
+    }
+  });
+
+  if (clashes.length) {
+    throw new Error("top-level names collide once bundled into one scope:\n" +
+      clashes.map((c) => `  "${c.name}" in both ${c.previous} and ${c.file}`).join("\n"));
+  }
 }

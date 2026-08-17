@@ -100,6 +100,7 @@ const summary = {
     ({ label, length, breakEven: point, shorterPct, medianSaving })),
 
   modes: stats.modes,
+  templatePct: pct(stats.templates, total),
   dictHitPct: pct(stats.dictHits, total),
   trackingPct: pct(stats.withTracking, total),
   trackingSavingPct: pct(stats.trackingSavedBytes, stats.trackingBaseBytes),
@@ -150,6 +151,7 @@ if (AS_JSON) {
   console.log();
 
   row("Dictionary", `${summary.dictHitPct.toFixed(1)}% of hosts`);
+  row("Templates", `${summary.templatePct.toFixed(1)}% of URLs matched one`);
   row("Tracking", `${summary.trackingPct.toFixed(2)}% of URLs carried any; ` +
     `stripping saves ${summary.trackingSavingPct.toFixed(1)}% on those`);
   console.log();

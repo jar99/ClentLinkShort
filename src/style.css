@@ -363,6 +363,40 @@ textarea::placeholder { color: var(--ink-faint); }
 
 .modes { display: grid; gap: 7px; margin-top: 10px; }
 
+/* ── advanced options ────────────────────────────────────────────────── */
+
+.advanced {
+  margin-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: .87rem;
+  color: var(--ink-soft);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.advanced summary:hover { color: var(--ink); }
+.advanced p { margin: 8px 0 10px; }
+
+#r-passphrase { margin: 0 0 20px; text-align: left; }
+#r-passphrase .out { margin-top: 8px; }
+
+.tag-note {
+  font-size: .85rem;
+  margin: 10px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.tag-note.ok { color: var(--good); }
+.tag-note.bad { color: var(--bad); font-weight: 560; }
+
 .mode-row {
   display: grid;
   grid-template-columns: 4.6rem 1fr 5.5rem;

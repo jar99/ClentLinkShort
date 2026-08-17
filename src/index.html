@@ -35,6 +35,14 @@
     <p class="muted" id="r-note">Taking you to</p>
     <p class="dest" id="r-dest"></p>
     <ul class="warnings" id="r-warnings" hidden></ul>
+    <div id="r-passphrase" hidden>
+      <p class="muted small">This link is signed. Enter the passphrase to check it.</p>
+      <div class="out">
+        <input type="text" id="r-pass" placeholder="passphrase" autocomplete="off"
+               spellcheck="false" aria-label="Passphrase">
+        <button class="btn" id="r-check" type="button">Check</button>
+      </div>
+    </div>
     <div class="actions" id="r-actions">
       <a class="btn primary" id="r-go" rel="noreferrer noopener">Continue</a>
       <a class="btn" href="./">Make a link</a>
@@ -90,7 +98,24 @@
         <input type="checkbox" id="preview">
         <span>Preview link<em>shows the destination instead of going there</em></span>
       </label>
+      <label class="opt">
+        <input type="checkbox" id="tamper" checked>
+        <span>Tamper check<em>4 characters; catches a link that got clipped or edited</em></span>
+      </label>
     </div>
+
+    <details class="advanced">
+      <summary>Sign this link with a passphrase</summary>
+      <p class="muted small">
+        Adds 18 characters. Anyone opening the link needs the same passphrase to
+        check it, so this is for a group that already shares one. It proves the
+        link came from someone who knows the passphrase — not from a particular
+        person, and not that the destination is safe. Leave it empty for a normal
+        link.
+      </p>
+      <input type="text" id="passphrase" placeholder="shared passphrase"
+             autocomplete="off" spellcheck="false" aria-label="Signing passphrase">
+    </details>
 
     <p class="error" id="error" role="alert" hidden></p>
 
@@ -187,6 +212,46 @@
       Measured {{generated}} by <code>npm run validate</code>. One mismatch fails the
       build. The run also checks that no link could have been encoded smaller by any
       other setting the encoder had available.
+    </p>
+  </section>
+
+  <section>
+    <h2>Known links get much shorter</h2>
+    <p>
+      A lot of shared links are one site's URL scheme with an ID dropped into it.
+      <code>youtube.com/watch?v=dQw4w9WgXcQ</code> is 43 characters, of which 11
+      carry any information. About 40 shapes are recognised — YouTube, Amazon,
+      imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify and more —
+      and for those only the ID is stored, at the exact width its own alphabet
+      needs.
+    </p>
+    <div class="stats">
+      <div class="stat"><b>43 → 15</b><span>youtube.com/watch?v=…</span></div>
+      <div class="stat"><b>36 → 14</b><span>amazon.com/dp/…</span></div>
+      <div class="stat"><b>31 → 11</b><span>i.imgur.com/….jpg</span></div>
+      <div class="stat"><b>40 → 15</b><span>instagram.com/p/…</span></div>
+    </div>
+    <p class="muted small">
+      A shape is only used when substituting the captured ID back in reproduces
+      the original URL character for character. A near miss falls back to the
+      general encoder rather than guessing.
+    </p>
+  </section>
+
+  <section>
+    <h2>Tamper checks</h2>
+    <p>
+      Every link gets a four-character check by default. If a link is clipped by a
+      chat app or edited in transit, opening it says so instead of taking you
+      somewhere you weren't sent.
+    </p>
+    <p>
+      That check has no key, so anyone can recompute it — it catches accidents,
+      not attackers, and it isn't described as anything more. For more than that,
+      sign a link with a passphrase: 18 extra characters, and whoever opens it can
+      confirm it was made by someone who knows the same passphrase. That proves
+      membership of whoever shares that passphrase, not a particular person, and
+      says nothing about whether the destination is safe.
     </p>
   </section>
 

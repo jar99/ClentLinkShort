@@ -1,6 +1,6 @@
 {
   "name": "clent",
-  "version": "3.0.0",
+  "version": "5.0.0",
   "description": "A stateless URL shortener codec \u2014 the destination is packed into the link, so nothing is ever stored",
   "type": "module",
   "license": "MIT",
@@ -11,13 +11,17 @@
       "types": "./src/clent.d.ts",
       "default": "./src/clent.js"
     },
-    "./hosts.js": "./src/hosts.js"
+    "./hosts.js": "./src/hosts.js",
+    "./sign.js": "./src/sign.js",
+    "./templates.js": "./src/templates.js"
   },
   "files": [
     "src/clent.js",
     "src/clent.d.ts",
     "src/hosts.js",
-    "src/tokens.js"
+    "src/tokens.js",
+    "src/templates.js",
+    "src/sign.js"
   ],
   "sideEffects": false,
   "engines": {

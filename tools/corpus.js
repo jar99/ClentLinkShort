@@ -51,7 +51,8 @@ export function emptyStats() {
     failures: [],
     /** @type {Array<{url: string, wasted: number}>} */
     suboptimal: [],
-    modes: { text6: 0, raw: 0, deflate: 0 },
+    modes: { text6: 0, raw: 0, deflate: 0, template: 0 },
+    templates: 0,
     inputBytes: 0,
     payloadBytes: 0,
     linkBytes: 0,
@@ -135,7 +136,8 @@ export async function check(raw, stats, { maxFailures = 50, origin = DEFAULT_ORI
 
   const linkLength = origin.length + result.payload.length;
   stats.checked++;
-  stats.modes[result.modeName]++;
+  stats.modes[result.modeName] = (stats.modes[result.modeName] ?? 0) + 1;
+  if (result.template !== null && result.template !== undefined) stats.templates++;
   stats.inputBytes += raw.length;
   stats.payloadBytes += result.payload.length;
   stats.linkBytes += linkLength;

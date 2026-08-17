@@ -121,7 +121,7 @@ function applyStrictCsp(html) {
 
   const replaced = html.replace(
     /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
-    `<meta http-equiv="Content-Security-Policy" content="${policy}">`);
+    () => `<meta http-equiv="Content-Security-Policy" content="${policy}">`);
 
   if (replaced === html) throw new Error("no Content-Security-Policy meta tag to replace");
   return replaced;
@@ -168,11 +168,16 @@ async function main() {
   const inlineJs = `(()=>{"use strict";\n${js}\n})();`;
 
   // Fold everything into the document, replacing the dev-mode references.
+  //
+  // The replacements are functions, not strings, and that is load-bearing: a
+  // string replacement expands "$&", "$1" and friends, and the bundled code
+  // contains the standard regex-escaping idiom `replace(/../g, "\\$&")`. As a
+  // string, that "$&" would be substituted with the matched <script> tag and
+  // quietly corrupt the built page. A function replacement disables all of it.
   let html = htmlSource
-    .replace(/[ \t]*<link rel="stylesheet"[^>]*>\n?/,
-      `<style>${css}</style>`)
+    .replace(/[ \t]*<link rel="stylesheet"[^>]*>\n?/, () => `<style>${css}</style>`)
     .replace(/[ \t]*<script type="module" src="[^"]*"><\/script>\n?/,
-      `<script>${inlineJs}</script>`);
+      () => `<script>${inlineJs}</script>`);
 
   if (/<link[^>]+rel="stylesheet"/.test(html) || /<script[^>]+src=/.test(html)) {
     throw new Error("index.html no longer matches the inlining patterns in build.mjs");

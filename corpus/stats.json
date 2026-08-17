@@ -6,19 +6,19 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://jar99.github.io/ClentLinkShort/#",
-  "payloadRatio": 0.7603666687048518,
+  "payloadRatio": 0.7578749670012944,
   "payloadShorterPct": 99.1350246681026,
   "medianRatio": 0.6818181818181818,
   "p90Ratio": 0.8554216867469879,
-  "linkSavingsMean": -0.8552592517139203,
-  "linkSavingsMedian": -0.7179487179487178,
+  "linkSavingsMean": -0.8519992332108767,
+  "linkSavingsMedian": -0.7105263157894737,
   "linkShorterPct": 3.615037836847328,
   "bareShorterPct": 0.00036059946054320705,
   "deepShorterPct": 6.349128419973106,
   "bareCount": 277316,
   "deepCount": 366633,
-  "deepSavingsMedian": -0.4193548387096775,
-  "deepSavingsMean": -0.4233812358141886,
+  "deepSavingsMedian": -0.4098360655737705,
+  "deepSavingsMean": -0.41765538556333875,
   "breakEvenLength": 180,
   "prefixes": [
     {
@@ -26,20 +26,20 @@
       "length": 40,
       "breakEven": 180,
       "shorterPct": 3.615037836847328,
-      "medianSaving": -0.7179487179487178
+      "medianSaving": -0.7105263157894737
     },
     {
       "label": "short path on the same host",
       "length": 27,
       "breakEven": 170,
-      "shorterPct": 5.864750158785866,
-      "medianSaving": -0.3999999999999999
+      "shorterPct": 6.759696808287613,
+      "medianSaving": -0.39473684210526305
     },
     {
       "label": "a short custom domain",
       "length": 20,
       "breakEven": 105,
-      "shorterPct": 12.712963293676983,
+      "shorterPct": 13.659156237528126,
       "medianSaving": -0.22857142857142865
     },
     {
@@ -51,11 +51,13 @@
     }
   ],
   "modes": {
-    "text6": 631971,
-    "raw": 2507,
-    "deflate": 9471
+    "text6": 620667,
+    "raw": 1316,
+    "deflate": 9467,
+    "template": 12499
   },
-  "dictHitPct": 16.762973465289953,
-  "trackingPct": 3.6203177580833263,
-  "trackingSavingPct": 25.17919899695031
+  "templatePct": 1.940992221433685,
+  "dictHitPct": 14.822757702861562,
+  "trackingPct": 3.6207836334865027,
+  "trackingSavingPct": 25.18050201012512
 }

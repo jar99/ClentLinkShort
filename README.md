@@ -13,7 +13,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 64 tests, no dependencies
+npm test              # 83 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -205,30 +205,80 @@ Append `~` to a link to preview where it goes instead of going there.
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **The predictable parts become bits.** Scheme, `www.` and a trailing slash cost 12
+2. **Known URL shapes collapse to an ID.** About 40 templates cover YouTube, Amazon,
+   imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv
+   and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
+   information; templated it is 15. Each slot is encoded at its own alphabet's width —
+   a YouTube ID is Base64url so 6 bits a character, an Amazon ASIN is uppercase and
+   digits so also 6, a numeric status ID is 4 — where the general text encoder would
+   spend up to 12 a character on capitals.
+
+   A template is used **only if** substituting the captured values back into the
+   pattern reproduces the URL exactly. A near miss falls back rather than guessing;
+   getting this wrong would mean a link that silently resolves somewhere else.
+3. **The predictable parts become bits.** Scheme, `www.` and a trailing slash cost 12
    characters in a normal URL; here they're 3 bits in a 6-bit header.
-3. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts included, chosen by category rather than mined — corpus frequency measures what Wikipedia cites, not what people shorten.
-4. **The rest is encoded three ways and the shortest is kept:**
+4. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts
+   included, chosen by category rather than mined — corpus frequency measures what
+   Wikipedia cites, not what people shorten.
+5. **The rest is encoded three ways and the shortest is kept:**
    - **text6** packs each byte as a 6-bit symbol written straight into the Base64url
      alphabet. Base64 is also 6 bits per character, so a lowercase URL comes out the
      same length it went in. A 64-entry substring dictionary (`.com`, `article`,
      `/index`, `wiki`…) replaces common runs with 12 bits each, which removes about
      12% of the body. Capitals cost a shift symbol; anything else escapes to a literal
      byte.
-   - **raw** is plain 8-bit bytes, which wins on uppercase-dense IDs where text6's
-     shift symbols would cost 12 bits per character instead of 8.
+   - **raw** is plain 8-bit bytes, which wins on uppercase-dense IDs.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
    Encoding naively as bytes-then-Base64 costs 1.33 characters per character. text6
    costs 1.0 or less.
 
-The payload is one continuous bit stream, so nothing rounds up to a byte and there's
-no padding.
+On the corpus: text6 wins 96.3%, templates 2.0%, deflate 1.5%, raw 0.2%.
+
+## Tamper resistance
+
+Two things, with different strengths, and the difference matters.
+
+**Integrity check** (four characters, on by default). A truncated SHA-256 of the
+payload. Catches a link that was clipped by a chat client, mangled, or edited. It has
+no key, so anyone can recompute it — **it catches accidents, not attackers**, and is
+never described as more than that. Verified before the destination is shown, let alone
+followed.
+
+**Signature** (18 characters, opt-in). HMAC-SHA-256 under a passphrase. Proves the link
+was made by someone who knows the passphrase. Also:
+
+- It doesn't identify a person — everyone with the passphrase can sign.
+- It doesn't stop anyone stripping it; a forger hands over an unsigned link instead,
+  which is why the page shows signed and unsigned links differently.
+- It's useless if the passphrase is public.
+
+Public-key signatures would fix the identity problem. The smallest useful one is 64
+bytes — 86 characters — on a payload averaging 30, so it would *be* the link. The short
+option was chosen and the trade written down rather than hidden.
+
+The tag rides after the payload, `#<payload>.c<tag>` or `#<payload>.h<tag>`, so it never
+changes where the link goes and stripping it leaves a working link.
+
+### On removing `ref`
+
+Asked for, and it can't be done globally. Measured over the corpus, `ref=` appears on
+0.05% of URLs and the values are overwhelmingly *data*: `Luuk.+23:26-49`, `Matt.+6:1`,
+`495-99-8` (a CAS registry number), `pdf_download`, page numbers. Stripping it
+everywhere would break those links to save a few characters on the sites where it is
+tracking.
+
+So it's removed by host — Amazon, eBay, Etsy, Reddit, Temu, Shein, Wayfair, IKEA, ASOS,
+Substack, TikTok, Pinterest, Booking and others — along with the rest of their
+site-specific tracking. `?ref=Matt.+6:1` on a Bible site survives; `?ref=sr_1_3` on
+Amazon does not.
 
 ### Wire format v3
 
 ```
-6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = verbatim
+6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = verbatim,
+                                    3 = template
                   bit  2    "www." was stripped
                   bit  3    host came from the dictionary
                   bits 4-5  body mode: 0 = text6, 1 = raw, 2 = deflate
@@ -237,6 +287,15 @@ body     text6    6-bit symbols: 0-58 literal, 59 TOKEN (+6-bit index),
                   61 SHIFT, 62 ESC (+8-bit byte), 63 END
          raw      UTF-8 bytes, 8 bits each
          deflate  DEFLATE-raw bytes, 8 bits each
+
+under scheme 3:
+8 bits   template index
+per slot 6 bits of length, then that many characters at the slot
+         alphabet's own width (4 bits for digits, 6 for Base64url)
+
+optional tag, outside the payload:
+         #<payload>.c<tag>   keyless integrity check
+         #<payload>.h<tag>   HMAC under a passphrase
 ```
 
 The body is `host + /path?query#frag`, or just the tail when the host is
