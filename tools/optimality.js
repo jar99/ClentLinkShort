@@ -1,32 +1,37 @@
 /**
  * Is the encoder's answer actually the best one it could have given?
  *
- * `shorten()` tries three body encodings and keeps the shortest, but that is
- * only part of the decision. It also decides whether to use the host
- * dictionary, whether to strip a `www.` prefix, and whether to fall back to
- * storing the URL verbatim — and it makes each of those once, up front, by a
- * rule rather than by measurement.
+ * The encoder crosses shapes with body modes and keeps the smallest — but it
+ * takes one measured shortcut (deflate runs only on the shortest body), and a
+ * bug in its shape or template enumeration would just make links quietly
+ * longer, which no round-trip test can see.
  *
- * This enumerates every combination of those choices, builds a real payload
- * for each, and reports the shortest. Anything shorter than what `shorten()`
- * returned is a genuine miss: a link that could have been smaller.
+ * So this oracle enumerates every combination itself — both host spellings,
+ * dictionary or spelled out, the scheme-index form, the spelled-scheme form,
+ * every body mode with deflate on EVERY shape, and the template form — builds
+ * a real payload for each, and reports the shortest. Anything shorter than
+ * what shorten() returned is a genuine miss.
  *
- * Every candidate here is a legitimate encoding that `expand()` decodes back
- * to the same URL, which the tests check — otherwise "shorter" would just mean
- * "wrong".
+ * Deliberately kept separate from the encoder's own enumeration loop: it
+ * shares only exported constants and the leaf builders. If it shared
+ * shapesFor(), "the encoder is never beaten" would be circular. The real
+ * independence check is in the tests, which decode every candidate via
+ * expand() and compare hrefs — a candidate that is shorter but wrong is a
+ * failure, not a win.
  */
 
 import {
-  build, shorten, parse, stripTracking, deflate, HOSTS,
-  MODE_TEXT6, MODE_RAW, MODE_DEFLATE,
+  build, shorten, parse, stripTracking, BitWriter,
+  SCHEME_HTTPS, SCHEME_HTTP, SCHEME_OTHER, SCHEME_TEMPLATE, SCHEME_IN_BODY,
+  F_WWW, F_HOST, MODE_TEXT6, MODE_RAW, MODE_DEFLATE, MODE_NAMES,
 } from "../src/clent.js";
+import { deflate } from "../src/deflate.js";
+import { HOST_INDEX } from "../src/hosts.js";
+import { SCHEME_INDEX } from "../src/schemes.js";
+import { asTemplate, writeTemplate } from "../src/templates.js";
 
-const HOST_INDEX = new Map(HOSTS.map((h, i) => [h, i]));
 const encoder = new TextEncoder();
 const MODES = [MODE_TEXT6, MODE_RAW, MODE_DEFLATE];
-
-const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2;
-const F_WWW = 0b100, F_HOST = 0b1000;
 
 /**
  * @typedef {object} Candidate
@@ -45,13 +50,26 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
   const url = parse(input instanceof URL ? input.href : input);
   if (clean && (url.protocol === "http:" || url.protocol === "https:")) stripTracking(url);
 
-  /** @type {Array<{flags: number, hostByte: number|null, body: string, how: string}>} */
+  /** @type {Array<{flags: number, hostByte: number|null, schemeIndex: number|null,
+   *                body: string, how: string}>} */
   const shapes = [];
 
-  // Always available: store the whole URL as text and let the decoder parse it.
+  // Always available: the spelled-scheme escape hatch — the whole URL as text.
   shapes.push({
-    flags: SCHEME_VERBATIM, hostByte: null, body: url.href, how: "verbatim",
+    flags: SCHEME_OTHER, hostByte: null, schemeIndex: SCHEME_IN_BODY,
+    body: url.href, how: "scheme spelled in body",
   });
+
+  // The scheme-index form, for any URL at all (the encoder only uses it for
+  // non-compact URLs, but it is legal for every scheme in the table — the
+  // oracle must consider it in case it ever wins).
+  const schemeIndex = SCHEME_INDEX.get(url.protocol);
+  if (schemeIndex !== undefined) {
+    shapes.push({
+      flags: SCHEME_OTHER, hostByte: null, schemeIndex,
+      body: url.href.slice(url.protocol.length), how: `scheme index ${schemeIndex}`,
+    });
+  }
 
   const compactable =
     (url.protocol === "http:" || url.protocol === "https:") &&
@@ -69,21 +87,15 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
     }
 
     for (const { host, wwwFlag, how } of spellings) {
-      // Host spelled out in the body.
       shapes.push({
-        flags: scheme | wwwFlag,
-        hostByte: null,
-        body: host + tail,
-        how: `${how}, host in body`,
+        flags: scheme | wwwFlag, hostByte: null, schemeIndex: null,
+        body: host + tail, how: `${how}, host in body`,
       });
-      // Host as a dictionary index, when it has one.
       const index = HOST_INDEX.get(host);
       if (index !== undefined) {
         shapes.push({
-          flags: scheme | wwwFlag | F_HOST,
-          hostByte: index,
-          body: tail,
-          how: `${how}, dictionary #${index}`,
+          flags: scheme | wwwFlag | F_HOST, hostByte: index, schemeIndex: null,
+          body: tail, how: `${how}, dictionary #${index}`,
         });
       }
     }
@@ -92,16 +104,30 @@ export async function allCandidates(input, { stripTracking: clean = false } = {}
   const candidates = [];
   for (const shape of shapes) {
     const bytes = encoder.encode(shape.body);
+    // Unlike the encoder, deflate every shape: this is the loop that polices
+    // the encoder's shortest-body-only shortcut.
     const zipped = await deflate(bytes);
     for (const mode of MODES) {
       if (mode === MODE_DEFLATE && !zipped) continue;
       candidates.push({
         payload: build(shape.flags, mode, shape.hostByte,
-          mode === MODE_DEFLATE ? zipped : bytes),
-        how: `${shape.how} + ${["text6", "raw", "deflate"][mode]}`,
+          mode === MODE_DEFLATE ? zipped : bytes, shape.schemeIndex),
+        how: `${shape.how} + ${MODE_NAMES[mode]}`,
       });
     }
   }
+
+  // The template form, when one fits.
+  const template = asTemplate(url);
+  if (template) {
+    const w = new BitWriter();
+    w.push(SCHEME_TEMPLATE, 6);
+    candidates.push({
+      payload: writeTemplate(w, template),
+      how: `template #${template.index}`,
+    });
+  }
+
   return candidates;
 }
 

@@ -37,12 +37,12 @@
  * place share a prefix, and stripping the tag cannot change the destination.
  */
 
+import { B64, ClentError } from "./bits.js";
+
 /** Marker for a keyless integrity check. */
 export const TAG_CHECK = "c";
 /** Marker for a passphrase signature. */
 export const TAG_SIGNED = "h";
-
-const B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /** Whether this runtime can hash. Without it, tags cannot be made or checked. */
 export const canSign = typeof crypto !== "undefined" && !!crypto?.subtle;
@@ -59,7 +59,7 @@ function pack(bytes, chars) {
     bits += 8;
     while (bits >= 6 && out.length < chars) {
       bits -= 6;
-      out += B64URL[(acc >> bits) & 63];
+      out += B64[(acc >> bits) & 63];
     }
     acc &= (1 << bits) - 1;
     if (out.length >= chars) break;
@@ -73,7 +73,7 @@ function pack(bytes, chars) {
  * @returns {Promise<string>}
  */
 export async function checksum(payload, chars = 4) {
-  if (!canSign) throw new Error("This browser cannot compute an integrity check.");
+  if (!canSign) throw new ClentError("This browser cannot compute an integrity check.");
   const digest = await crypto.subtle.digest("SHA-256", utf8.encode(payload));
   return pack(new Uint8Array(digest), chars);
 }
@@ -85,8 +85,8 @@ export async function checksum(payload, chars = 4) {
  * @returns {Promise<string>}
  */
 export async function sign(payload, passphrase, chars = 16) {
-  if (!canSign) throw new Error("This browser cannot sign links.");
-  if (!passphrase) throw new Error("A passphrase is needed to sign.");
+  if (!canSign) throw new ClentError("This browser cannot sign links.");
+  if (!passphrase) throw new ClentError("A passphrase is needed to sign.");
   const key = await crypto.subtle.importKey(
     "raw", utf8.encode(passphrase),
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);

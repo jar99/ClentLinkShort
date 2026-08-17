@@ -104,28 +104,6 @@ test("a near-miss never silently resolves to a different URL", async () => {
   }
 });
 
-test("template patterns and slot declarations agree", () => {
-  for (let i = 0; i < TEMPLATES.length; i++) {
-    const { pattern, slots } = TEMPLATES[i];
-    const holes = [...pattern.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
-    assert.equal(holes.length, slots.length, `${pattern}: slot count`);
-    assert.deepEqual(holes, holes.map((_, n) => n), `${pattern}: slots must be in order`);
-    for (const slot of slots) {
-      assert.ok(CHARSETS[slot], `${pattern}: unknown charset "${slot}"`);
-    }
-    assert.ok(pattern.startsWith("https://"), `${pattern}: must be absolute https`);
-  }
-  assert.ok(TEMPLATES.length <= 256, "the template index is 8 bits");
-});
-
-test("charsets are consistent with the widths they claim", () => {
-  for (const [name, set] of Object.entries(CHARSETS)) {
-    assert.ok(set.chars.length <= 1 << set.bits,
-      `${name}: ${set.chars.length} characters do not fit in ${set.bits} bits`);
-    assert.equal(new Set(set.chars).size, set.chars.length, `${name}: duplicate characters`);
-  }
-});
-
 test("filling a template is the exact inverse of matching it", () => {
   for (let i = 0; i < COMPILED.length; i++) {
     const template = COMPILED[i];

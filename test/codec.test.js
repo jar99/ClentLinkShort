@@ -4,14 +4,7 @@ import {
   shorten, expand, analyze, parse, HOSTS,
   MODE_TEXT6, MODE_RAW, MODE_DEFLATE, ClentError,
 } from "../src/clent.js";
-
-/** Encode then decode, asserting the destination survives exactly. */
-async function roundTrip(input, options) {
-  const payload = await shorten(input, options);
-  const out = await expand(payload);
-  assert.equal(out.href, parse(input).href, `round-trip failed for ${input}`);
-  return payload;
-}
+import { roundTrip } from "./helpers.js";
 
 test("ordinary URLs round-trip", async () => {
   for (const url of [
@@ -97,15 +90,6 @@ test("every dictionary host encodes and decodes", async () => {
     const a = await analyze(`https://${host}/probe/path`, { stripTracking: false });
     assert.equal(a.hostByte, HOSTS.indexOf(host), `${host} should hit the dictionary`);
     assert.equal((await expand(a.payload)).href, `https://${host}/probe/path`);
-  }
-});
-
-test("dictionary entries are unique and within one byte", () => {
-  assert.ok(HOSTS.length <= 256, "index is 8 bits");
-  assert.equal(new Set(HOSTS).size, HOSTS.length, "duplicate entries waste indices");
-  for (const host of HOSTS) {
-    assert.equal(host, host.toLowerCase(), `${host} must be lowercase to ever match`);
-    assert.doesNotThrow(() => new URL(`https://${host}`), `${host} must be a valid host`);
   }
 });
 

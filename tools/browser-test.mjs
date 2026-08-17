@@ -87,7 +87,7 @@ try {
   const modeRows = await page.locator(".mode-row").count();
   const winners = await page.locator(".mode-row.won").count();
   check("the bit breakdown renders", segments >= 2, `${segments} segments`);
-  check("all three body modes are shown", modeRows === 3, `${modeRows} rows`);
+  check("all four encodings are shown", modeRows === 4, `${modeRows} rows`);
   check("exactly one mode is marked as the winner", winners === 1, `${winners} marked`);
 
   // ---- following a link ---------------------------------------------------
@@ -320,6 +320,34 @@ try {
     await reader.close();
 
     await page.fill("#passphrase", "");
+  }
+
+  // ---- damaged fragments that are not even decodable ----------------------
+  {
+    // "#%" throws URIError inside decodeURIComponent; this used to leave the
+    // spinner running forever with an unhandled rejection in the console.
+    const broken = await context.newPage();
+    await broken.goto(BASE + "#%");
+    await broken.waitForFunction(() =>
+      document.getElementById("r-title")?.textContent.includes("didn't work"),
+      { timeout: 5000 });
+    const spinnerGone = await broken.locator("#r-spinner").count() === 0;
+    check("an undecodable fragment shows the failure card, not a spinner",
+      spinnerGone, `spinner remained: ${!spinnerGone}`);
+    await broken.close();
+  }
+
+  // ---- the template row in the breakdown ----------------------------------
+  {
+    await page.fill("#url", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+    // Waiting on #short races the previous section's debounced update, so
+    // wait for the assertion's own condition: the template row marked won.
+    const won = await page.waitForFunction(() =>
+      document.querySelector(".mode-row.won .name")?.textContent === "template",
+      { timeout: 5000 }).then(() => true).catch(() => false);
+    const rows = await page.locator(".mode-row").count();
+    check("the breakdown shows the template row as the winner",
+      rows === 4 && won, `${rows} rows, template won: ${won}`);
   }
 
   // ---- works with JavaScript switched off ---------------------------------

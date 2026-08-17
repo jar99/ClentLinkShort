@@ -13,7 +13,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 83 tests, no dependencies
+npm test              # 112 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -34,8 +34,8 @@ Measured over 643,949 real URLs:
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
 | `jar99.github.io/ClentLinkShort/#` (40c) | ~180 | 3.6% |
-| `jar99.github.io/l/#` (27c) | ~170 | 5.9% |
-| `clent.link/#` (20c) | ~105 | 12.7% |
+| `jar99.github.io/l/#` (27c) | ~170 | 6.8% |
+| `clent.link/#` (20c) | ~105 | 13.7% |
 | payload alone, no prefix | ~10 | 99.1% |
 
 The domain matters more than the codec does. What you get regardless of length is a
@@ -198,6 +198,13 @@ itself — all asserted in the browser tests rather than claimed. `Referrer-Poli
 no-referrer` means the destination isn't told where you came from. The fragment never
 leaves the browser, so no server ever learns the destination.
 
+**Degenerate input.** Hard edges everywhere, each a `ClentError` with a user-showable
+message: URLs over 8,192 characters are refused, payloads over 16,384, and — the one
+that matters — decompression is bounded at 16 KB. Before that bound, a 27,000-character
+fragment inflated to a 20 MB string on the main thread before validation saw it; now a
+decompression bomb is cancelled while it is still small, which the tests prove with a
+real one.
+
 Append `~` to a link to preview where it goes instead of going there.
 
 ## How the encoding works
@@ -217,7 +224,9 @@ Append `~` to a link to preview where it goes instead of going there.
    pattern reproduces the URL exactly. A near miss falls back rather than guessing;
    getting this wrong would mean a link that silently resolves somewhere else.
 3. **The predictable parts become bits.** Scheme, `www.` and a trailing slash cost 12
-   characters in a normal URL; here they're 3 bits in a 6-bit header.
+   characters in a normal URL; here they're 3 bits in a 6-bit header. Non-http schemes
+   go through a 15-entry scheme table at 4 bits each, so `mailto:` and `tel:` links are
+   first-class instead of paying for their scheme in the body.
 4. **253 common hosts collapse to one byte.** Shopping, news, social and image hosts
    included, chosen by category rather than mined — corpus frequency measures what
    Wikipedia cites, not what people shorten.
@@ -274,10 +283,10 @@ Substack, TikTok, Pinterest, Booking and others — along with the rest of their
 site-specific tracking. `?ref=Matt.+6:1` on a Bible site survives; `?ref=sr_1_3` on
 Amazon does not.
 
-### Wire format v3
+### Wire format v6
 
 ```
-6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = verbatim,
+6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = other,
                                     3 = template
                   bit  2    "www." was stripped
                   bit  3    host came from the dictionary
@@ -288,10 +297,16 @@ body     text6    6-bit symbols: 0-58 literal, 59 TOKEN (+6-bit index),
          raw      UTF-8 bytes, 8 bits each
          deflate  DEFLATE-raw bytes, 8 bits each
 
-under scheme 3:
-8 bits   template index
-per slot 6 bits of length, then that many characters at the slot
-         alphabet's own width (4 bits for digits, 6 for Base64url)
+under scheme 2 ("other"): bits 2-3 must be zero, then a 4-bit index into the
+         scheme table — mailto:, ftp:, tel: and the rest cost 4 bits instead
+         of being spelled out. Index 15 is reserved: the scheme is spelled in
+         the body, so future tables can carry schemes this one has never
+         heard of. URLs with user:password@ ride this path too, and no
+         longer pay 8 characters for "https://".
+
+under scheme 3: 8 bits of template index, then each slot as 6 bits of length
+         followed by its characters at the slot alphabet's own width
+         (4 bits for digits, 6 for Base64url)
 
 optional tag, outside the payload:
          #<payload>.c<tag>   keyless integrity check
@@ -299,7 +314,7 @@ optional tag, outside the payload:
 ```
 
 The body is `host + /path?query#frag`, or just the tail when the host is
-dictionary-encoded, or the whole URL when the scheme is verbatim.
+dictionary-encoded, or everything after the scheme under scheme 2.
 
 Two details that are load-bearing:
 
@@ -314,22 +329,37 @@ so reordering one repoints every link that used it.
 ## Project layout
 
 ```
-src/clent.js      the codec — zero dependencies, browser and Node
-src/hosts.js      host dictionary (append-only)
-src/tokens.js     text6 substring dictionary (append-only)
-src/clent.d.ts    hand-written types
+src/clent.js      codec core and public API — one import serves everything
+src/bits.js       bit stream + ClentError
+src/text6.js      6-bit text encoding, token DP, strict decoder
+src/deflate.js    bounded DEFLATE (16 KB inflate cap)
+src/tracking.js   tracking-parameter policy
+src/risk.js       phishing-shape assessment
+src/schemes.js    scheme table          (data, append-only)
+src/hosts.js      host dictionary       (data, append-only)
+src/tokens.js     text6 substrings      (data, append-only)
+src/templates.js  known URL shapes      (data, append-only)
+src/sign.js       integrity checks and signatures
+src/*.d.ts        types, one per module, pinned by test/exports.test.js
 src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             59 tests on node:test
+test/             112 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
-  security        hostile fragments, scheme allowlists, exhaustive short sweeps
+  schemes         the v6 scheme table, reserved indices, escape hatch
+  security        hostile fragments, scheme allowlists, exhaustive sweeps
+  robustness      size caps, decompression bombs, unassigned symbols
   property        generated URLs, truncation, bit-flips, random payloads
-  corpus          the real-URL corpus
+  templates       shape matching, near-miss safety
+  sign            checksums, signatures, tamper detection
+  tables          data-table wire invariants in one place
+  exports         .d.ts vs runtime export parity, both directions
+  corpus          the real-URL corpus, one shared scan
   optimality      brute-force check that no smaller encoding existed
   minify          that the minified library computes what the source computes
+  readme          this file's quoted numbers against corpus/stats.json
 
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
                   optimality, bundle, minify, build, serve, browser-test

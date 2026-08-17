@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BitWriter, BitReader, B64, T6, TOKENS, ClentError } from "../src/clent.js";
+import { BitWriter, BitReader, B64, T6, ClentError } from "../src/clent.js";
+import { rng } from "./helpers.js";
 
 test("alphabets are the sizes the format assumes", () => {
   assert.equal(B64.length, 64, "Base64url alphabet must be exactly 64 symbols");
@@ -11,14 +12,6 @@ test("alphabets are the sizes the format assumes", () => {
   assert.equal(new Set(T6).size, T6.length, "text6 table must have no duplicates");
   assert.ok([...T6].every((c) => c.charCodeAt(0) < 128), "text6 table is byte-indexed");
 
-  assert.equal(TOKENS.length, 64, "the token index is exactly 6 bits");
-  assert.equal(new Set(TOKENS).size, TOKENS.length, "duplicate tokens waste slots");
-  for (const token of TOKENS) {
-    assert.ok(token.length >= 3,
-      `"${token}" is too short to pay for its 12-bit reference`);
-    assert.ok([...token].every((c) => c.charCodeAt(0) < 128),
-      `"${token}" must be ASCII to match on bytes`);
-  }
 });
 
 test("a single value round-trips at every width", () => {
@@ -33,8 +26,8 @@ test("a single value round-trips at every width", () => {
 
 test("sequences round-trip at mixed widths", () => {
   // A deterministic pseudo-random walk: reproducible, but not hand-picked.
-  let seed = 12345;
-  const next = (n) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) % n);
+  const random = rng(12345);
+  const next = (n) => Math.floor(random() * n);
 
   for (let trial = 0; trial < 500; trial++) {
     const items = [];

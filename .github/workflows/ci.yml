@@ -28,6 +28,20 @@ jobs:
       - name: The committed corpus stats must match the corpus
         run: git diff --exit-code corpus/stats.json
 
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # CI-only dependency, same pattern as the playwright job below: the
+      # library itself stays zero-dependency and devDependencies stays empty.
+      - run: npm install --no-save typescript@7 @types/node
+      - name: JSDoc and declaration soundness
+        run: npx tsc -p tsconfig.json
+
   browser:
     runs-on: ubuntu-latest
     steps:

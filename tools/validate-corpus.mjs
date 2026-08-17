@@ -100,7 +100,7 @@ const summary = {
     ({ label, length, breakEven: point, shorterPct, medianSaving })),
 
   modes: stats.modes,
-  templatePct: pct(stats.templates, total),
+  templatePct: pct(stats.modes.template, total),
   dictHitPct: pct(stats.dictHits, total),
   trackingPct: pct(stats.withTracking, total),
   trackingSavingPct: pct(stats.trackingSavedBytes, stats.trackingBaseBytes),

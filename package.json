@@ -1,6 +1,6 @@
 {
   "name": "clent",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "description": "A stateless URL shortener codec \u2014 the destination is packed into the link, so nothing is ever stored",
   "type": "module",
   "license": "MIT",
@@ -11,17 +11,40 @@
       "types": "./src/clent.d.ts",
       "default": "./src/clent.js"
     },
+    "./bits.js": "./src/bits.js",
+    "./deflate.js": "./src/deflate.js",
+    "./text6.js": "./src/text6.js",
+    "./tracking.js": "./src/tracking.js",
+    "./risk.js": "./src/risk.js",
     "./hosts.js": "./src/hosts.js",
-    "./sign.js": "./src/sign.js",
-    "./templates.js": "./src/templates.js"
+    "./tokens.js": "./src/tokens.js",
+    "./schemes.js": "./src/schemes.js",
+    "./templates.js": "./src/templates.js",
+    "./sign.js": "./src/sign.js"
   },
   "files": [
-    "src/clent.js",
+    "src/bits.d.ts",
+    "src/bits.js",
     "src/clent.d.ts",
+    "src/clent.js",
+    "src/deflate.d.ts",
+    "src/deflate.js",
+    "src/hosts.d.ts",
     "src/hosts.js",
-    "src/tokens.js",
+    "src/risk.d.ts",
+    "src/risk.js",
+    "src/schemes.d.ts",
+    "src/schemes.js",
+    "src/sign.d.ts",
+    "src/sign.js",
+    "src/templates.d.ts",
     "src/templates.js",
-    "src/sign.js"
+    "src/text6.d.ts",
+    "src/text6.js",
+    "src/tokens.d.ts",
+    "src/tokens.js",
+    "src/tracking.d.ts",
+    "src/tracking.js"
   ],
   "sideEffects": false,
   "engines": {
@@ -37,7 +60,8 @@
     "preview": "node tools/build.mjs && node tools/serve.mjs dist",
     "test:browser": "node tools/browser-test.mjs dist",
     "coverage": "node tools/coverage.mjs",
-    "coverage:sweep": "node tools/coverage.mjs --sweep"
+    "coverage:sweep": "node tools/coverage.mjs --sweep",
+    "types": "tsc --noEmit"
   },
   "keywords": [
     "url-shortener",

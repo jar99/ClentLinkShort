@@ -2,12 +2,15 @@
  * Validation against real URLs.
  *
  * The corpus in corpus/urls.txt.br is real traffic: Wikipedia citations from
- * 30 language editions, Hacker News submissions, and domains from the Tranco
- * ranking. It contains things nobody would think to write a test for.
+ * 30 language editions, Hacker News submissions, Lemmy posts, RSS feeds,
+ * Wikimedia Commons images and Tranco-ranked domains. It contains things
+ * nobody would think to write a test for.
  *
- * CI runs a bounded slice to stay fast. `npm run validate` runs the lot.
+ * One scan feeds every assertion — this suite used to run three identical
+ * scans and pay for ~240,000 analyze() calls where ~80,000 suffice. CI runs a
+ * bounded slice; `npm run validate` runs the lot.
  */
-import test from "node:test";
+import test, { before } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -18,12 +21,27 @@ import { shorten } from "../src/clent.js";
 const LIMIT = Number(process.env.CLENT_CORPUS_LIMIT) || 40000;
 const skip = hasCorpus() ? false : "no corpus (npm run corpus:fetch)";
 
-test("real URLs round-trip exactly", { skip }, async (t) => {
-  const stats = emptyStats();
+const stats = emptyStats();
+const variety = { hosts: new Set(), tlds: new Set(), withQuery: 0, nonAscii: 0, deep: 0, n: 0 };
+
+before(async () => {
+  if (skip) return;
   for await (const url of readCorpus(LIMIT)) {
     await check(url, stats, { maxFailures: 20 });
-  }
 
+    variety.n++;
+    try {
+      const parsed = new URL(url);
+      variety.hosts.add(parsed.hostname);
+      variety.tlds.add(parsed.hostname.split(".").pop());
+      if (parsed.search) variety.withQuery++;
+      if (parsed.pathname.length > 1) variety.deep++;
+    } catch { /* counted as a failure by check() if the codec also rejects it */ }
+    if (/[^\x20-\x7e]/.test(url)) variety.nonAscii++;
+  }
+});
+
+test("real URLs round-trip exactly", { skip }, (t) => {
   for (const failure of stats.failures) {
     t.diagnostic(`${failure.reason}: ${failure.url}`);
     if (failure.detail) t.diagnostic(`  -> ${failure.detail}`);
@@ -36,21 +54,13 @@ test("real URLs round-trip exactly", { skip }, async (t) => {
   t.diagnostic(`checked ${stats.checked.toLocaleString()}, ${stats.skipped} unparseable`);
   t.diagnostic(`payload ${(100 * stats.payloadBytes / stats.inputBytes).toFixed(1)}% of input, ` +
     `median ${(100 * percentile(stats.ratios, 0.5)).toFixed(1)}%`);
-  t.diagnostic(`deep links shorter: ` +
-    `${(100 * stats.deep.linkShorter / stats.deep.count).toFixed(1)}% ` +
-    `(whole link, prefixed with ${DEFAULT_ORIGIN})`);
   t.diagnostic(`modes: ${JSON.stringify(stats.modes)}`);
 });
 
-test("the shortest body mode is always the one used", { skip }, async (t) => {
-  // The encoder builds text6, raw and deflate for every link. Keeping anything
-  // other than the smallest would be a silent regression: links would still
-  // work, just be needlessly long, and no round-trip test would notice.
-  const stats = emptyStats();
-  for await (const url of readCorpus(LIMIT)) {
-    await check(url, stats);
-  }
-
+test("the shortest body mode is always the one used", { skip }, (t) => {
+  // The encoder builds every candidate. Keeping anything other than the
+  // smallest would be a silent regression: links would still work, just be
+  // needlessly long, and no round-trip test would notice.
   for (const miss of stats.suboptimal.slice(0, 10)) {
     t.diagnostic(`${miss.wasted} chars wasted: ${miss.url}`);
   }
@@ -59,11 +69,6 @@ test("the shortest body mode is always the one used", { skip }, async (t) => {
 });
 
 test("savings hold up on real links", { skip }, async (t) => {
-  const stats = emptyStats();
-  for await (const url of readCorpus(LIMIT)) {
-    await check(url, stats);
-  }
-
   const payloadShorter = 100 * stats.payloadShorter / stats.checked;
   const deepShorter = 100 * stats.deep.linkShorter / stats.deep.count;
   const point = breakEven(stats.pairs, DEFAULT_ORIGIN.length - 1);
@@ -92,25 +97,10 @@ test("savings hold up on real links", { skip }, async (t) => {
     `got ${DEFAULT_ORIGIN.length + payload.length}`);
 });
 
-test("the corpus is varied enough to prove anything", { skip }, async () => {
-  const hosts = new Set();
-  const tlds = new Set();
-  let withQuery = 0, nonAscii = 0, deep = 0, n = 0;
-
-  for await (const url of readCorpus(20000)) {
-    n++;
-    try {
-      const parsed = new URL(url);
-      hosts.add(parsed.hostname);
-      tlds.add(parsed.hostname.split(".").pop());
-      if (parsed.search) withQuery++;
-      if (parsed.pathname.length > 1) deep++;
-    } catch { /* the round-trip test owns this */ }
-    if (/[^\x20-\x7e]/.test(url)) nonAscii++;
-  }
-
+test("the corpus is varied enough to prove anything", { skip }, () => {
   // If these collapse the corpus has gone uniform, and the tests above stop
   // proving much.
+  const { hosts, tlds, withQuery, nonAscii, deep, n } = variety;
   assert.ok(hosts.size > n / 20, `expected many distinct hosts, got ${hosts.size} in ${n}`);
   assert.ok(tlds.size > 50, `expected a long TLD tail, got ${tlds.size}`);
   assert.ok(withQuery > n / 50, `expected query strings, got ${withQuery}`);

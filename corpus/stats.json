@@ -6,11 +6,11 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://jar99.github.io/ClentLinkShort/#",
-  "payloadRatio": 0.7578749670012944,
-  "payloadShorterPct": 99.1350246681026,
+  "payloadRatio": 0.7578747504610345,
+  "payloadShorterPct": 99.13517995990365,
   "medianRatio": 0.6818181818181818,
   "p90Ratio": 0.8554216867469879,
-  "linkSavingsMean": -0.8519992332108767,
+  "linkSavingsMean": -0.8519988826316119,
   "linkSavingsMedian": -0.7105263157894737,
   "linkShorterPct": 3.615037836847328,
   "bareShorterPct": 0.00036059946054320705,
@@ -46,7 +46,7 @@
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.1350246681026,
+      "shorterPct": 99.13517995990365,
       "medianSaving": 0.31818181818181823
     }
   ],

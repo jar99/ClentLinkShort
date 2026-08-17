@@ -11,16 +11,7 @@ import { shorten, expand, parse, HOSTS, B64, ClentError } from "../src/clent.js"
 
 const SEED = Number(process.env.CLENT_SEED) || 20240817;
 
-/** Small deterministic PRNG — no dependency, and reproducible across runs. */
-function rng(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state ^= state << 13; state >>>= 0;
-    state ^= state >> 17;
-    state ^= state << 5;  state >>>= 0;
-    return state / 0x100000000;
-  };
-}
+import { rng } from "./helpers.js";
 
 const ALPHABETS = [
   "abcdefghijklmnopqrstuvwxyz",

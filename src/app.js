@@ -14,7 +14,11 @@ import {
   checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
 } from "./sign.js";
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
+/** The same lookup, for elements the code reads values or state from. */
+const field = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id));
+/** The same lookup, for anchors whose href the code sets. */
+const anchor = (id) => /** @type {HTMLAnchorElement} */ (document.getElementById(id));
 
 /**
  * Run once the document has a body to touch.
@@ -38,8 +42,27 @@ const PREVIEW_SUFFIX = "~";
  * Redirect view
  * -------------------------------------------------------------------------- */
 
+/** Render the shared "this link didn't work" card. */
+function showLinkFailure(message) {
+  whenReady(() => {
+    $("r-spinner")?.remove();
+    $("r-title").textContent = "This link didn't work";
+    $("r-note").textContent = message;
+    $("r-dest")?.remove();
+    $("r-go")?.remove();
+  });
+}
+
 async function runRedirect() {
-  let fragment = decodeURIComponent(location.hash.slice(1));
+  let fragment;
+  try {
+    // A malformed percent sequence ("#%") throws URIError here; without the
+    // guard that was an unhandled rejection and a spinner that never stopped.
+    fragment = decodeURIComponent(location.hash.slice(1));
+  } catch {
+    showLinkFailure("This link is damaged — its address isn't valid.");
+    return;
+  }
   let previewOnly = false;
   if (fragment.endsWith(PREVIEW_SUFFIX)) {
     previewOnly = true;
@@ -81,14 +104,7 @@ async function runRedirect() {
   try {
     url = await expand(payload);
   } catch (error) {
-    const message = error instanceof ClentError ? error.message : "This link is damaged.";
-    whenReady(() => {
-      $("r-spinner").remove();
-      $("r-title").textContent = "This link didn't work";
-      $("r-note").textContent = message;
-      $("r-dest").remove();
-      $("r-go").remove();
-    });
+    showLinkFailure(error instanceof ClentError ? error.message : "This link is damaged.");
     return;
   }
 
@@ -107,7 +123,7 @@ async function runRedirect() {
     $("r-spinner").remove();
     // textContent, never innerHTML: this string is attacker-controlled.
     $("r-dest").textContent = url.href;
-    $("r-go").href = url.href;
+    anchor("r-go").href = url.href;
 
     if (tagState?.kind === TAG_CHECK) {
       const note = document.createElement("p");
@@ -120,7 +136,7 @@ async function runRedirect() {
       const box = $("r-passphrase");
       box.hidden = false;
       const check = async () => {
-        const result = await verify(payload, TAG_SIGNED, tag, $("r-pass").value);
+        const result = await verify(payload, TAG_SIGNED, tag, field("r-pass").value);
         const existing = box.querySelector(".tag-note");
         if (existing) existing.remove();
         const note = document.createElement("p");
@@ -206,7 +222,9 @@ function renderBreakdown(result) {
       colour: "var(--seg-body)",
       bits: result.bodyBits,
       name: "Body",
-      note: `path, query and fragment, as ${result.modeName}`,
+      note: result.template !== null
+        ? `the IDs from ${result.templatePattern}`
+        : `path, query and fragment, as ${result.modeName}`,
       cost: bits(result.bodyBits),
     },
   ];
@@ -274,14 +292,14 @@ function renderBreakdown(result) {
 }
 
 function setUpCreate() {
-  const input = $("url");
+  const input = field("url");
   const error = $("error");
   const result = $("result");
   const breakdown = $("breakdown");
 
   if (!canSign) {
-    $("tamper").checked = false;
-    $("tamper").disabled = true;
+    field("tamper").checked = false;
+    field("tamper").disabled = true;
   }
 
   if (!canCompress) {
@@ -303,7 +321,7 @@ function setUpCreate() {
 
     let analysis;
     try {
-      analysis = await analyze(input.value, { stripTracking: $("clean").checked });
+      analysis = await analyze(input.value, { stripTracking: field("clean").checked });
     } catch (failure) {
       error.textContent = failure instanceof ClentError
         ? failure.message
@@ -319,11 +337,11 @@ function setUpCreate() {
     // Tags are computed over the payload, so they never change where the link
     // goes — stripping one leaves a working link, it just stops being checkable.
     let fragment = analysis.payload;
-    const passphrase = $("passphrase").value.trim();
+    const passphrase = field("passphrase").value.trim();
     try {
       if (passphrase) {
         fragment = join(fragment, TAG_SIGNED, await sign(analysis.payload, passphrase));
-      } else if ($("tamper").checked && canSign) {
+      } else if (field("tamper").checked && canSign) {
         fragment = join(fragment, TAG_CHECK, await checksum(analysis.payload));
       }
     } catch {
@@ -331,8 +349,8 @@ function setUpCreate() {
     }
 
     const link = origin() + "#" + fragment +
-      ($("preview").checked ? PREVIEW_SUFFIX : "");
-    $("short").value = link;
+      (field("preview").checked ? PREVIEW_SUFFIX : "");
+    field("short").value = link;
     result.hidden = false;
     breakdown.hidden = false;
 
@@ -341,8 +359,8 @@ function setUpCreate() {
     const widest = Math.max(before, after);
     $("bar-long").style.width = `${(100 * before) / widest}%`;
     $("bar-short").style.width = `${(100 * after) / widest}%`;
-    $("len-long").textContent = before;
-    $("len-short").textContent = after;
+    $("len-long").textContent = String(before);
+    $("len-short").textContent = String(after);
 
     const verdict = $("verdict");
     const saved = before - after;
@@ -366,21 +384,28 @@ function setUpCreate() {
     renderBreakdown(analysis);
   }
 
+  // A rejection out of an async listener is otherwise unhandled: the page
+  // would look fine and just silently stop updating.
+  const safeUpdate = () => update().catch(() => {
+    error.textContent = "Something went wrong — try editing the URL.";
+    error.hidden = false;
+  });
+
   // Debounced so that typing stays responsive; DEFLATE runs on every keystroke.
   let pending;
   const schedule = () => {
     clearTimeout(pending);
-    pending = setTimeout(update, 120);
+    pending = setTimeout(safeUpdate, 120);
   };
 
   input.addEventListener("input", schedule);
-  input.addEventListener("paste", () => setTimeout(update, 0));
-  for (const id of ["clean", "preview", "tamper"]) $(id).addEventListener("change", update);
+  input.addEventListener("paste", () => setTimeout(safeUpdate, 0));
+  for (const id of ["clean", "preview", "tamper"]) $(id).addEventListener("change", safeUpdate);
   $("passphrase").addEventListener("input", schedule);
 
   $("copy").addEventListener("click", async () => {
     const button = $("copy");
-    const link = $("short");
+    const link = field("short");
     try {
       await navigator.clipboard.writeText(link.value);
     } catch {
@@ -399,7 +424,10 @@ function setUpCreate() {
  * -------------------------------------------------------------------------- */
 
 if (location.hash.length > 1) {
-  runRedirect();
+  // Every expected failure inside runRedirect renders its own card; this
+  // catch is for the unexpected ones, which otherwise leave the spinner
+  // running forever with the error only in the console.
+  runRedirect().catch(() => showLinkFailure("Something went wrong opening this link."));
 } else {
   whenReady(setUpCreate);
 }

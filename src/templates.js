@@ -14,11 +14,17 @@
  *
  * APPEND-ONLY once published: an index is a wire encoding.
  *
- * Correctness rule, enforced at encode time in clent.js: a template is only
- * used if substituting the captured values back into the pattern reproduces
- * the original URL character for character. Anything else would be a silent
+ * Correctness rule, enforced by asTemplate() below: a template is only used
+ * if substituting the captured values back into the pattern reproduces the
+ * original URL character for character. Anything else would be a silent
  * redirect to the wrong place, which is the one failure that must never ship.
+ *
+ * Templates apply to https URLs only — every pattern is an https literal, and
+ * asTemplate() bails early on anything else. That is a table property, not a
+ * codec rule: an http pattern added here would work.
  */
+
+import { ClentError } from "./bits.js";
 
 /**
  * Slot alphabets. `bits` is what one character costs; a character outside the
@@ -106,7 +112,9 @@ export const MAX_SLOT = 63;
 export const COMPILED = TEMPLATES.map(({ pattern, slots }, index) => {
   const literals = pattern.split(/\{\d\}/);
   if (literals.length - 1 !== slots.length) {
-    throw new Error(`template "${pattern}" has ${literals.length - 1} slots, ` +
+    // Thrown at module evaluation: a malformed table must fail the build and
+    // the test run, not one unlucky decode.
+    throw new ClentError(`template "${pattern}" has ${literals.length - 1} slots, ` +
       `declared ${slots.length}`);
   }
   const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -130,11 +138,15 @@ export const COMPILED = TEMPLATES.map(({ pattern, slots }, index) => {
  *
  * @type {ReadonlyMap<string, typeof COMPILED>}
  */
-export const BY_HOST = new Map();
-for (const template of COMPILED) {
-  if (!BY_HOST.has(template.host)) BY_HOST.set(template.host, []);
-  BY_HOST.get(template.host).push(template);
-}
+export const BY_HOST = (() => {
+  /** @type {Map<string, typeof COMPILED>} */
+  const byHost = new Map();
+  for (const template of COMPILED) {
+    if (!byHost.has(template.host)) byHost.set(template.host, []);
+    byHost.get(template.host).push(template);
+  }
+  return byHost;
+})();
 
 /**
  * Rebuild a URL from a template index and its slot values.
@@ -144,8 +156,115 @@ for (const template of COMPILED) {
  */
 export function fill(index, values) {
   const template = COMPILED[index];
-  if (!template) throw new Error(`no template ${index}`);
+  if (!template) throw new ClentError(`This link uses template ${index}, which this page does not have.`);
   let out = template.literals[0];
   for (let i = 0; i < values.length; i++) out += values[i] + template.literals[i + 1];
   return out;
+}
+
+/**
+ * Index of each charset's characters, for encoding.
+ * @type {Record<string, {set: {chars: string, bits: number}, index: Map<string, number>}>}
+ */
+export const CHARSET_INDEX = Object.fromEntries(Object.entries(CHARSETS).map(([name, set]) => [
+  name, { set, index: new Map([...set.chars].map((c, i) => [c, i])) },
+]));
+
+/**
+ * Try to express a URL as one of the templates.
+ *
+ * Returns null unless the captured values round-trip: every value has to fit
+ * its declared alphabet, be short enough for the 6-bit length field, and
+ * substituting them back must reproduce the URL exactly. Approximate matches
+ * are worse than useless here — they would resolve to a different page.
+ *
+ * @param {URL} url
+ * @returns {{index: number, values: string[], bits: number}|null}
+ */
+export function asTemplate(url) {
+  // Only templates for this exact host can match, so most URLs do no regex
+  // work at all.
+  if (url.protocol !== "https:") return null;
+  const family = BY_HOST.get(url.host);
+  if (!family) return null;
+
+  const href = url.href;
+  let best = null;
+
+  for (const template of family) {
+    const index = template.index;
+    const found = template.match.exec(href);
+    if (!found) continue;
+
+    const values = found.slice(1);
+    let bits = 0;
+    let usable = true;
+
+    for (let slot = 0; slot < values.length; slot++) {
+      const value = values[slot];
+      const charset = CHARSET_INDEX[template.slots[slot]];
+      if (!value || value.length > MAX_SLOT) { usable = false; break; }
+      for (const character of value) {
+        if (!charset.index.has(character)) { usable = false; break; }
+      }
+      if (!usable) break;
+      bits += 6 + value.length * charset.set.bits;
+    }
+    if (!usable) continue;
+
+    // The guard that makes this safe to use at all.
+    if (fill(index, values) !== href) continue;
+
+    if (!best || bits < best.bits) best = { index, values, bits };
+  }
+  return best;
+}
+
+/**
+ * Write a template's index and slot values into an open bit stream. The
+ * caller writes the 6-bit header first; this writes everything after it.
+ *
+ * @param {import("./bits.js").BitWriter} w
+ * @param {{index: number, values: string[]}} template
+ * @returns {string} the finished payload
+ */
+export function writeTemplate(w, { index, values }) {
+  w.push(index, 8);
+  const slots = COMPILED[index].slots;
+  for (let slot = 0; slot < values.length; slot++) {
+    const charset = CHARSET_INDEX[slots[slot]];
+    w.push(values[slot].length, 6);
+    for (const character of values[slot]) {
+      w.push(charset.index.get(character), charset.set.bits);
+    }
+  }
+  return w.finish();
+}
+
+/**
+ * Read a template payload (after the header) back into the URL it encodes.
+ *
+ * @param {import("./bits.js").BitReader} reader
+ * @returns {string} the rebuilt URL
+ */
+export function readTemplate(reader) {
+  const index = reader.read(8);
+  const template = COMPILED[index];
+  if (!template) throw new ClentError("This link uses a newer template than this page has.");
+
+  const values = [];
+  for (const name of template.slots) {
+    const charset = CHARSETS[name];
+    const length = reader.read(6);
+    if (length === 0) throw new ClentError("This link is damaged — an empty field.");
+    let value = "";
+    for (let i = 0; i < length; i++) {
+      const at = reader.read(charset.bits);
+      const character = charset.chars[at];
+      if (character === undefined) throw new ClentError("This link is damaged.");
+      value += character;
+    }
+    values.push(value);
+  }
+  return fill(index, values);
 }

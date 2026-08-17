@@ -6,338 +6,131 @@
  *
  * Zero dependencies. Runs unmodified in browsers and in Node >= 18.
  *
+ * This module is the codec core and the public API; the pieces live in
+ * focused modules and are re-exported here so callers need one import:
+ *
+ *   bits.js        the bit stream and ClentError
+ *   text6.js       the 6-bit text body encoding (with token dictionary)
+ *   deflate.js     bounded DEFLATE
+ *   tracking.js    tracking-parameter removal policy
+ *   risk.js        phishing-shape assessment for the redirector
+ *   hosts.js       host dictionary          (data table, append-only)
+ *   tokens.js      text6 substring tokens   (data table, append-only)
+ *   templates.js   known URL shapes         (data table, append-only)
+ *
  * ---------------------------------------------------------------------------
- * Wire format v5
+ * Wire format v6
  *
  * A continuous bit stream written straight into the Base64url alphabet at
  * 6 bits per character. Nothing rounds up to a byte, so nothing is wasted.
  *
- *   6 bits  header  bits 0-1  scheme: 0 https://, 1 http://, 2 verbatim,
+ *   6 bits  header  bits 0-1  scheme: 0 https://, 1 http://, 2 other,
  *                                     3 template
  *                   bit  2    "www." was stripped from the host
  *                   bit  3    host came from the dictionary
  *                   bits 4-5  body mode: 0 text6, 1 raw, 2 deflate
  *   8 bits  host dictionary index, present only when bit 3 is set
- *
- * Under scheme 3 the layout is different: 8 bits of template index, then each
- * slot as 6 bits of length followed by its characters at whatever width that
- * slot's alphabet needs. A YouTube ID costs 6 bits a character rather than
- * the ~9 the general text encoder averages once shift symbols are counted.
  *   body    text6   6-bit symbols, terminated by END
  *           raw     UTF-8 bytes, 8 bits each
  *           deflate DEFLATE-raw bytes, 8 bits each
  *
+ * Under scheme 2 ("other") bits 2-3 must be zero and the header is followed
+ * by a 4-bit index into schemes.js — so "mailto:" costs 4 bits, not seven
+ * body characters. Index 15 is reserved: the scheme is spelled in the body,
+ * which is exactly the old verbatim form. The encoder never emits 15 for a
+ * scheme the table knows; the decoder accepts it so future tables can grow.
+ *
+ * Under scheme 3 the layout is: 8 bits of template index, then each slot as
+ * 6 bits of length followed by its characters at whatever width that slot's
+ * alphabet needs.
+ *
+ * An optional integrity tag rides OUTSIDE the payload — "#<payload>.c<tag>"
+ * or ".h<tag>" — see sign.js; it never changes what the payload decodes to.
+ *
  * The encoder does not decide anything by rule that it could decide by
- * measurement. Every legal way of splitting the URL is crossed with every
- * body mode, and the smallest result wins. text6 wins on ordinary lowercase
- * URLs (one output character per input character — Base64 is also 6 bits, so
- * packing text at 6 bits costs nothing), raw wins on uppercase-dense ID
- * tokens, and deflate wins once a URL is long enough to repay its overhead.
+ * measurement: every legal way of splitting the URL is crossed with every
+ * body mode and the smallest result wins. The one deliberate exception is
+ * documented at the deflate step inside analyze(), and tools/optimality.js
+ * polices it over the corpus.
  * ---------------------------------------------------------------------------
  *
  * @module clent
  */
 
+import { B64, BitWriter, BitReader, ClentError } from "./bits.js";
+import { canCompress, deflate, inflate } from "./deflate.js";
+import { T6, emitText6, decodeText6 } from "./text6.js";
+import { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
+import { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
 import { HOSTS, HOST_INDEX } from "./hosts.js";
 import { TOKENS } from "./tokens.js";
-import { CHARSETS, COMPILED, BY_HOST, TEMPLATES, MAX_SLOT, fill } from "./templates.js";
+import {
+  TEMPLATES, asTemplate, writeTemplate, readTemplate,
+} from "./templates.js";
+import {
+  ENCODABLE_ORDER, SCHEME_INDEX, SCHEME_BITS, SCHEME_IN_BODY,
+  ENCODABLE, FOLLOWABLE,
+} from "./schemes.js";
 
-export { HOSTS, TOKENS, TEMPLATES };
+// One import serves every caller; the module boundaries stay an internal
+// affair. (The page bundler strips these re-export lines when it merges the
+// modules into a single scope.)
+export { B64, BitWriter, BitReader, ClentError } from "./bits.js";
+export { canCompress, deflate, inflate, MAX_INFLATED } from "./deflate.js";
+export { T6, emitText6, decodeText6 } from "./text6.js";
+export { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
+export { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
+export { HOSTS } from "./hosts.js";
+export { TOKENS } from "./tokens.js";
+export { TEMPLATES } from "./templates.js";
+export {
+  ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
+} from "./schemes.js";
 
 /** Wire format version this build reads and writes. */
-export const VERSION = 5;
+export const VERSION = 6;
 
-export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2,
+export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_OTHER = 2,
   SCHEME_TEMPLATE = 3;
+/** @deprecated v5 name for {@link SCHEME_OTHER}. */
+export const SCHEME_VERBATIM = SCHEME_OTHER;
+
 export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
+/**
+ * Analysis-level marker for a template win. NEVER a wire value — on the wire
+ * a template is scheme 3 and the mode bits stay zero.
+ */
+export const MODE_TEMPLATE = 3;
 
-/** @type {readonly string[]} Human-readable body mode names, indexed by mode. */
-export const MODE_NAMES = Object.freeze(["text6", "raw", "deflate"]);
+/** @type {readonly string[]} Human-readable mode names, indexed by mode. */
+export const MODE_NAMES = Object.freeze(["text6", "raw", "deflate", "template"]);
 
-const SCHEME_MASK = 0b11, F_WWW = 0b100, F_HOST = 0b1000;
+const SCHEME_MASK = 0b11;
+/** Header bit: "www." was stripped from the host. */
+export const F_WWW = 0b100;
+/** Header bit: the host is a dictionary index. */
+export const F_HOST = 0b1000;
 
 /**
- * Schemes that may be encoded into a link at all. Everything outside this
- * set is refused on the way in and on the way out, which is what stops a
- * hand-crafted payload from turning a redirector into an XSS vector.
- * @type {ReadonlySet<string>}
+ * Longest URL the codec will encode or return. Far past anything real — the
+ * corpus tops out near 4,000 — but a hard edge, so degenerate input fails
+ * with a message instead of tying up the page.
  */
-export const ENCODABLE = new Set([
-  "http:", "https:", "mailto:", "ftp:", "ftps:", "tel:", "sms:",
-  "magnet:", "ipfs:", "ipns:",
-]);
+export const MAX_URL = 8192;
 
 /**
- * Schemes a redirector may navigate to automatically. Deliberately much
- * narrower than ENCODABLE: anything else has to be clicked by a human.
- * @type {ReadonlySet<string>}
+ * Longest payload expand() will read. Generous: the least dense winning mode
+ * is raw at ~4/3 characters per byte, so every compliant payload for a
+ * MAX_URL input fits with room to spare.
  */
-export const FOLLOWABLE = new Set(["http:", "https:"]);
-
-/**
- * Query parameters removed when `stripTracking` is enabled.
- *
- * This is the only transformation in the codec that changes the destination
- * rather than re-encoding it, which is why it is a visible switch and is
- * reported separately.
- *
- * The list errs towards leaving things alone. Anything that might select
- * what you actually see is not here: Amazon's `th` and `psc` pick a product
- * variant, and a bare `ref` is a real route parameter on plenty of sites even
- * though Amazon uses it for tracking. Affiliate tags (`tag`, `campid`,
- * `ascsubtag`) *are* removed — they are tracking identifiers, and the switch
- * is there for anyone who is deliberately sharing their own.
- */
-export const TRACKING_PARAMS = new RegExp("^(?:" + [
-  // analytics and ad networks
-  "utm_[\\w-]*", "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid",
-  "yclid", "ttclid", "twclid", "epik", "irclickid", "mc_[ce]id", "_hsenc",
-  "_hsmi", "hsa_[\\w-]+", "_ga", "_gl", "s_kwcid", "ef_id", "vero_id",
-  "oly_(?:enc|anon)_id", "piwik_[\\w-]+", "pk_[\\w-]+", "at_[\\w-]+", "__s",
-  "spm", "scm", "_openstat", "yclid", "rb_clickid", "cmpid", "ncid", "sfnsn",
-  // social
-  "igshid", "igsh", "share_source", "share_app_id", "share_id", "ref_src",
-  "ref_url", "rdt", "si", "_branch_match_id", "_branch_referrer", "xmt",
-  "is_from_webapp", "sender_device", "web_id", "social_share", "smid",
-  // video
-  "pp", "ab_channel",
-  // shopping and marketplaces
-  "pd_rd_[\\w-]+", "pf_rd_[\\w-]+", "linkCode", "linkId", "ascsubtag", "tag",
-  "creativeASIN", "creative", "camp", "qid", "sr", "sprefix", "crid",
-  "content-id", "dib", "dib_tag", "_trkparms", "_trksid", "campid",
-  "customid", "toolid", "mkevt", "mkcid", "mkrid", "click_key", "click_sum",
-  "frs", "sts", "organic_search_click", "athbdg", "adsRedirect", "veh",
-  "irgwc", "sourceid", "affid", "afsrc", "srsltid",
-].join("|") + ")$", "i");
-
-/**
- * Parameters that are only safe to remove on particular hosts.
- *
- * `s` and `t` are how X marks a shared link, and `trk` is LinkedIn's — but
- * one-letter and three-letter names like those are ordinary search or state
- * parameters everywhere else, so removing them globally would quietly break
- * links. Scoping them keeps the aggressive removal without the collateral.
- *
- * @type {ReadonlyArray<{host: RegExp, params: RegExp}>}
- */
-export const TRACKING_BY_HOST = Object.freeze([
-  { host: /(?:^|\.)(?:twitter|x)\.com$/i, params: /^(?:s|t)$/i },
-  { host: /(?:^|\.)(?:youtube\.com|youtu\.be)$/i, params: /^(?:feature|kw|index)$/i },
-  { host: /(?:^|\.)amazon\.[a-z.]+$/i, params: /^(?:ref|_encoding|smid|keywords)$/i },
-  { host: /(?:^|\.)reddit\.com$/i, params: /^(?:ref|ref_source|correlation_id|share_id)$/i },
-  { host: /(?:^|\.)linkedin\.com$/i, params: /^(?:trk|trackingId|originalSubdomain|lipi)$/i },
-  { host: /(?:^|\.)facebook\.com$/i, params: /^(?:mibextid|extid|rdid)$/i },
-  { host: /(?:^|\.)instagram\.com$/i, params: /^(?:img_index|hl)$/i },
-  { host: /(?:^|\.)(?:ebay|etsy)\.[a-z.]+$/i, params: /^(?:_from|hash|var|ref)$/i },
-  { host: /(?:^|\.)(?:walmart|target|bestbuy)\.com$/i, params: /^(?:from|selectedSellerId|sid)$/i },
-  { host: /(?:^|\.)aliexpress\.[a-z.]+$/i, params: /^(?:sk|aff_[\w]+|terminal_id|algo_[\w]+)$/i },
-
-  // `ref` is the one people ask for most, and it cannot go in the global list.
-  // Measured over the corpus it appears on 0.05% of URLs, and the values are
-  // things like "Luuk.+23:26-49", "Matt.+6:1" and "495-99-8" — Bible verses,
-  // CAS registry numbers, page selectors. Removing it globally would break
-  // those links to save a handful of characters on the sites where it really
-  // is tracking. So it is removed on those sites, by name.
-  {
-    host: /(?:^|\.)(?:temu|shein|wayfair|newegg|chewy|nordstrom|macys|costco|otto|zalando|asos|johnlewis|argos|ikea|homedepot|lowes|sephora|rakuten|mercadolibre|alibaba|taobao|banggood|wish)\.[a-z.]+$/i,
-    params: /^(?:ref|refer|referrer|source|from|channel|spm_id|_pid)$/i,
-  },
-  {
-    host: /(?:^|\.)(?:tiktok|snapchat|pinterest|threads|bsky|mastodon\.social|tumblr|vk|weibo)\.[a-z.]+$/i,
-    params: /^(?:ref|ref_src|source|invite|from)$/i,
-  },
-  {
-    host: /(?:^|\.)(?:substack|medium|patreon|kickstarter|gofundme|eventbrite)\.[a-z.]+$/i,
-    params: /^(?:ref|source|utm|r|triedRedirect)$/i,
-  },
-  { host: /(?:^|\.)(?:booking|expedia|airbnb|tripadvisor)\.[a-z.]+$/i,
-    params: /^(?:aid|label|sid|source_impression_id|federated_search_id|search_mode)$/i },
-]);
-
-/* -------------------------------------------------------------------------- *
- * Bit stream
- * -------------------------------------------------------------------------- */
-
-/** The Base64url alphabet. Index in this string IS the 6-bit symbol value. */
-export const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-const B64_INDEX = new Map([...B64].map((c, i) => [c, i]));
-
-/**
- * text6 symbol table. Symbols 0..58 are literal bytes; the control symbols
- * below cover everything else. Symbol 60 is unassigned.
- */
-export const T6 = "abcdefghijklmnopqrstuvwxyz0123456789/-_.?=&%+,:~#@!$*();'[]";
-const T6_INDEX = new Map([...T6].map((c, i) => [c.charCodeAt(0), i]));
-
-/** A 6-bit index into TOKENS follows. */
-const TOKEN = 59;
-/** Uppercase the next symbol. */
-const SHIFT = 61;
-/** One raw 8-bit byte follows. */
-const ESC = 62;
-/** End of body. */
-const END = 63;
-
-const tokenEncoder = new TextEncoder();
-/** @type {Uint8Array[]} tokens as bytes, indexed as they are on the wire */
-const TOKEN_BYTES = TOKENS.map((token) => tokenEncoder.encode(token));
-/** First byte -> token indices, so matching only considers plausible tokens. */
-const TOKEN_BY_FIRST = new Map();
-for (let i = 0; i < TOKEN_BYTES.length; i++) {
-  const first = TOKEN_BYTES[i][0];
-  if (!TOKEN_BY_FIRST.has(first)) TOKEN_BY_FIRST.set(first, []);
-  TOKEN_BY_FIRST.get(first).push(i);
-}
-
-/** Thrown for any malformed, truncated or unsafe payload. */
-export class ClentError extends Error {
-  /** @param {string} message */
-  constructor(message) {
-    super(message);
-    this.name = "ClentError";
-  }
-}
-
-/** Writes values of 1..8 bits into a Base64url string. */
-export class BitWriter {
-  constructor() {
-    /** @type {string} */ this.out = "";
-    this.acc = 0;
-    this.bits = 0;
-  }
-
-  /**
-   * @param {number} value
-   * @param {number} width bits to write, at most 8 (keeps `acc` under 2^13)
-   */
-  push(value, width) {
-    this.acc = (this.acc << width) | value;
-    this.bits += width;
-    while (this.bits >= 6) {
-      this.bits -= 6;
-      this.out += B64[(this.acc >> this.bits) & 63];
-    }
-    this.acc &= (1 << this.bits) - 1;
-  }
-
-  /** @returns {string} the finished payload, zero-padded to a character */
-  finish() {
-    if (this.bits) this.out += B64[(this.acc << (6 - this.bits)) & 63];
-    return this.out;
-  }
-}
-
-/** Reads values of 1..8 bits back out of a Base64url string. */
-export class BitReader {
-  /** @param {string} str */
-  constructor(str) {
-    this.str = str;
-    this.at = 0;
-    this.acc = 0;
-    this.bits = 0;
-  }
-
-  /**
-   * @param {number} width bits to read, at most 8
-   * @returns {number}
-   */
-  read(width) {
-    while (this.bits < width) {
-      if (this.at >= this.str.length) throw new ClentError("This link is truncated.");
-      const symbol = B64_INDEX.get(this.str[this.at++]);
-      if (symbol === undefined) throw new ClentError("This isn't a valid Clent link.");
-      this.acc = (this.acc << 6) | symbol;
-      this.bits += 6;
-    }
-    this.bits -= width;
-    const value = (this.acc >> this.bits) & ((1 << width) - 1);
-    this.acc &= (1 << this.bits) - 1;
-    return value;
-  }
-
-  /** Bits not yet consumed, including whole characters not yet read. */
-  get left() {
-    return this.bits + 6 * (this.str.length - this.at);
-  }
-}
-
-/* -------------------------------------------------------------------------- *
- * DEFLATE
- * -------------------------------------------------------------------------- */
-
-/** Whether this runtime can compress. Without it links are simply longer. */
-export const canCompress = typeof CompressionStream !== "undefined";
-
-/**
- * @param {typeof CompressionStream | typeof DecompressionStream} Ctor
- * @param {Uint8Array} bytes
- * @returns {Promise<Uint8Array>}
- */
-async function runStream(Ctor, bytes) {
-  const stream = new Ctor("deflate-raw");
-  const writer = stream.writable.getWriter();
-  // Corrupt input rejects on the writable side as well as the readable one.
-  // Keep a handle on it so it surfaces here instead of as an unhandled
-  // rejection, but don't let it reject before the read below observes it.
-  const pump = writer.write(bytes).then(() => writer.close());
-  pump.catch(() => {});
-  const out = new Uint8Array(await new Response(stream.readable).arrayBuffer());
-  await pump;
-  return out;
-}
-
-/**
- * @param {Uint8Array} bytes
- * @returns {Promise<Uint8Array|null>} null where the runtime can't compress
- */
-export async function deflate(bytes) {
-  if (!canCompress) return null;
-  try {
-    return await runStream(CompressionStream, bytes);
-  } catch {
-    return null; // engines that have CompressionStream but not "deflate-raw"
-  }
-}
-
-/**
- * @param {Uint8Array} bytes
- * @returns {Promise<Uint8Array>}
- */
-export async function inflate(bytes) {
-  if (typeof DecompressionStream === "undefined")
-    throw new ClentError("This browser can't decompress the link (needs DecompressionStream).");
-  try {
-    return await runStream(DecompressionStream, bytes);
-  } catch {
-    throw new ClentError("This link is damaged — decompression failed.");
-  }
-}
-
-/* -------------------------------------------------------------------------- *
- * Canonicalisation
- * -------------------------------------------------------------------------- */
+export const MAX_PAYLOAD = 16384;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/**
- * Remove known tracking parameters in place.
- * @param {URL} url
- * @returns {string[]} the parameter names removed
- */
-export function stripTracking(url) {
-  const scoped = TRACKING_BY_HOST
-    .filter((rule) => rule.host.test(url.hostname))
-    .map((rule) => rule.params);
-
-  const hits = [...url.searchParams.keys()].filter((key) =>
-    TRACKING_PARAMS.test(key) || scoped.some((params) => params.test(key)));
-
-  for (const key of hits) url.searchParams.delete(key);
-  // Re-serialising an emptied query leaves a bare "?" behind.
-  if (![...url.searchParams].length) url.search = "";
-  return hits;
-}
+/* -------------------------------------------------------------------------- *
+ * Parsing
+ * -------------------------------------------------------------------------- */
 
 /**
  * Parse user input into a URL, tolerating a missing scheme.
@@ -348,6 +141,8 @@ export function stripTracking(url) {
 export function parse(input) {
   const trimmed = String(input ?? "").trim();
   if (!trimmed) throw new ClentError("Paste a URL first.");
+  if (trimmed.length > MAX_URL)
+    throw new ClentError(`That is too long to be a URL (over ${MAX_URL} characters).`);
   // "example.com/x" is what people actually paste.
   const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : "https://" + trimmed;
 
@@ -365,107 +160,8 @@ export function parse(input) {
 }
 
 /* -------------------------------------------------------------------------- *
- * Templates
+ * Shapes
  * -------------------------------------------------------------------------- */
-
-/** Index of each charset's characters, for encoding. */
-const CHARSET_INDEX = Object.fromEntries(Object.entries(CHARSETS).map(([name, set]) => [
-  name, { set, index: new Map([...set.chars].map((c, i) => [c, i])) },
-]));
-
-/**
- * Try to express a URL as one of the templates.
- *
- * Returns null unless the captured values round-trip: every value has to fit
- * its declared alphabet, be short enough for the 6-bit length field, and
- * substituting them back must reproduce the URL exactly. Approximate matches
- * are worse than useless here — they would resolve to a different page.
- *
- * @param {string} href
- * @returns {{index: number, values: string[], bits: number}|null}
- */
-function asTemplate(url) {
-  // Only templates for this exact host can match, so most URLs do no regex
-  // work at all.
-  if (url.protocol !== "https:") return null;
-  const family = BY_HOST.get(url.host);
-  if (!family) return null;
-
-  const href = url.href;
-  let best = null;
-
-  for (const template of family) {
-    const index = template.index;
-    const found = template.match.exec(href);
-    if (!found) continue;
-
-    const values = found.slice(1);
-    let bits = 0;
-    let usable = true;
-
-    for (let slot = 0; slot < values.length; slot++) {
-      const value = values[slot];
-      const charset = CHARSET_INDEX[template.slots[slot]];
-      if (!value || value.length > MAX_SLOT) { usable = false; break; }
-      for (const character of value) {
-        if (!charset.index.has(character)) { usable = false; break; }
-      }
-      if (!usable) break;
-      bits += 6 + value.length * charset.set.bits;
-    }
-    if (!usable) continue;
-
-    // The guard that makes this safe to use at all.
-    if (fill(index, values) !== href) continue;
-
-    if (!best || bits < best.bits) best = { index, values, bits };
-  }
-  return best;
-}
-
-/**
- * @param {BitWriter} w
- * @param {{index: number, values: string[]}} template
- */
-function writeTemplate(w, { index, values }) {
-  w.push(SCHEME_TEMPLATE, 6); // mode bits stay 0: slots are self-describing
-  w.push(index, 8);
-  const slots = COMPILED[index].slots;
-  for (let slot = 0; slot < values.length; slot++) {
-    const charset = CHARSET_INDEX[slots[slot]];
-    w.push(values[slot].length, 6);
-    for (const character of values[slot]) {
-      w.push(charset.index.get(character), charset.set.bits);
-    }
-  }
-  return w.finish();
-}
-
-/**
- * @param {BitReader} reader
- * @returns {string} the rebuilt URL
- */
-function readTemplate(reader) {
-  const index = reader.read(8);
-  const template = COMPILED[index];
-  if (!template) throw new ClentError("This link uses a newer template than this page has.");
-
-  const values = [];
-  for (const name of template.slots) {
-    const charset = CHARSETS[name];
-    const length = reader.read(6);
-    if (length === 0) throw new ClentError("This link is damaged — an empty field.");
-    let value = "";
-    for (let i = 0; i < length; i++) {
-      const at = reader.read(charset.bits);
-      const character = charset.chars[at];
-      if (character === undefined) throw new ClentError("This link is damaged.");
-      value += character;
-    }
-    values.push(value);
-  }
-  return fill(index, values);
-}
 
 /**
  * Every way this URL could legitimately be split for the wire format.
@@ -475,17 +171,27 @@ function readTemplate(reader) {
  * is measured rather than assumed.
  *
  * @param {URL} url
- * @returns {Array<{flags: number, hostByte: number|null, body: string, host: string|null}>}
+ * @returns {Array<{flags: number, schemeIndex: number|null, hostByte: number|null, body: string, host: string|null}>}
  */
 function shapesFor(url) {
   // The compact form has nowhere to keep userinfo, and silently dropping it
-  // would repoint the link — so those go verbatim.
+  // would repoint the link — so those go through the "other" scheme, which
+  // keeps the whole rest of the URL as the body.
   const compact =
     (url.protocol === "http:" || url.protocol === "https:") &&
     !url.username && !url.password;
 
   if (!compact) {
-    return [{ flags: SCHEME_VERBATIM, hostByte: null, body: url.href, host: null }];
+    // parse() already gated on ENCODABLE, so the scheme is always in the
+    // table; the 4-bit index replaces spelling it out in the body.
+    const schemeIndex = SCHEME_INDEX.get(url.protocol);
+    return [{
+      flags: SCHEME_OTHER,
+      schemeIndex,
+      hostByte: null,
+      body: url.href.slice(url.protocol.length),
+      host: null,
+    }];
   }
 
   const scheme = url.protocol === "http:" ? SCHEME_HTTP : SCHEME_HTTPS;
@@ -511,9 +217,15 @@ function shapesFor(url) {
   for (const { host, extra } of spellings) {
     const index = HOST_INDEX.get(host);
     if (index !== undefined) {
-      shapes.push({ flags: scheme | extra | F_HOST, hostByte: index, body: tail, host });
+      shapes.push({
+        flags: scheme | extra | F_HOST, schemeIndex: null,
+        hostByte: index, body: tail, host,
+      });
     }
-    shapes.push({ flags: scheme | extra, hostByte: null, body: host + tail, host });
+    shapes.push({
+      flags: scheme | extra, schemeIndex: null,
+      hostByte: null, body: host + tail, host,
+    });
   }
   return shapes;
 }
@@ -528,11 +240,17 @@ function shapesFor(url) {
  * @param {number} mode
  * @param {number|null} hostByte
  * @param {Uint8Array} bytes
+ * @param {number|null} [schemeIndex] required exactly when flags carry SCHEME_OTHER
  * @returns {string}
  */
-export function build(flags, mode, hostByte, bytes) {
+export function build(flags, mode, hostByte, bytes, schemeIndex = null) {
   const w = new BitWriter();
   w.push(flags | (mode << 4), 6);
+  if ((flags & SCHEME_MASK) === SCHEME_OTHER) {
+    if (schemeIndex === null)
+      throw new ClentError("A scheme-2 payload needs a scheme index.");
+    w.push(schemeIndex, SCHEME_BITS);
+  }
   if (hostByte !== null) w.push(hostByte, 8);
 
   if (mode === MODE_TEXT6) {
@@ -541,81 +259,6 @@ export function build(flags, mode, hostByte, bytes) {
     for (const byte of bytes) w.push(byte, 8);
   }
   return w.finish();
-}
-
-/** Bits to write one literal byte: direct symbol, SHIFT + symbol, or ESC + byte. */
-function literalCost(byte) {
-  if (T6_INDEX.has(byte)) return 6;
-  if (byte >= 65 && byte <= 90 && T6_INDEX.has(byte + 32)) return 12;
-  return 14;
-}
-
-/**
- * Write a body as text6, choosing tokens by dynamic programming.
- *
- * Greedy longest-match is the obvious approach and is not optimal: taking a
- * long token here can step over the start of a better one, or over a run of
- * cheap literals that would have let two tokens line up. Working backwards
- * from the end and keeping the best cost for every suffix gives the genuinely
- * smallest text6 encoding of the body, which is what the mode is then judged
- * on against raw and deflate.
- *
- * @param {BitWriter} w
- * @param {Uint8Array} bytes
- */
-function emitText6(w, bytes) {
-  const n = bytes.length;
-  const cost = new Int32Array(n + 1);
-  /** -1 = emit a literal here, otherwise the token index to emit. */
-  const choice = new Int32Array(n + 1).fill(-1);
-
-  for (let i = n - 1; i >= 0; i--) {
-    let best = literalCost(bytes[i]) + cost[i + 1];
-    let pick = -1;
-
-    for (const index of TOKEN_BY_FIRST.get(bytes[i]) ?? []) {
-      const token = TOKEN_BYTES[index];
-      if (i + token.length > n) continue;
-      let matched = true;
-      for (let k = 1; k < token.length; k++) {
-        if (bytes[i + k] !== token[k]) {
-          matched = false;
-          break;
-        }
-      }
-      if (!matched) continue;
-      const candidate = 12 + cost[i + token.length];
-      if (candidate < best) {
-        best = candidate;
-        pick = index;
-      }
-    }
-
-    cost[i] = best;
-    choice[i] = pick;
-  }
-
-  for (let i = 0; i < n;) {
-    const pick = choice[i];
-    if (pick >= 0) {
-      w.push(TOKEN, 6);
-      w.push(pick, 6);
-      i += TOKEN_BYTES[pick].length;
-      continue;
-    }
-    const byte = bytes[i++];
-    const direct = T6_INDEX.get(byte);
-    if (direct !== undefined) {
-      w.push(direct, 6);
-    } else if (byte >= 65 && byte <= 90 && T6_INDEX.has(byte + 32)) {
-      w.push(SHIFT, 6);
-      w.push(T6_INDEX.get(byte + 32), 6);
-    } else {
-      w.push(ESC, 6);
-      w.push(byte, 8);
-    }
-  }
-  w.push(END, 6);
 }
 
 /**
@@ -644,6 +287,8 @@ export async function shorten(input, options = {}) {
  * @property {string[]} removed tracking parameters that were dropped
  * @property {string|null} host host as stored, before dictionary lookup
  * @property {number|null} hostByte dictionary index, or null when spelled out
+ * @property {number|null} template winning template index, or null
+ * @property {string|null} templatePattern winning template's pattern, or null
  * @property {number} headerBits bits spent on the header and host index
  * @property {number} bodyBits bits spent on the body
  * @property {Record<string, number|null>} candidates payload length per mode
@@ -666,26 +311,34 @@ export async function analyze(input, options = {}) {
   // Every shape crossed with every body mode. The smallest payload wins, so
   // no combination of choices can beat what comes out of here.
   const shapes = shapesFor(url);
-  /** @type {{payload: string, shape: shapes[0], mode: number}|null} */
+  /** @type {{payload: string, shape: (typeof shapes)[0], mode: number}|null} */
   let winner = null;
 
   // A template, when one fits, is just another candidate: it wins on length
   // or it does not get used.
   const template = asTemplate(url);
   const templateCandidate = template
-    ? { payload: writeTemplate(new BitWriter(), template), index: template.index }
+    ? {
+        payload: (() => {
+          const w = new BitWriter();
+          w.push(SCHEME_TEMPLATE, 6); // mode bits stay 0: slots are self-describing
+          return writeTemplate(w, template);
+        })(),
+        index: template.index,
+      }
     : null;
   /** Best length seen per mode, across all shapes. */
   const candidates = { text6: null, raw: null, deflate: null };
 
   // Deflate costs about three quarters of the time spent encoding, so it runs
-  // once rather than once per shape. The shortest body is the one it is run
-  // on: every other shape's body is that one with a host spelled out in front
-  // of it, and compressing a longer string to beat a shorter one that is its
-  // own suffix does not happen. This is the single place in the encoder that
-  // trades a rule for a measurement, so tools/optimality.js — which builds
-  // every shape and every mode without this shortcut — is what keeps it
-  // honest, and it runs over the corpus.
+  // once rather than once per shape, on the shortest body. That is the one
+  // measured shortcut in the encoder, and it is not perfectly safe: DEFLATE
+  // is not monotonic in input length, so a strictly longer body can, rarely,
+  // compress one character smaller — the oracle found exactly one such URL in
+  // 4,000 (a 1-character loss). Accepted: closing it means deflating every
+  // shape, which measured at ~56% of encode throughput. tools/optimality.js
+  // builds every shape and mode without this shortcut and keeps the loss
+  // bounded and visible.
   const encoded = shapes.map((shape) => encoder.encode(shape.body));
   let shortest = 0;
   for (let i = 1; i < encoded.length; i++) {
@@ -701,7 +354,7 @@ export async function analyze(input, options = {}) {
     for (const mode of [MODE_TEXT6, MODE_RAW, MODE_DEFLATE]) {
       if (mode === MODE_DEFLATE && !zipped) continue;
       const payload = build(shape.flags, mode, shape.hostByte,
-        mode === MODE_DEFLATE ? zipped : bytes);
+        mode === MODE_DEFLATE ? zipped : bytes, shape.schemeIndex);
 
       const name = MODE_NAMES[mode];
       if (candidates[name] === null || payload.length < candidates[name]) {
@@ -717,8 +370,8 @@ export async function analyze(input, options = {}) {
     return {
       payload: templateCandidate.payload,
       url,
-      mode: MODE_TEXT6,
-      modeName: "template",
+      mode: MODE_TEMPLATE,
+      modeName: MODE_NAMES[MODE_TEMPLATE],
       removed,
       host: url.host,
       hostByte: null,
@@ -731,7 +384,8 @@ export async function analyze(input, options = {}) {
   }
 
   const { payload, shape, mode } = winner;
-  const headerBits = 6 + (shape.hostByte === null ? 0 : 8);
+  const headerBits = 6 + (shape.hostByte === null ? 0 : 8) +
+    (shape.schemeIndex === null ? 0 : SCHEME_BITS);
   return {
     payload,
     url,
@@ -770,6 +424,7 @@ export async function analyze(input, options = {}) {
 export async function expand(payload) {
   const code = String(payload ?? "");
   if (!code) throw new ClentError("This link is empty.");
+  if (code.length > MAX_PAYLOAD) throw new ClentError("This link is far too long.");
   if (!/^[A-Za-z0-9_-]+$/.test(code)) throw new ClentError("This isn't a valid Clent link.");
 
   const reader = new BitReader(code);
@@ -782,38 +437,24 @@ export async function expand(payload) {
     return finish(readTemplate(reader));
   }
 
+  const scheme = flags & SCHEME_MASK;
+
+  // Scheme 2 has its own layout: bits 2-3 must be clear, then a 4-bit index
+  // into the scheme table before the body.
+  let schemeIndex = null;
+  if (scheme === SCHEME_OTHER) {
+    if (flags & (F_WWW | F_HOST))
+      throw new ClentError("This link uses an unknown format.");
+    schemeIndex = reader.read(SCHEME_BITS);
+    if (schemeIndex !== SCHEME_IN_BODY && schemeIndex >= ENCODABLE_ORDER.length)
+      throw new ClentError("This link uses a newer scheme table than this page has.");
+  }
+
   const hostIndex = flags & F_HOST ? reader.read(8) : null;
 
   let body;
   if (mode === MODE_TEXT6) {
-    /** @type {number[]} */
-    const bytes = [];
-    let shifted = false;
-    for (;;) {
-      if (reader.left < 6) throw new ClentError("This link is truncated.");
-      const symbol = reader.read(6);
-      if (symbol === END) break;
-      if (symbol === SHIFT) {
-        shifted = true;
-        continue;
-      }
-      if (symbol === ESC) {
-        bytes.push(reader.read(8));
-        shifted = false;
-        continue;
-      }
-      if (symbol === TOKEN) {
-        const token = TOKEN_BYTES[reader.read(6)];
-        if (!token) throw new ClentError("This link uses an unknown token.");
-        for (const byte of token) bytes.push(byte);
-        shifted = false;
-        continue;
-      }
-      const ch = T6.charCodeAt(symbol);
-      bytes.push(shifted && ch >= 97 && ch <= 122 ? ch - 32 : ch);
-      shifted = false;
-    }
-    body = decoder.decode(new Uint8Array(bytes));
+    body = decodeText6(reader);
   } else if (mode === MODE_RAW || mode === MODE_DEFLATE) {
     const count = Math.floor(reader.left / 8); // trailing padding is under 8 bits
     const bytes = new Uint8Array(count);
@@ -823,10 +464,9 @@ export async function expand(payload) {
     throw new ClentError("This link uses an unknown format.");
   }
 
-  const scheme = flags & SCHEME_MASK;
   let href;
-  if (scheme === SCHEME_VERBATIM) {
-    href = body;
+  if (scheme === SCHEME_OTHER) {
+    href = schemeIndex === SCHEME_IN_BODY ? body : ENCODABLE_ORDER[schemeIndex] + body;
   } else if (scheme === SCHEME_HTTPS || scheme === SCHEME_HTTP) {
     let host, tail;
     if (hostIndex !== null) {
@@ -849,12 +489,17 @@ export async function expand(payload) {
 }
 
 /**
- * Final gate for every decode path, template or not: it has to parse, and it
- * has to have a scheme we are willing to hand to a browser.
+ * Final gate for every decode path, template or not: it has to be a sane
+ * length, it has to parse, and it has to have a scheme we are willing to
+ * hand to a browser.
  * @param {string} href
  * @returns {URL}
  */
 function finish(href) {
+  // Re-checked here, not only in parse(): a crafted payload never went
+  // through parse() on the way in.
+  if (href.length > MAX_URL)
+    throw new ClentError("This link decodes to something far too long to be a URL.");
   let url;
   try {
     url = new URL(href);
@@ -873,72 +518,4 @@ function finish(href) {
  */
 export function isFollowable(url) {
   return FOLLOWABLE.has(url.protocol);
-}
-
-/* -------------------------------------------------------------------------- *
- * Destination risk
- * -------------------------------------------------------------------------- */
-
-/** Nothing worth mentioning. */
-export const RISK_NONE = 0;
-/** Worth showing, not worth stopping for. */
-export const RISK_NOTE = 1;
-/** Stop and make a human look before going there. */
-export const RISK_BLOCK = 2;
-
-const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-
-/**
- * Look for the shapes phishing links take.
- *
- * A redirector is a gift to a phisher: the destination is invisible until it
- * has already happened, and the link wears this site's domain. The scheme
- * allowlist stops a payload from running code, but it does nothing about a
- * payload that points somewhere deliberately deceptive, and that is a
- * different problem needing a different answer.
- *
- * Nothing here is a verdict on whether a site is malicious — that can't be
- * known from a URL. These are the properties a normal shared link almost
- * never has and a deceptive one often does, so the page shows the destination
- * and waits instead of going there quietly.
- *
- * @param {URL} url
- * @returns {{level: number, reasons: Array<{code: string, level: number, message: string}>}}
- */
-export function assess(url) {
-  const reasons = [];
-  const add = (code, level, message) => reasons.push({ code, level, message });
-
-  // "https://paypal.com@evil.example/" reads as PayPal and goes to evil.
-  // The oldest trick there is, and still the most effective.
-  if (url.username || url.password) {
-    add("userinfo", RISK_BLOCK,
-      `The part before the "@" is not the destination. This link actually goes to ${url.hostname}.`);
-  }
-
-  // Punycode is how a homograph attack survives being written down:
-  // "xn--pypal-4ve.com" renders as something very close to "paypal.com".
-  const punycode = url.hostname.split(".").filter((label) => label.startsWith("xn--"));
-  if (punycode.length) {
-    add("punycode", RISK_BLOCK,
-      "This address uses characters that can look like a different name.");
-  }
-
-  if (IPV4.test(url.hostname) || url.hostname.startsWith("[")) {
-    add("ip-literal", RISK_BLOCK,
-      "This link points at a raw IP address rather than a named site.");
-  }
-
-  if (url.port && url.port !== "80" && url.port !== "443") {
-    add("port", RISK_NOTE, `It connects on port ${url.port} rather than the usual one.`);
-  }
-
-  if (url.protocol === "http:") {
-    add("insecure", RISK_NOTE, "The connection is plain HTTP, so it isn't encrypted.");
-  }
-
-  return {
-    level: reasons.reduce((worst, r) => Math.max(worst, r.level), RISK_NONE),
-    reasons,
-  };
 }

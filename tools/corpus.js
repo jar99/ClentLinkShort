@@ -8,7 +8,7 @@ import { createBrotliDecompress } from "node:zlib";
 import { createInterface } from "node:readline";
 import path from "node:path";
 
-import { analyze, expand, parse } from "../src/clent.js";
+import { analyze, expand, parse, stripTracking } from "../src/clent.js";
 import { ROOT } from "./bundle.js";
 
 export const CORPUS_FILE = path.join(ROOT, "corpus", "urls.txt.br");
@@ -52,10 +52,8 @@ export function emptyStats() {
     /** @type {Array<{url: string, wasted: number}>} */
     suboptimal: [],
     modes: { text6: 0, raw: 0, deflate: 0, template: 0 },
-    templates: 0,
     inputBytes: 0,
     payloadBytes: 0,
-    linkBytes: 0,
     /** payload length / input length, per URL */
     ratios: [],
     /** 1 - (full link length / input length), per URL; negative means longer */
@@ -136,11 +134,14 @@ export async function check(raw, stats, { maxFailures = 50, origin = DEFAULT_ORI
 
   const linkLength = origin.length + result.payload.length;
   stats.checked++;
-  stats.modes[result.modeName] = (stats.modes[result.modeName] ?? 0) + 1;
-  if (result.template !== null && result.template !== undefined) stats.templates++;
+  // A mode name emptyStats does not declare means analyze() grew a mode this
+  // harness has never heard of — that must fail the run, not vanish from it.
+  if (!(result.modeName in stats.modes)) {
+    throw new Error(`analyze() returned unknown mode "${result.modeName}"`);
+  }
+  stats.modes[result.modeName]++;
   stats.inputBytes += raw.length;
   stats.payloadBytes += result.payload.length;
-  stats.linkBytes += linkLength;
   stats.ratios.push(result.payload.length / raw.length);
   stats.linkSavings.push(1 - linkLength / raw.length);
   if (result.payload.length < raw.length) stats.payloadShorter++;
@@ -155,10 +156,12 @@ export async function check(raw, stats, { maxFailures = 50, origin = DEFAULT_ORI
   if (linkLength < raw.length) bucket.linkShorter++;
 
   // What tracking-parameter stripping is actually worth, measured only on the
-  // URLs that carry any.
+  // URLs that carry any. Probing with stripTracking on a clone first keeps
+  // the expensive second analyze() off the ~96% of URLs with nothing to
+  // strip — it used to run on every one, doubling the whole scan.
   try {
-    const cleaned = await analyze(raw, { stripTracking: true });
-    if (cleaned.removed.length) {
+    if (stripTracking(new URL(expected)).length) {
+      const cleaned = await analyze(raw, { stripTracking: true });
       stats.withTracking++;
       stats.trackingBaseBytes += result.payload.length;
       stats.trackingSavedBytes += result.payload.length - cleaned.payload.length;

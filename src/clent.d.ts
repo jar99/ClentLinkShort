@@ -3,53 +3,54 @@
  *
  * Packs a URL into a short, URL-safe string containing the whole destination,
  * so nothing needs to be stored anywhere to resolve it back.
+ *
+ * This is the public API; the focused modules are re-exported here so callers
+ * need one import.
  */
 
+export { B64, BitWriter, BitReader, ClentError } from "./bits.js";
+export { canCompress, deflate, inflate, MAX_INFLATED } from "./deflate.js";
+export { T6, emitText6, decodeText6 } from "./text6.js";
+export { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
+export { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
+export { HOSTS } from "./hosts.js";
+export { TOKENS } from "./tokens.js";
+export { TEMPLATES } from "./templates.js";
+export {
+  ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
+} from "./schemes.js";
+
 /** Wire format version this build reads and writes. */
-export declare const VERSION: 4;
+export declare const VERSION: 6;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;
+export declare const SCHEME_OTHER: 2;
+export declare const SCHEME_TEMPLATE: 3;
+/** @deprecated v5 name for SCHEME_OTHER. */
 export declare const SCHEME_VERBATIM: 2;
 
 export declare const MODE_TEXT6: 0;
 export declare const MODE_RAW: 1;
 export declare const MODE_DEFLATE: 2;
+/** Analysis-level marker for a template win; never a wire value. */
+export declare const MODE_TEMPLATE: 3;
 
-export type Mode = 0 | 1 | 2;
-export type ModeName = "text6" | "raw" | "deflate";
+export type Mode = 0 | 1 | 2 | 3;
+export type ModeName = "text6" | "raw" | "deflate" | "template";
 
-/** Human-readable body mode names, indexed by mode. */
+/** Human-readable mode names, indexed by mode. */
 export declare const MODE_NAMES: readonly ModeName[];
 
-/** The host dictionary. Append-only: an entry's index is its wire encoding. */
-export declare const HOSTS: readonly string[];
+/** Header bit: "www." was stripped from the host. */
+export declare const F_WWW: 4;
+/** Header bit: the host is a dictionary index. */
+export declare const F_HOST: 8;
 
-/** Schemes that may be encoded into a link at all. */
-export declare const ENCODABLE: ReadonlySet<string>;
-
-/** Schemes a redirector may navigate to without a human clicking first. */
-export declare const FOLLOWABLE: ReadonlySet<string>;
-
-/** Query parameters removed when tracking-stripping is enabled. */
-export declare const TRACKING_PARAMS: RegExp;
-
-/** The Base64url alphabet; an index in this string is a 6-bit symbol value. */
-export declare const B64: string;
-
-/** The text6 symbol table; symbols 0..58 are literal bytes. */
-export declare const T6: string;
-
-/** Substring dictionary for text6. Append-only; exactly 64 entries. */
-export declare const TOKENS: readonly string[];
-
-/** Whether this runtime can DEFLATE. Without it, links are merely longer. */
-export declare const canCompress: boolean;
-
-/** Thrown for any malformed, truncated or unsafe payload. */
-export declare class ClentError extends Error {
-  readonly name: "ClentError";
-}
+/** Longest URL the codec will encode or return. */
+export declare const MAX_URL: 8192;
+/** Longest payload expand() will read. */
+export declare const MAX_PAYLOAD: 16384;
 
 export interface ShortenOptions {
   /** Remove utm_*, fbclid, gclid and friends. Defaults to true. */
@@ -62,22 +63,31 @@ export interface Analysis {
   payload: string;
   /** The URL as it will be reconstructed. */
   url: URL;
-  /** Winning body mode. */
+  /** Winning mode. */
   mode: Mode;
-  /** Winning body mode, named. */
+  /** Winning mode, named. */
   modeName: ModeName;
   /** Tracking parameters that were dropped. */
   removed: string[];
-  /** Host as stored, before dictionary lookup; null when stored verbatim. */
+  /** Host as stored; null when the URL went through the "other" scheme. */
   host: string | null;
   /** Dictionary index, or null when the host is spelled out. */
   hostByte: number | null;
-  /** Bits spent on the header and host index. */
+  /** Winning template index, or null. */
+  template: number | null;
+  /** Winning template's pattern, or null. */
+  templatePattern: string | null;
+  /** Bits spent on the header, scheme index and host index. */
   headerBits: number;
   /** Bits spent on the body. */
   bodyBits: number;
-  /** Payload length per mode; deflate is null where unsupported. */
-  candidates: { text6: number; raw: number; deflate: number | null };
+  /** Best payload length per mode; null where a mode was unavailable. */
+  candidates: {
+    text6: number | null;
+    raw: number | null;
+    deflate: number | null;
+    template: number | null;
+  };
 }
 
 /**
@@ -98,7 +108,7 @@ export declare function analyze(
 /**
  * Unpack a payload back into its URL.
  *
- * The result is guaranteed to have a scheme in {@link ENCODABLE}; callers that
+ * The result is guaranteed to have a scheme in ENCODABLE; callers that
  * navigate automatically must additionally check {@link isFollowable}.
  *
  * @throws {ClentError} with a message safe to show a user.
@@ -108,37 +118,18 @@ export declare function expand(payload: string): Promise<URL>;
 /** Whether a decoded URL may be navigated to without a human clicking first. */
 export declare function isFollowable(url: URL): boolean;
 
-/** Parse user input into a URL, tolerating a missing scheme. */
+/** Parse user input into a URL, tolerating a missing scheme. @throws {ClentError} */
 export declare function parse(input: string): URL;
 
-/** Remove known tracking parameters in place; returns the names removed. */
-export declare function stripTracking(url: URL): string[];
-
-/** Compress; resolves null where the runtime cannot DEFLATE. */
-export declare function deflate(bytes: Uint8Array): Promise<Uint8Array | null>;
-
-/** Decompress. @throws {ClentError} */
-export declare function inflate(bytes: Uint8Array): Promise<Uint8Array>;
-
-/** Assemble one complete candidate payload. Exposed for tests. */
+/**
+ * Assemble one complete candidate payload. Exposed for tests and the
+ * optimality oracle. schemeIndex is required exactly when flags carry
+ * SCHEME_OTHER.
+ */
 export declare function build(
   flags: number,
   mode: Mode,
   hostByte: number | null,
   bytes: Uint8Array,
+  schemeIndex?: number | null,
 ): string;
-
-/** Writes values of 1..8 bits into a Base64url string. */
-export declare class BitWriter {
-  out: string;
-  push(value: number, width: number): void;
-  finish(): string;
-}
-
-/** Reads values of 1..8 bits back out of a Base64url string. */
-export declare class BitReader {
-  constructor(str: string);
-  read(width: number): number;
-  /** Bits not yet consumed, including whole characters not yet read. */
-  readonly left: number;
-}
