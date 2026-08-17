@@ -44,14 +44,22 @@ const DENSE = B64 + "!$&'()*+,;=:@/?#[]{}|^\\";
 const DENSE_BASE = BigInt(DENSE.length);
 const DENSE_INDEX = new Map([...DENSE].map((c, i) => [c, i]));
 /**
- * Dense payloads always OPEN with "~" — never a Base64url character or a
- * dense digit, so detection is unambiguous in both directions.
+ * The "~" marker — never a Base64url character or a dense digit — is worn
+ * ONLY when the digits alone would be misread: a payload that happens to
+ * use nothing but Base64url characters (indistinguishable from canonical),
+ * or one that opens with a character the fragment grammar assigns a
+ * meaning ("!" is the preview prefix, "s=" opens a prefill). Nearly every
+ * dense payload contains punctuation Base64url cannot, which identifies it
+ * for free — so dense is never longer than canonical, and shorter from
+ * about eighteen payload characters up.
  */
 const DENSE_MARK = "~";
+/** A character only the dense alphabet uses — the free detection signal. */
+const DENSE_ONLY = /[!$&'()*+,;=:@/?#[\]{}|^\\]/;
 
 /** Is this fragment payload wearing the dense transport? */
 export function isDense(payload) {
-  return payload.startsWith(DENSE_MARK);
+  return payload.startsWith(DENSE_MARK) || DENSE_ONLY.test(payload);
 }
 
 /**
@@ -74,7 +82,12 @@ export function toDense(payload) {
     out = DENSE[Number(value % DENSE_BASE)] + out;
     value /= DENSE_BASE;
   }
-  return DENSE_MARK + out;
+  // The marker is paid only when the digits would be misread bare — and
+  // when even the marked form is longer (tiny payloads), the canonical
+  // spelling IS the best dense spelling: it decodes identically.
+  const ambiguous = !DENSE_ONLY.test(out) || out.startsWith("!") || out.startsWith("s=");
+  const dressed = ambiguous ? DENSE_MARK + out : out;
+  return dressed.length <= payload.length ? dressed : payload;
 }
 
 /**
@@ -84,8 +97,9 @@ export function toDense(payload) {
  * @throws {ClentError}
  */
 export function fromDense(payload) {
+  const digits = payload.startsWith(DENSE_MARK) ? payload.slice(1) : payload;
   let value = 0n;
-  for (const c of payload.slice(1)) {
+  for (const c of digits) {
     const digit = DENSE_INDEX.get(c);
     if (digit === undefined)
       throw new ClentError("This link carries a character that doesn't belong.");

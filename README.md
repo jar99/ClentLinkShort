@@ -242,12 +242,14 @@ Append `~` to a link to preview where it goes instead of going there.
 
 **Link styles.** The canonical payload is Base64url — the only alphabet that survives
 every chat app, terminal and clipboard, and the form all integrity tags are computed
-over. Two opt-in dresses re-spell the same bits: **dense** (leading `~`) writes the
-payload in base 87 over every character a browser keeps verbatim in a fragment,
-about 7% fewer characters at the cost of punctuation some apps cut links at; **emoji**
-packs 8 bits a glyph into the animal block, a quarter fewer characters to look at.
-Both are exact re-encodings — the decoder detects the dress from the first character
-and the same tag verifies the link in any spelling.
+over. Two opt-in dresses re-spell the same bits: **dense** writes the payload in
+base 87 over every character a browser keeps verbatim in a fragment — about 7% fewer
+characters at the cost of punctuation some apps cut links at, and never longer than
+canonical: the punctuation itself identifies the dress, so the `~` marker is paid
+only in the rare payload that happens to spell itself in Base64url characters.
+**Emoji** packs 8 bits a glyph into the animal block, a quarter fewer characters to
+look at. Both are exact re-encodings — the same tag verifies the link in any
+spelling.
 
 ## How the encoding works
 

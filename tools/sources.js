@@ -601,3 +601,114 @@ export async function* mastodon(target, { get, progress, sleep }) {
     progress("mastodon", total, target);
   }
 }
+
+/* -------------------------------------------------------------------------- *
+ * Deep links on the sites people care about: Fandom wikis and targeted
+ * per-domain mining
+ * -------------------------------------------------------------------------- */
+
+/** Big Fandom communities across film, TV, games and comics. */
+const FANDOM_WIKIS = [
+  "starwars", "harrypotter", "marvel", "dc", "memory-alpha", "minecraft",
+  "elderscrolls", "fallout", "leagueoflegends", "naruto", "onepiece",
+  "pokemon", "disney", "gameofthrones", "zelda", "warframe", "terraria",
+  "genshin-impact", "simpsons", "southpark",
+];
+
+/**
+ * Real article URLs from Fandom wikis, via each community's own MediaWiki
+ * API — page titles become the exact /wiki/ URLs Fandom serves, capitals,
+ * quotes, parentheses and all, which is precisely the messy shape a codec
+ * needs to prove itself on.
+ */
+export async function* fandom(target, { get, progress, sleep }) {
+  const perWiki = Math.ceil(target / FANDOM_WIKIS.length);
+  let total = 0;
+  for (const community of FANDOM_WIKIS) {
+    let cont = "";
+    let fromWiki = 0;
+    while (fromWiki < perWiki) {
+      let body;
+      try {
+        body = await get(`https://${community}.fandom.com/api.php?action=query` +
+          "&list=allpages&aplimit=500&format=json&formatversion=2" +
+          (cont ? `&apcontinue=${encodeURIComponent(cont)}` : ""), { retries: 1 });
+      } catch {
+        break; // one community down should not stop the sweep
+      }
+      const pages = body?.query?.allpages ?? [];
+      if (!pages.length) break;
+      for (const page of pages) {
+        if (!page.title) continue;
+        // Fandom's own URL spelling: spaces become underscores; slashes and
+        // colons stay; the rest percent-encodes.
+        const slug = encodeURIComponent(page.title.replace(/ /g, "_"))
+          .replace(/%2F/gi, "/").replace(/%3A/gi, ":");
+        yield `https://${community}.fandom.com/wiki/${slug}`;
+        fromWiki++;
+        total++;
+      }
+      progress("fandom", total, target);
+      cont = body?.continue?.apcontinue;
+      if (!cont) break;
+      await sleep(120);
+    }
+    if (total >= target) return;
+  }
+}
+
+/**
+ * The domains worth mining on purpose: asked-for sites whose deep links are
+ * underrepresented in listing-driven sources.
+ */
+const TARGET_DOMAINS = [
+  "imdb.com", "fandom.com", "linkedin.com", "instagram.com", "twitter.com",
+  "x.com", "youtube.com", "youtu.be", "facebook.com", "tiktok.com",
+  "medium.com", "substack.com", "goodreads.com", "rottentomatoes.com",
+  "open.spotify.com", "soundcloud.com", "letterboxd.com", "discogs.com",
+  "twitch.tv", "flickr.com", "imgur.com", "patreon.com", "kickstarter.com",
+];
+
+/**
+ * Wikipedia's citation index, filtered per domain: every URL is a real
+ * link someone cited, and the euquery filter turns the index into a
+ * per-site deep-link mine — IMDb titles, LinkedIn profiles, Instagram
+ * posts, X statuses. Paced gently: Wikimedia rate-limits by IP, and this
+ * source backs off rather than pushing into a 429 wall.
+ */
+export async function* targeted(target, { get, progress, sleep }) {
+  const perDomain = Math.ceil(target / TARGET_DOMAINS.length);
+  let total = 0;
+  let strikes = 0;
+  for (const domain of TARGET_DOMAINS) {
+    let cont = "";
+    let fromDomain = 0;
+    while (fromDomain < perDomain && strikes < 5) {
+      let body;
+      try {
+        body = await get("https://en.wikipedia.org/w/api.php?action=query" +
+          `&list=exturlusage&euquery=${encodeURIComponent(domain)}` +
+          "&eulimit=500&format=json&formatversion=2" +
+          (cont ? `&eucontinue=${encodeURIComponent(cont)}` : ""), { retries: 1 });
+      } catch {
+        strikes++;
+        await sleep(30000 * strikes); // the limiter cools on a scale of minutes
+        continue;
+      }
+      const rows = body?.query?.exturlusage ?? [];
+      if (!rows.length) break;
+      for (const row of rows) {
+        if (row.url) {
+          yield row.url;
+          fromDomain++;
+          total++;
+        }
+      }
+      progress("targeted", total, target);
+      cont = body?.continue?.eucontinue;
+      if (!cont) break;
+      await sleep(700);
+    }
+    if (total >= target || strikes >= 5) return;
+  }
+}

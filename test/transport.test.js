@@ -29,10 +29,12 @@ function* payloads(maxLength, perLength) {
 test("dense round-trips every payload length exactly", () => {
   for (const p of payloads(90, 8)) {
     const dressed = toDense(p);
-    assert.ok(isDense(dressed), dressed);
     assert.ok(!isEmoji(dressed), dressed);
-    assert.equal(fromDense(dressed), p);
+    // Tiny payloads may come back in canonical spelling — the one case
+    // where that is the shortest dense form; every spelling decodes alike.
     assert.equal(decodeTransport(dressed), p);
+    if (isDense(dressed)) assert.equal(fromDense(dressed), p);
+    else assert.equal(dressed, p);
   }
 });
 
@@ -47,14 +49,32 @@ test("emoji round-trips every payload length exactly", () => {
 });
 
 test("dense output never collides with the fragment grammar", () => {
+  let marked = 0;
   for (const p of payloads(90, 8)) {
     const dressed = toDense(p);
-    // "~" opens the payload and appears nowhere else, so the preview
-    // suffix ("~" at the end) and the tag separator (".") stay unambiguous,
-    // and a dense payload can never be mistaken for canonical Base64url.
+    // "~" appears only as a leading marker, so the preview suffix ("~" at
+    // the end) and the tag separator (".") stay unambiguous; the grammar's
+    // leading "!" (preview) and "s=" (prefill) are never emitted bare; and
+    // a dense payload is never mistaken for canonical Base64url.
     assert.ok(!dressed.slice(1).includes("~"), dressed);
     assert.ok(!dressed.includes("."), dressed);
     assert.ok(!dressed.startsWith("!"), dressed);
+    assert.ok(!dressed.startsWith("s="), dressed);
+    if (dressed.startsWith("~")) marked++;
+    else assert.ok(isDense(dressed) || dressed === p, dressed);
+  }
+  // The marker is the exception, not the rule — that is what makes dense
+  // never longer than canonical.
+  assert.ok(marked < 30, `${marked} of 720 payloads needed the marker`);
+});
+
+test("dense is never longer than canonical, and shorter when it matters", () => {
+  for (const p of payloads(90, 4)) {
+    const dressed = toDense(p);
+    assert.ok(dressed.length <= p.length, `${p} -> ${dressed}`);
+    if (p.length >= 24) {
+      assert.ok(dressed.length < p.length, `${p} (${p.length}) -> ${dressed} (${dressed.length})`);
+    }
   }
 });
 

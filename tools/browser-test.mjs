@@ -332,8 +332,8 @@ try {
 
     await page.selectOption("#style", "dense");
     const dense = await wait(plain);
-    check("the dense style re-dresses the payload behind a ~",
-      dense.includes("#~") || dense.includes("#!~"), dense.slice(-30));
+    check("the dense style re-dresses the payload in the wide alphabet",
+      /[!$&'()*+,;=:@?#[\]{}|^\\]/.test(dense.split("#")[1] ?? ""), dense.slice(-30));
     check("the dense link is shorter than the standard one",
       dense.length < plain.length, `${dense.length} vs ${plain.length}`);
 

@@ -25,7 +25,7 @@ import { ROOT } from "./bundle.js";
 import { readLines } from "./corpus.js";
 import {
   wikipedia, hackernews, gdelt, stackexchange, trancoDomains,
-  feeds, lemmy, commons, reddit, mastodon,
+  feeds, lemmy, commons, reddit, mastodon, fandom, targeted,
 } from "./sources.js";
 
 const OUT = path.join(ROOT, "corpus");
@@ -185,6 +185,8 @@ async function main() {
     commons: (n) => commons(n, context),
     reddit: (n) => reddit(n, context),
     mastodon: (n) => mastodon(n, context),
+    fandom: (n) => fandom(n, context),
+    targeted: (n) => targeted(n, context),
     tranco: (n) => trancoDomains(n, ranks),
   };
 

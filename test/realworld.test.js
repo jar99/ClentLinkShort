@@ -64,7 +64,7 @@ test("every wild link also survives the emoji and dense dresses", async () => {
     const payload = await shorten(url, { stripTracking: false });
     assert.equal((await expand(toEmoji(payload))).href, new URL(url).href, url);
     assert.equal((await expand(toDense(payload))).href, new URL(url).href, url);
-    // The dense dress must actually be denser.
-    assert.ok(toDense(payload).length <= payload.length + 1, url);
+    // The dense dress must actually be denser — never longer, marker included.
+    assert.ok(toDense(payload).length <= payload.length, url);
   }
 });

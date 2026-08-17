@@ -161,9 +161,15 @@ const summary = {
 };
 
 // Written every run so the page quotes measurements, not remembered numbers.
-// Free of timings on purpose: CI diffs this against the committed copy.
+// Free of timings on purpose: CI diffs this against the committed copy —
+// and floats are rounded to 10 significant digits, far past anything
+// quoted, because the parallel workers merge in whatever order they finish
+// and float addition is not associative in the last couple of bits.
 await writeFile(path.join(ROOT, "corpus", "stats.json"),
-  JSON.stringify(summary, null, 2) + "\n");
+  JSON.stringify(summary, (key, value) =>
+    typeof value === "number" && !Number.isInteger(value)
+      ? Number(value.toPrecision(10))
+      : value, 2) + "\n");
 
 if (AS_JSON) {
   console.log(JSON.stringify(summary, null, 2));
