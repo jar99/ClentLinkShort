@@ -24,8 +24,9 @@ import path from "node:path";
 import { ROOT } from "./bundle.js";
 import { readLines } from "./corpus.js";
 import {
-  wikipedia, hackernews, gdelt, stackexchange, trancoDomains,
+  wikipedia, hackernews, hncomments, gdelt, stackexchange, trancoDomains,
   feeds, lemmy, commons, reddit, mastodon, fandom, targeted,
+  crossref, npmjs, pypi, archiveitems,
 } from "./sources.js";
 
 const OUT = path.join(ROOT, "corpus");
@@ -187,6 +188,11 @@ async function main() {
     mastodon: (n) => mastodon(n, context),
     fandom: (n) => fandom(n, context),
     targeted: (n) => targeted(n, context),
+    hncomments: (n) => hncomments(n, context),
+    crossref: (n) => crossref(n, context),
+    npmjs: (n) => npmjs(n, context),
+    pypi: (n) => pypi(n, context),
+    archiveitems: (n) => archiveitems(n, context),
     tranco: (n) => trancoDomains(n, ranks),
   };
 
@@ -213,22 +219,28 @@ async function main() {
   // All sources at once: the run takes as long as its slowest source, not
   // the sum of them. The shared dedup set is safe — generators only hand
   // over between awaits, and Node runs this on one thread.
+  /** Per-source honesty: what arrived, what was junk, what was already seen. */
+  const quality = {};
   await Promise.all(Object.entries(wanted).map(async ([name, share]) => {
     const target = Math.round(TOTAL * share);
     counts[name] = 0;
+    const q = quality[name] = { kept: 0, duplicates: 0, rejected: 0 };
     const started = Date.now();
     try {
       for await (const raw of generators[name](Math.round(target * 1.3))) {
         const url = usable(raw);
-        if (!url || seen.has(url)) continue;
+        if (!url) { q.rejected++; continue; }
+        if (seen.has(url)) { q.duplicates++; continue; }
         seen.add(url);
+        q.kept++;
         if (++counts[name] >= target) break;
       }
     } catch (error) {
       console.warn(`  ! ${name} stopped early: ${error.message}`);
     }
     console.log(`  ${name.padEnd(14)} ${counts[name].toLocaleString()} URLs in ` +
-      `${((Date.now() - started) / 1000).toFixed(0)}s`);
+      `${((Date.now() - started) / 1000).toFixed(0)}s` +
+      ` (${q.duplicates.toLocaleString()} dupes, ${q.rejected.toLocaleString()} rejected)`);
   }));
 
   // Shuffle deterministically so reading the first N lines still gives a
@@ -249,6 +261,7 @@ async function main() {
     generated: new Date().toISOString().slice(0, 10),
     total: all.length,
     counts,
+    quality,
     rankedDomains: ranks.length,
     sha256: createHash("sha256").update(text).digest("hex"),
     bytes: text.length,

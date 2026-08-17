@@ -31,6 +31,7 @@ const WIKIS = [
   "en", "de", "fr", "es", "ru", "ja", "zh", "pt", "it", "pl",
   "nl", "ar", "fa", "he", "ko", "tr", "id", "vi", "sv", "uk",
   "cs", "hu", "fi", "th", "el", "hi", "no", "da", "ro", "bg",
+  "ca", "eu", "gl", "sr", "sk", "sl", "lt", "hr", "ms", "bn",
 ];
 
 /** Stack Exchange sites, for links people actually paste into questions. */
@@ -40,61 +41,32 @@ const SE_SITES = [
 ];
 
 /**
- * External links cited in articles, across many language editions. Deep,
- * messy, and full of URLs typed by hand a decade ago.
+ * Merge N concurrent producers into one async URL stream.
  *
- * A FEW editions page concurrently — one polite sequential stream each. A
- * large run would take the sum of thirty round-trip chains run one after
- * another, but thirty at once trips the API's rate limiting and every
- * stream dies early; six is measured to sail through. A tiny channel hands
- * their results to the single consumer.
+ * Every source that talks to more than one server (or can partition its
+ * keyspace) uses this: each producer is one polite sequential stream, the
+ * run costs the slowest producer instead of the sum, and the consumer stops
+ * all of them the moment the target is reached.
+ *
+ * @param {number} target stop after this many URLs
+ * @param {string} label progress label
+ * @param {(label: string, n: number, target: number) => void} progress
+ * @param {Array<(push: (url: string) => void, stopped: () => boolean) => Promise<void>>} producers
+ * @returns {AsyncGenerator<string>}
  */
-export async function* wikipedia(target, { get, progress }) {
-  const CONCURRENT = 6;
-  const perWiki = Math.ceil(target / WIKIS.length);
+async function* channel(target, label, progress, producers) {
   /** @type {string[]} */
   const queue = [];
   /** @type {(() => void)|null} */
   let wake = null;
-  let running = CONCURRENT;
+  let running = producers.length;
   let stop = false;
-  let nextWiki = 0;
   const notify = () => { if (wake) { wake(); wake = null; } };
+  const push = (url) => { queue.push(url); notify(); };
+  const stopped = () => stop;
 
-  for (let runner = 0; runner < CONCURRENT; runner++) {
-    (async () => {
-      while (!stop) {
-        const at = nextWiki++;
-        if (at >= WIKIS.length) break;
-        const lang = WIKIS[at];
-        let cont = "";
-        let fromWiki = 0;
-        while (fromWiki < perWiki && !stop) {
-          const url = `https://${lang}.wikipedia.org/w/api.php?action=query` +
-            "&list=exturlusage&eulimit=500&format=json&formatversion=2" +
-            (cont ? `&eucontinue=${encodeURIComponent(cont)}` : "");
-          let body;
-          try {
-            body = await get(url);
-          } catch {
-            break; // a single wiki being unavailable should not stop the run
-          }
-          const rows = body?.query?.exturlusage ?? [];
-          if (!rows.length) break;
-          for (const row of rows) {
-            if (row.url) {
-              queue.push(row.url);
-              fromWiki++;
-            }
-          }
-          notify();
-          cont = body?.continue?.eucontinue;
-          if (!cont) break;
-        }
-      }
-      running--;
-      notify();
-    })();
+  for (const producer of producers) {
+    producer(push, stopped).catch(() => {}).then(() => { running--; notify(); });
   }
 
   let total = 0;
@@ -106,38 +78,143 @@ export async function* wikipedia(target, { get, progress }) {
     while (queue.length) {
       yield queue.shift();
       if (++total >= target) {
-        stop = true; // wind the streams down instead of fetching past the quota
+        stop = true;
         return;
       }
     }
-    progress("wikipedia", total, target);
+    progress(label, total, target);
   }
 }
 
 /**
- * Links submitted to Hacker News. Algolia caps a query at 1000 hits, so walk
- * backwards through time using the oldest timestamp of each page as the next
- * upper bound.
+ * External links cited in articles, across many language editions. Deep,
+ * messy, and full of URLs typed by hand a decade ago.
+ *
+ * A FEW editions page concurrently — one polite sequential stream each,
+ * paced with a small sleep. Thirty at once trips Wikimedia's per-IP rate
+ * limiting and every stream dies early; four slow streams are measured to
+ * live long enough to matter.
+ */
+export async function* wikipedia(target, { get, progress, sleep }) {
+  const CONCURRENT = 4;
+  const perWiki = Math.ceil(target / WIKIS.length);
+  let nextWiki = 0;
+
+  yield* channel(target, "wikipedia", progress,
+    Array.from({ length: CONCURRENT }, () => async (push, stopped) => {
+      while (!stopped()) {
+        const at = nextWiki++;
+        if (at >= WIKIS.length) return;
+        const lang = WIKIS[at];
+        let cont = "";
+        let fromWiki = 0;
+        while (fromWiki < perWiki && !stopped()) {
+          let body;
+          try {
+            body = await get(`https://${lang}.wikipedia.org/w/api.php?action=query` +
+              "&list=exturlusage&eulimit=500&format=json&formatversion=2" +
+              (cont ? `&eucontinue=${encodeURIComponent(cont)}` : ""));
+          } catch {
+            return; // a single wiki being unavailable should not stop the run
+          }
+          const rows = body?.query?.exturlusage ?? [];
+          if (!rows.length) break;
+          for (const row of rows) {
+            if (row.url) {
+              push(row.url);
+              fromWiki++;
+            }
+          }
+          cont = body?.continue?.eucontinue;
+          if (!cont) break;
+          await sleep(250); // the pace that keeps the limiter asleep
+        }
+      }
+    }));
+}
+
+/**
+ * Links submitted to Hacker News. Algolia caps a query at 1000 hits, so
+ * each walker pages backwards through time using the oldest timestamp of a
+ * page as the next upper bound — and the site's whole history is split
+ * into year slices walked CONCURRENTLY, so a deep run costs one slice's
+ * walk, not eighteen years of one cursor.
  */
 export async function* hackernews(target, { get, progress }) {
-  let before = Math.floor(Date.now() / 1000);
-  let seen = 0;
-  while (seen < target) {
-    const body = await get("https://hn.algolia.com/api/v1/search_by_date?tags=story" +
-      `&hitsPerPage=1000&numericFilters=created_at_i<${before}`);
-    const hits = body?.hits ?? [];
-    if (!hits.length) return;
-    for (const hit of hits) {
-      if (hit.url) {
-        yield hit.url;
-        seen++;
+  const WALKERS = 4;
+  const now = Math.floor(Date.now() / 1000);
+  const epoch = 1160000000; // HN's first posts, autumn 2006
+  const slice = Math.ceil((now - epoch) / WALKERS);
+  const perWalker = Math.ceil(target / WALKERS);
+
+  yield* channel(target, "hn", progress,
+    Array.from({ length: WALKERS }, (_, k) => async (push, stopped) => {
+      const floor = now - (k + 1) * slice;
+      let before = now - k * slice;
+      let seen = 0;
+      while (seen < perWalker && !stopped()) {
+        let body;
+        try {
+          body = await get("https://hn.algolia.com/api/v1/search_by_date?tags=story" +
+            `&hitsPerPage=1000&numericFilters=created_at_i<${before},created_at_i>${floor}`);
+        } catch {
+          return;
+        }
+        const hits = body?.hits ?? [];
+        if (!hits.length) return;
+        for (const hit of hits) {
+          if (hit.url) {
+            push(hit.url);
+            seen++;
+          }
+        }
+        const oldest = Math.min(...hits.map((h) => h.created_at_i).filter(Number.isFinite));
+        if (!Number.isFinite(oldest) || oldest >= before) return;
+        before = oldest;
       }
-    }
-    progress("hn", seen, target);
-    const oldest = Math.min(...hits.map((h) => h.created_at_i).filter(Number.isFinite));
-    if (!Number.isFinite(oldest) || oldest >= before) return;
-    before = oldest;
-  }
+    }));
+}
+
+/**
+ * URLs people paste into Hacker News COMMENTS — recommendations, sources,
+ * rebuttals. Shared-in-conversation links, a different population from
+ * submitted stories, from the same generous API.
+ */
+export async function* hncomments(target, { get, progress }) {
+  const WALKERS = 4;
+  const now = Math.floor(Date.now() / 1000);
+  const epoch = 1160000000;
+  const slice = Math.ceil((now - epoch) / WALKERS);
+  const perWalker = Math.ceil(target / WALKERS);
+
+  yield* channel(target, "hn-comments", progress,
+    Array.from({ length: WALKERS }, (_, k) => async (push, stopped) => {
+      const floor = now - (k + 1) * slice;
+      let before = now - k * slice;
+      let seen = 0;
+      while (seen < perWalker && !stopped()) {
+        let body;
+        try {
+          body = await get("https://hn.algolia.com/api/v1/search_by_date?tags=comment" +
+            `&hitsPerPage=1000&numericFilters=created_at_i<${before},created_at_i>${floor}`);
+        } catch {
+          return;
+        }
+        const hits = body?.hits ?? [];
+        if (!hits.length) return;
+        for (const hit of hits) {
+          // Comment bodies arrive as escaped HTML; links hide in hrefs.
+          for (const match of String(hit.comment_text ?? "")
+            .matchAll(/href="(https?:\/\/[^"]+)"/g)) {
+            push(unescapeXml(match[1]));
+            seen++;
+          }
+        }
+        const oldest = Math.min(...hits.map((h) => h.created_at_i).filter(Number.isFinite));
+        if (!Number.isFinite(oldest) || oldest >= before) return;
+        before = oldest;
+      }
+    }));
 }
 
 /**
@@ -531,75 +608,50 @@ export async function* reddit(target, { progress, sleep, deadline = 900000 }) {
   }
 }
 
-/** Big general-purpose instances; together they see most of the fediverse. */
+/** General-purpose and topical instances; together they see most of the fediverse. */
 const MASTODON = [
   "mastodon.social", "fosstodon.org", "mstdn.social", "mas.to",
   "hachyderm.io", "mastodon.online", "infosec.exchange", "mastodon.world",
+  "techhub.social", "mstdn.party", "mastodon.art", "mastodonapp.uk",
+  "aus.social", "mastodon.nz", "toot.community", "social.vivaldi.net",
 ];
 
 /**
  * Mastodon public timelines: each status contributes its own permalink, its
  * link-card target when it has one, and any URL written in the post body.
  * All instances page concurrently — they are separate servers with separate
- * rate limits — through the same tiny channel wikipedia uses.
+ * rate limits.
  */
 export async function* mastodon(target, { get, progress, sleep }) {
   const perInstance = Math.ceil(target / MASTODON.length);
-  /** @type {string[]} */
-  const queue = [];
-  /** @type {(() => void)|null} */
-  let wake = null;
-  let running = MASTODON.length;
-  let stop = false;
-  const notify = () => { if (wake) { wake(); wake = null; } };
 
-  for (const instance of MASTODON) {
-    (async () => {
+  yield* channel(target, "mastodon", progress,
+    MASTODON.map((instance) => async (push, stopped) => {
       let maxId = "";
       let fromInstance = 0;
-      while (fromInstance < perInstance && !stop) {
+      while (fromInstance < perInstance && !stopped()) {
         let statuses;
         try {
           statuses = await get(`https://${instance}/api/v1/timelines/public` +
             `?limit=40${maxId ? `&max_id=${maxId}` : ""}`, { retries: 1 });
         } catch {
-          break; // one instance down is fine; seven others are paging
+          return; // one instance down is fine; the rest are paging
         }
-        if (!Array.isArray(statuses) || !statuses.length) break;
+        if (!Array.isArray(statuses) || !statuses.length) return;
         for (const status of statuses) {
-          if (status?.url) { queue.push(status.url); fromInstance++; }
-          if (status?.card?.url) { queue.push(status.card.url); fromInstance++; }
+          if (status?.url) { push(status.url); fromInstance++; }
+          if (status?.card?.url) { push(status.card.url); fromInstance++; }
           const content = String(status?.content ?? "");
           for (const match of content.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
-            queue.push(match[1].replace(/&amp;/g, "&"));
+            push(match[1].replace(/&amp;/g, "&"));
             fromInstance++;
           }
         }
-        notify();
         maxId = statuses[statuses.length - 1]?.id ?? "";
-        if (!maxId) break;
+        if (!maxId) return;
         await sleep(400); // well inside 300 requests per 5 minutes
       }
-      running--;
-      notify();
-    })();
-  }
-
-  let total = 0;
-  while (running > 0 || queue.length) {
-    if (!queue.length) {
-      await new Promise((resolve) => { wake = resolve; });
-      continue;
-    }
-    while (queue.length) {
-      yield queue.shift();
-      if (++total >= target) {
-        stop = true;
-        return;
-      }
-    }
-    progress("mastodon", total, target);
-  }
+    }));
 }
 
 /* -------------------------------------------------------------------------- *
@@ -607,54 +659,63 @@ export async function* mastodon(target, { get, progress, sleep }) {
  * per-domain mining
  * -------------------------------------------------------------------------- */
 
-/** Big Fandom communities across film, TV, games and comics. */
+/** Big Fandom communities across film, TV, games, anime and comics. */
 const FANDOM_WIKIS = [
   "starwars", "harrypotter", "marvel", "dc", "memory-alpha", "minecraft",
   "elderscrolls", "fallout", "leagueoflegends", "naruto", "onepiece",
   "pokemon", "disney", "gameofthrones", "zelda", "warframe", "terraria",
-  "genshin-impact", "simpsons", "southpark",
+  "genshin-impact", "simpsons", "southpark", "lotr", "dune", "stargate",
+  "tardis", "villains", "heroes", "dragonball", "bleach", "jojo",
+  "yugioh", "digimon", "sonic", "residentevil", "finalfantasy", "halo",
+  "masseffect", "witcher", "cyberpunk", "runescape", "wowpedia",
 ];
 
 /**
  * Real article URLs from Fandom wikis, via each community's own MediaWiki
  * API — page titles become the exact /wiki/ URLs Fandom serves, capitals,
  * quotes, parentheses and all, which is precisely the messy shape a codec
- * needs to prove itself on.
+ * needs to prove itself on. Six communities page at once; each is its own
+ * subdomain, and Fandom serves them from one CDN that tolerates this fine.
  */
 export async function* fandom(target, { get, progress, sleep }) {
+  const CONCURRENT = 6;
   const perWiki = Math.ceil(target / FANDOM_WIKIS.length);
-  let total = 0;
-  for (const community of FANDOM_WIKIS) {
-    let cont = "";
-    let fromWiki = 0;
-    while (fromWiki < perWiki) {
-      let body;
-      try {
-        body = await get(`https://${community}.fandom.com/api.php?action=query` +
-          "&list=allpages&aplimit=500&format=json&formatversion=2" +
-          (cont ? `&apcontinue=${encodeURIComponent(cont)}` : ""), { retries: 1 });
-      } catch {
-        break; // one community down should not stop the sweep
+  let nextWiki = 0;
+
+  yield* channel(target, "fandom", progress,
+    Array.from({ length: CONCURRENT }, () => async (push, stopped) => {
+      while (!stopped()) {
+        const at = nextWiki++;
+        if (at >= FANDOM_WIKIS.length) return;
+        const community = FANDOM_WIKIS[at];
+        let cont = "";
+        let fromWiki = 0;
+        while (fromWiki < perWiki && !stopped()) {
+          let body;
+          try {
+            body = await get(`https://${community}.fandom.com/api.php?action=query` +
+              "&list=allpages&aplimit=500&format=json&formatversion=2" +
+              (cont ? `&apcontinue=${encodeURIComponent(cont)}` : ""), { retries: 1 });
+          } catch {
+            break; // one community down should not stop the sweep
+          }
+          const pages = body?.query?.allpages ?? [];
+          if (!pages.length) break;
+          for (const page of pages) {
+            if (!page.title) continue;
+            // Fandom's own URL spelling: spaces become underscores; slashes
+            // and colons stay; the rest percent-encodes.
+            const slug = encodeURIComponent(page.title.replace(/ /g, "_"))
+              .replace(/%2F/gi, "/").replace(/%3A/gi, ":");
+            push(`https://${community}.fandom.com/wiki/${slug}`);
+            fromWiki++;
+          }
+          cont = body?.continue?.apcontinue;
+          if (!cont) break;
+          await sleep(120);
+        }
       }
-      const pages = body?.query?.allpages ?? [];
-      if (!pages.length) break;
-      for (const page of pages) {
-        if (!page.title) continue;
-        // Fandom's own URL spelling: spaces become underscores; slashes and
-        // colons stay; the rest percent-encodes.
-        const slug = encodeURIComponent(page.title.replace(/ /g, "_"))
-          .replace(/%2F/gi, "/").replace(/%3A/gi, ":");
-        yield `https://${community}.fandom.com/wiki/${slug}`;
-        fromWiki++;
-        total++;
-      }
-      progress("fandom", total, target);
-      cont = body?.continue?.apcontinue;
-      if (!cont) break;
-      await sleep(120);
-    }
-    if (total >= target) return;
-  }
+    }));
 }
 
 /**
@@ -710,5 +771,134 @@ export async function* targeted(target, { get, progress, sleep }) {
       await sleep(700);
     }
     if (total >= target || strikes >= 5) return;
+  }
+}
+
+/* -------------------------------------------------------------------------- *
+ * High-volume registries: DOIs, packages, archive items
+ *
+ * Uniform in shape individually, but the shapes are real and shared daily —
+ * a paper's DOI, a package page, an archive item — and the registries
+ * publish fast, generous, cursor-paged APIs.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Crossref: the DOI registry, 185M works. Every URL is a real citable
+ * link of the exact form people paste into papers, posts and READMEs.
+ */
+export async function* crossref(target, { get, progress, sleep }) {
+  let cursor = "*";
+  let seen = 0;
+  let failures = 0;
+  while (seen < target && failures < 4) {
+    let body;
+    try {
+      body = await get("https://api.crossref.org/works?rows=1000&select=URL" +
+        `&cursor=${encodeURIComponent(cursor)}`, { retries: 1 });
+    } catch {
+      failures++;
+      await sleep(3000);
+      continue;
+    }
+    const items = body?.message?.items ?? [];
+    if (!items.length) return;
+    for (const item of items) {
+      if (item.URL) {
+        yield item.URL;
+        seen++;
+      }
+    }
+    progress("crossref", seen, target);
+    cursor = body?.message?.["next-cursor"];
+    if (!cursor) return;
+    await sleep(150); // their "polite" pool asks for moderation, not silence
+  }
+}
+
+/**
+ * npm package pages, via the registry's public CouchDB view. Names become
+ * the npmjs.com URLs people paste into issues and chat, scoped packages'
+ * "@" and "/" included.
+ */
+export async function* npmjs(target, { get, progress }) {
+  let startkey = "";
+  let seen = 0;
+  while (seen < target) {
+    let body;
+    try {
+      body = await get("https://replicate.npmjs.com/_all_docs?limit=5000" +
+        (startkey ? `&startkey=${encodeURIComponent(JSON.stringify(startkey))}&skip=1` : ""),
+      { retries: 1 });
+    } catch {
+      return;
+    }
+    const rows = body?.rows ?? [];
+    if (!rows.length) return;
+    for (const row of rows) {
+      if (row.id && !row.id.startsWith("_")) {
+        yield `https://www.npmjs.com/package/${row.id}`;
+        seen++;
+      }
+    }
+    progress("npm", seen, target);
+    startkey = rows[rows.length - 1]?.id;
+    if (!startkey) return;
+  }
+}
+
+/**
+ * PyPI project pages, from the simple index — one request lists every
+ * project on the index; the target-sized slice is spread across it rather
+ * than taken alphabetically from the front.
+ */
+export async function* pypi(target, { get, progress }) {
+  let text;
+  try {
+    const response = await get("https://pypi.org/simple/", { json: false });
+    text = await response.text();
+  } catch {
+    return;
+  }
+  const names = [...text.matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
+  const step = Math.max(1, Math.floor(names.length / target));
+  let seen = 0;
+  for (let i = 0; i < names.length && seen < target; i += step) {
+    yield `https://pypi.org/project/${names[i]}/`;
+    seen++;
+    if (seen % 20000 === 0) progress("pypi", seen, target);
+  }
+}
+
+/** Internet Archive item pages, spread across media types. */
+export async function* archiveitems(target, { get, progress, sleep }) {
+  const KINDS = ["texts", "movies", "audio", "software", "image"];
+  const perKind = Math.ceil(target / KINDS.length);
+  let total = 0;
+  for (const kind of KINDS) {
+    let page = 1;
+    let fromKind = 0;
+    while (fromKind < perKind) {
+      let body;
+      try {
+        body = await get("https://archive.org/advancedsearch.php" +
+          `?q=mediatype:${kind}&fl%5B%5D=identifier&rows=1000&page=${page}&output=json`,
+        { retries: 1 });
+      } catch {
+        break;
+      }
+      const docs = body?.response?.docs ?? [];
+      if (!docs.length) break;
+      for (const doc of docs) {
+        if (doc.identifier) {
+          yield `https://archive.org/details/${doc.identifier}`;
+          fromKind++;
+          total++;
+        }
+      }
+      progress("archive", total, target);
+      page++;
+      await sleep(300);
+    }
+    if (total >= target) return;
   }
 }
