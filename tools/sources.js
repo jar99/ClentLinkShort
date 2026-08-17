@@ -672,6 +672,16 @@ const FANDOM_WIKIS = [
   "tardis", "villains", "heroes", "dragonball", "bleach", "jojo",
   "yugioh", "digimon", "sonic", "residentevil", "finalfantasy", "halo",
   "masseffect", "witcher", "cyberpunk", "runescape", "wowpedia",
+  "attackontitan", "deathnote", "hunterxhunter", "myheroacademia",
+  "kimetsu-no-yaiba", "swordartonline", "fairytail", "fma", "tokyoghoul",
+  "jujutsu-kaisen", "chainsaw-man", "spy-x-family", "haikyuu", "gta",
+  "callofduty", "assassinscreed", "godofwar", "darksouls", "eldenring",
+  "hollowknight", "stardewvalley", "subnautica", "satisfactory",
+  "rimworld", "borderlands", "bioshock", "dishonored", "danganronpa",
+  "megamitensei", "xenoblade", "fireemblem", "supersmashbros",
+  "deadbydaylight", "apexlegends", "overwatch", "valorant", "starcraft",
+  "diablo", "hearthstone", "criticalrole", "rickandmorty",
+  "strangerthings", "thewalkingdead", "breakingbad",
 ];
 
 /**
