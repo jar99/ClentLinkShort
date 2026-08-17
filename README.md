@@ -53,17 +53,18 @@ encoder head-to-head over 3,999 corpus URLs:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **147,141 chars** | 151,216 chars |
+| Total payload, same 3,999 URLs | **145,734 chars** | 151,216 chars |
 | Decodes back byte-identical | **100%** | 83.4% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
-| `upload.wikimedia.org/...%22Agnese%22...` | **134** | 160 |
-| Shorter link, per URL | 34.4% | 55.3% |
+| `upload.wikimedia.org/...%22Agnese%22...` | **133** | 160 |
+| Shorter link, per URL | 37.5% | 51.3% |
 
 Read the last row with the others: ha.mr's per-URL edge is many 1–3-character wins on
 long-tail text, bought mostly by the wider output alphabet — and characters like
-`[](),'` are exactly the ones chat apps cut links off at, which is why Clent refuses
-them. Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
+`[](),'` are exactly the ones chat apps cut links off at, which is why Clent's
+default refuses them. (Clent's opt-in dense style plays the same alphabet game,
+base 87, while keeping the safe Base64url form the default and the canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
 slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
 page. Clent holds byte-exactness at 100% across the full 643,949 and fails loudly
 otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and

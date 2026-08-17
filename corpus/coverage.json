@@ -28,5 +28,9 @@
   ],
   "zipfExponent": 1,
   "weightedReachPct": 89.81597310128453,
-  "sweep": null
+  "sweep": {
+    "checked": 1000000,
+    "failed": 0,
+    "shorterPct": 100
+  }
 }
