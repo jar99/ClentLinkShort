@@ -1,0 +1,18 @@
+{
+  "generated": "2026-08-17",
+  "corpus": "200,000 URLs (2026-08-17)",
+  "checked": 200000,
+  "skipped": 0,
+  "failures": 0,
+  "shorterPct": 98.4205,
+  "overallRatio": 0.8229356647323182,
+  "medianRatio": 0.7666666666666667,
+  "p90Ratio": 0.921875,
+  "modes": {
+    "text6": 196877,
+    "raw": 1054,
+    "deflate": 2069
+  },
+  "dictHitPct": 11.4545,
+  "trackingPct": 0.0105
+}

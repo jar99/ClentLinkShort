@@ -1,0 +1,16 @@
+{
+  "generated": "2026-08-17",
+  "total": 200000,
+  "counts": {
+    "wikipedia": 80000,
+    "hn": 60000,
+    "majestic": 60000
+  },
+  "sha256": "a1542c1e80aacad6d093ecc50d7ea73cf3adcd7d116294196f021810b26dd0a5",
+  "bytes": 9367600,
+  "sources": {
+    "wikipedia": "en.wikipedia.org/w/api.php?action=query&list=exturlusage",
+    "hn": "hn.algolia.com/api/v1/search_by_date?tags=story",
+    "majestic": "downloads.majestic.com/majestic_million.csv"
+  }
+}

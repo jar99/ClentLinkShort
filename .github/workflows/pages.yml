@@ -22,9 +22,21 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Nothing to install. Tests gate the deploy: the site that ships is the
+      # one that just proved it round-trips 200k real URLs.
+      - name: Test
+        run: node --test test/*.test.js
+
+      - name: Build
+        run: node tools/build.mjs
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - id: deploy
         uses: actions/deploy-pages@v4

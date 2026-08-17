@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No install step: the library, the tests and the build have no
+      # dependencies at all, so there is nothing to fetch or audit.
+      - name: Unit, property, security and minifier tests
+        run: node --test test/*.test.js
+
+      - name: Validate against the frozen real-URL corpus
+        run: node tools/validate-corpus.mjs
+
+      - name: Build
+        run: node tools/build.mjs
+
+      - name: The committed corpus stats must match the corpus
+        run: git diff --exit-code corpus/stats.json
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The only place a dependency appears, and it stays out of the library.
+      - run: npm install --no-save playwright@1
+      - run: npx playwright install --with-deps chromium
+
+      # Builds from the committed corpus stats; no need to re-measure here.
+      - run: node tools/build.mjs
+      - name: End-to-end against the built site
+        run: node tools/browser-test.mjs dist
+      - name: End-to-end against the unbuilt sources
+        run: node tools/browser-test.mjs src

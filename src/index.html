@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="create">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Clent — a link shortener that stores nothing</title>
+<meta name="description" content="Shorten links with no database, no accounts and no logging. The destination is compressed into the link itself, so nothing is ever stored and the link never expires.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' font-size='24'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
+<script>
+  // Choose the view before first paint so the creator UI never flashes
+  // in front of someone who only clicked a link.
+  if (location.hash.length > 1) document.documentElement.dataset.mode = "redirect";
+</script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<!-- ─────────────────────────────  redirect view  ───────────────────────── -->
+<main id="redirect">
+  <div class="card center">
+    <div class="spinner" id="r-spinner" aria-hidden="true"></div>
+    <h1 id="r-title">Redirecting</h1>
+    <p class="muted" id="r-note">Taking you to</p>
+    <p class="dest" id="r-dest"></p>
+    <div class="actions" id="r-actions">
+      <a class="btn primary" id="r-go" rel="noreferrer noopener">Continue</a>
+      <a class="btn" href="./">Make a link</a>
+    </div>
+  </div>
+</main>
+
+<!-- ─────────────────────────────   create view   ───────────────────────── -->
+<main id="create">
+
+  <header class="hero">
+    <div class="wordmark">
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="19" height="19" fill="none"
+           stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+      <span>Clent</span>
+    </div>
+    <h1>A link shortener that stores&nbsp;nothing.</h1>
+    <p class="lede">
+      No database, no accounts, no logging — not because they're switched off, but
+      because there is nowhere for them to be. The destination is compressed into
+      the link itself, so the link <em>is</em> the record. It can't expire, can't be
+      revoked, and can't be mined.
+    </p>
+  </header>
+
+  <section class="card tool">
+    <label class="field-label" for="url">Paste a long URL</label>
+    <textarea id="url" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"
+      placeholder="https://example.com/a/very/long/path?with=parameters"></textarea>
+
+    <div class="opts">
+      <label class="opt">
+        <input type="checkbox" id="clean" checked>
+        <span>Strip tracking parameters<em id="clean-note">utm_*, fbclid, gclid …</em></span>
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="preview">
+        <span>Preview link<em>shows the destination instead of redirecting</em></span>
+      </label>
+    </div>
+
+    <p class="error" id="error" role="alert" hidden></p>
+
+    <div id="result" hidden>
+      <div class="out">
+        <input type="text" id="short" readonly spellcheck="false" aria-label="Your short link">
+        <button class="btn primary" id="copy" type="button">Copy</button>
+      </div>
+
+      <div class="compare" aria-hidden="true">
+        <div class="bar-row">
+          <span class="bar-label">original</span>
+          <span class="bar"><i class="fill long" id="bar-long"></i></span>
+          <span class="bar-num" id="len-long">0</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">short</span>
+          <span class="bar"><i class="fill short" id="bar-short"></i></span>
+          <span class="bar-num" id="len-short">0</span>
+        </div>
+      </div>
+      <p class="verdict" id="verdict"></p>
+    </div>
+  </section>
+
+  <!-- ────────────────────  what the encoder decided  ──────────────────── -->
+  <section id="breakdown" hidden>
+    <h2>Where every bit went</h2>
+
+    <div class="card">
+      <div class="bits" id="bits"></div>
+      <ul class="legend" id="legend"></ul>
+
+      <h3>Body encodings tried</h3>
+      <p class="muted small">
+        All three are built for every link and the shortest one wins, so the codec
+        can never lose to itself.
+      </p>
+      <div class="modes" id="modes"></div>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────  validation  ──────────────────────────── -->
+  <section>
+    <h2>Tested against real links, not invented ones</h2>
+    <p>
+      Synthetic URLs only prove a codec handles what its author imagined. The test
+      corpus is {{checked}} real URLs — external links cited on Wikipedia, links
+      submitted to Hacker News, and the Majestic Million domain ranking. They carry
+      doubled slashes, unencoded spaces, mojibake, kilobyte query strings, session
+      tokens and punycode.
+    </p>
+
+    <div class="stats">
+      <div class="stat">
+        <b>{{checked}}</b>
+        <span>real URLs validated</span>
+      </div>
+      <div class="stat">
+        <b>{{roundTrip}}</b>
+        <span>decode to the exact original</span>
+      </div>
+      <div class="stat">
+        <b>{{shorterPct}}</b>
+        <span>come out shorter than the input</span>
+      </div>
+      <div class="stat">
+        <b>{{medianPct}}</b>
+        <span>median payload size, versus the input URL</span>
+      </div>
+    </div>
+    <p class="muted small">
+      Measured {{generated}} by <code>npm run validate</code>, which fails the build
+      on a single mismatch. A link that resolves to the <em>wrong</em> place is far
+      worse than one that fails loudly, so that is the number held at zero.
+    </p>
+  </section>
+
+  <!-- ──────────────────────────  how it works  ────────────────────────── -->
+  <section>
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li>
+        <b>Tracking parameters go first.</b> Worth about a third of the payload on a
+        newsletter or social link. It's the only step that changes the destination
+        rather than just re-encoding it, which is why it's a visible switch.
+      </li>
+      <li>
+        <b>The URL is canonicalised.</b> The scheme, a <code>www.</code> prefix and a
+        trailing slash become single <em>bits</em> in a 6-bit header instead of the
+        twelve characters they normally cost.
+      </li>
+      <li>
+        <b>Common hosts collapse to one byte.</b> A built-in dictionary of 165 hosts
+        turns <code>en.wikipedia.org</code> into 8 bits.
+      </li>
+      <li>
+        <b>The rest is encoded three ways and the shortest wins.</b> Text packing
+        writes each character straight into the Base64url alphabet at 6 bits — and
+        since Base64 is <em>also</em> 6 bits per character, an ordinary lowercase URL
+        survives at one character per character with no expansion at all. Encoding
+        naively as bytes-then-Base64 costs 1.33× instead.
+      </li>
+      <li>
+        <b>The payload rides in the fragment</b> — the part after <code>#</code>,
+        which browsers never send to a server. GitHub's servers, and mine, never see
+        where you're going.
+      </li>
+    </ol>
+
+    <pre class="wire"><code>6 bits  header   scheme · www · dictionary · body mode
+8 bits  host     dictionary index, when the host is known
+  body  text6    6-bit symbols, terminated by END
+        raw      UTF-8 bytes, 8 bits each
+        deflate  DEFLATE-raw bytes, 8 bits each</code></pre>
+  </section>
+
+  <!-- ───────────────────────────   limits   ──────────────────────────── -->
+  <section>
+    <h2>What it can't do</h2>
+    <ul class="limits">
+      <li>
+        <b>A link can never be shorter than the information it carries.</b> That's
+        arithmetic, not an implementation detail. Long, parameter-heavy URLs
+        compress well; already-terse ones come out longer. The counter above always
+        tells you which happened.
+      </li>
+      <li>
+        <b>Links can't be edited or revoked</b> once shared. There's nothing to edit.
+      </li>
+      <li>
+        <b>Fixed overhead is the domain.</b> Every link carries this site's origin,
+        so a short domain saves more than any further work on the codec would.
+      </li>
+      <li>
+        <b>No click counts, no dashboards, no expiry.</b> All of those need a server
+        that remembers, which is the thing being avoided.
+      </li>
+    </ul>
+    <p class="muted small">
+      Add <code>~</code> to the end of any Clent link to see where it goes instead of
+      following it.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      No cookies, no localStorage, no analytics, no network requests — the page makes
+      exactly one request, for itself. Everything above runs in your browser.
+    </p>
+    <p>
+      <a href="https://github.com/jar99/ClentLinkShort">Source and test suite on GitHub</a>
+    </p>
+  </footer>
+
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "name": "clent",
+  "version": "2.0.0",
+  "description": "A stateless URL shortener codec \u2014 the destination is packed into the link, so nothing is ever stored",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/clent.js",
+  "types": "./src/clent.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/clent.d.ts",
+      "default": "./src/clent.js"
+    },
+    "./hosts.js": "./src/hosts.js"
+  },
+  "files": [
+    "src/clent.js",
+    "src/clent.d.ts",
+    "src/hosts.js"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:corpus": "node --test test/corpus.test.js",
+    "corpus:fetch": "node tools/fetch-corpus.mjs",
+    "validate": "node tools/validate-corpus.mjs",
+    "build": "node tools/build.mjs",
+    "dev": "node tools/serve.mjs src",
+    "preview": "node tools/build.mjs && node tools/serve.mjs dist",
+    "test:browser": "node tools/browser-test.mjs dist"
+  },
+  "keywords": [
+    "url-shortener",
+    "stateless",
+    "serverless",
+    "compression",
+    "base64url",
+    "deflate",
+    "zero-dependency"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jar99/ClentLinkShort.git"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
