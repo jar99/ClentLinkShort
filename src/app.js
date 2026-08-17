@@ -64,7 +64,7 @@ async function runRedirect() {
     $("r-spinner").remove();
     $("r-title").textContent = "Where this link goes";
     $("r-note").textContent =
-      "Preview mode — nothing has been loaded yet. Check the destination first.";
+      "Nothing has been loaded yet. Check the destination before continuing.";
     return;
   }
 
@@ -92,7 +92,7 @@ function renderBreakdown(result) {
       colour: "var(--seg-header)",
       bits: headerBits,
       name: "Header",
-      note: "scheme, www, dictionary flag and body mode",
+      note: "scheme, www, dictionary flag, body mode",
       cost: bits(headerBits),
     },
     {
@@ -101,8 +101,8 @@ function renderBreakdown(result) {
       bits: hostBits,
       name: "Host",
       note: result.hostByte === null
-        ? "spelled out in the body — not in the dictionary"
-        : `${result.host} — dictionary entry #${result.hostByte}`,
+        ? "not in the dictionary, so it is spelled out in the body"
+        : `${result.host}, dictionary entry ${result.hostByte}`,
       cost: hostBits ? bits(hostBits) : "—",
     },
     {
@@ -110,7 +110,7 @@ function renderBreakdown(result) {
       colour: "var(--seg-body)",
       bits: result.bodyBits,
       name: "Body",
-      note: `path, query and fragment, encoded as ${result.modeName}`,
+      note: `path, query and fragment, as ${result.modeName}`,
       cost: bits(result.bodyBits),
     },
   ];
@@ -185,7 +185,7 @@ function setUpCreate() {
 
   if (!canCompress) {
     $("clean-note").textContent =
-      "utm_*, fbclid, gclid … · this browser can't DEFLATE, so links will be longer";
+      "utm_*, fbclid, gclid · this browser can't DEFLATE, so links will be longer";
   }
 
   const clear = () => {
@@ -233,16 +233,17 @@ function setUpCreate() {
     if (saved > 0) {
       verdict.textContent = `${saved} characters shorter` +
         (analysis.removed.length
-          ? ` — including ${analysis.removed.length} tracking parameter` +
-            `${analysis.removed.length === 1 ? "" : "s"} removed`
+          ? `, after removing ${analysis.removed.length} tracking parameter` +
+            `${analysis.removed.length === 1 ? "" : "s"}`
           : "");
       verdict.className = "verdict win";
     } else if (saved === 0) {
       verdict.textContent = "Exactly the same length.";
       verdict.className = "verdict";
     } else {
-      verdict.textContent = `${-saved} characters longer — this URL is already ` +
-        "compact enough that carrying it whole costs more than it saves.";
+      verdict.textContent =
+        `${-saved} characters longer. This URL is already short enough that ` +
+        "carrying it whole costs more than it saves.";
       verdict.className = "verdict lose";
     }
 

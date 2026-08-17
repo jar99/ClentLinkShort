@@ -6,7 +6,7 @@
  */
 
 /** Wire format version this build reads and writes. */
-export declare const VERSION: 2;
+export declare const VERSION: 3;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;
@@ -37,8 +37,11 @@ export declare const TRACKING_PARAMS: RegExp;
 /** The Base64url alphabet; an index in this string is a 6-bit symbol value. */
 export declare const B64: string;
 
-/** The text6 symbol table; symbols 0..60 are literal bytes. */
+/** The text6 symbol table; symbols 0..58 are literal bytes. */
 export declare const T6: string;
+
+/** Substring dictionary for text6. Append-only; exactly 64 entries. */
+export declare const TOKENS: readonly string[];
 
 /** Whether this runtime can DEFLATE. Without it, links are merely longer. */
 export declare const canCompress: boolean;

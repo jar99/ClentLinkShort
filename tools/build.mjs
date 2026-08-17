@@ -50,9 +50,14 @@ function substituteStats(html, stats) {
     checked: stats.checked.toLocaleString("en-US"),
     roundTrip: stats.failures === 0 ? "100%" : `${(100 * stats.checked /
       (stats.checked + stats.failures)).toFixed(2)}%`,
-    shorterPct: `${stats.shorterPct.toFixed(1)}%`,
+    shorterPct: `${stats.payloadShorterPct.toFixed(1)}%`,
     medianPct: `${(100 * stats.medianRatio).toFixed(0)}%`,
-    overallPct: `${(100 * stats.overallRatio).toFixed(0)}%`,
+    overallPct: `${(100 * stats.payloadRatio).toFixed(0)}%`,
+    deepShorter: `${stats.deepShorterPct.toFixed(0)}%`,
+    deepSaving: `${(100 * stats.deepSavingsMedian).toFixed(0)}%`,
+    breakEven: stats.breakEvenLength ? String(stats.breakEvenLength) : "—",
+    originLength: String((stats.origin ?? "").length),
+    linkShorter: `${stats.linkShorterPct.toFixed(1)}%`,
     generated: stats.generated ?? "",
   };
 

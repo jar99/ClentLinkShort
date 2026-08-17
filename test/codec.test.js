@@ -186,3 +186,64 @@ test("a URL instance is validated like a string", async () => {
   assert.equal(await shorten(new URL("https://example.com/x")),
                await shorten("https://example.com/x"));
 });
+
+test("the token dictionary shortens what it should", async () => {
+  const { TOKENS } = await import("../src/clent.js");
+
+  // Compared at the text6 candidate level, not the winning payload: a control
+  // string repetitive enough to have no tokens is also repetitive enough for
+  // deflate to win, which would measure the wrong thing entirely.
+  const token = TOKENS.find((t) => t.length >= 6 && /^[a-z]+$/.test(t));
+  const repeats = 8;
+  const body = token.repeat(repeats);
+  // Same length, and built from letters no token contains, so the only
+  // difference measured is the tokenisation itself.
+  const control = "qzxvbj".repeat(Math.ceil(body.length / 6)).slice(0, body.length);
+
+  const tokenised = await analyze(`https://ex.example/${body}`, { stripTracking: false });
+  const plain = await analyze(`https://ex.example/${control}`, { stripTracking: false });
+
+  assert.ok(tokenised.candidates.text6 < plain.candidates.text6,
+    `tokenised text6 (${tokenised.candidates.text6}) should beat ` +
+    `untokenised (${plain.candidates.text6}) at the same body length`);
+
+  // Each hit replaces token.length symbols of 6 bits with 12 bits.
+  const savedChars = ((token.length * 6 - 12) * repeats) / 6;
+  assert.ok(plain.candidates.text6 - tokenised.candidates.text6 >= savedChars - 1,
+    `expected about ${savedChars} characters saved, got ` +
+    `${plain.candidates.text6 - tokenised.candidates.text6}`);
+});
+
+test("token selection is optimal, not greedy", async () => {
+  // Greedy longest-match can take a token that steps over the start of a
+  // better one. The encoder solves this by dynamic programming, so the only
+  // way to check it is that no alternative split is ever smaller.
+  const { TOKENS, T6, build, MODE_TEXT6 } = await import("../src/clent.js");
+  const encoder = new TextEncoder();
+
+  for (const body of [
+    "article" + "news" + "media",
+    "the" + "article" + "the",
+    "searchable-articles/index.html",
+    "wikipedia.org/wiki/thing",
+    "storage.example/portal/technology",
+  ]) {
+    const actual = build(0, MODE_TEXT6, null, encoder.encode(body)).length;
+
+    // Exhaustive shortest-path over the same choices, computed independently.
+    const bytes = encoder.encode(body);
+    const cost = new Array(bytes.length + 1).fill(Infinity);
+    cost[bytes.length] = 6; // END
+    for (let i = bytes.length - 1; i >= 0; i--) {
+      const c = bytes[i];
+      const direct = T6.includes(String.fromCharCode(c));
+      const upper = c >= 65 && c <= 90 && T6.includes(String.fromCharCode(c + 32));
+      cost[i] = (direct ? 6 : upper ? 12 : 14) + cost[i + 1];
+      for (const t of TOKENS) {
+        if (body.startsWith(t, i)) cost[i] = Math.min(cost[i], 12 + cost[i + t.length]);
+      }
+    }
+    const ideal = Math.ceil((6 + cost[0]) / 6); // header + body, in characters
+    assert.equal(actual, ideal, `${body}: encoder used ${actual} chars, ideal is ${ideal}`);
+  }
+});

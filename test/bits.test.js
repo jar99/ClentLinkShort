@@ -1,15 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BitWriter, BitReader, B64, T6, ClentError } from "../src/clent.js";
+import { BitWriter, BitReader, B64, T6, TOKENS, ClentError } from "../src/clent.js";
 
 test("alphabets are the sizes the format assumes", () => {
   assert.equal(B64.length, 64, "Base64url alphabet must be exactly 64 symbols");
   assert.equal(new Set(B64).size, 64, "Base64url alphabet must have no duplicates");
   assert.match(B64, /^[A-Za-z0-9_-]+$/, "alphabet must be URL-safe");
 
-  assert.ok(T6.length <= 61, "text6 needs symbols 61-63 free for SHIFT/ESC/END");
+  assert.ok(T6.length <= 59, "text6 needs symbols 59-63 free for TOKEN/SHIFT/ESC/END");
   assert.equal(new Set(T6).size, T6.length, "text6 table must have no duplicates");
   assert.ok([...T6].every((c) => c.charCodeAt(0) < 128), "text6 table is byte-indexed");
+
+  assert.equal(TOKENS.length, 64, "the token index is exactly 6 bits");
+  assert.equal(new Set(TOKENS).size, TOKENS.length, "duplicate tokens waste slots");
+  for (const token of TOKENS) {
+    assert.ok(token.length >= 3,
+      `"${token}" is too short to pay for its 12-bit reference`);
+    assert.ok([...token].every((c) => c.charCodeAt(0) < 128),
+      `"${token}" must be ASCII to match on bytes`);
+  }
 });
 
 test("a single value round-trips at every width", () => {

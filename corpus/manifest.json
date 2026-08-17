@@ -1,16 +1,19 @@
 {
   "generated": "2026-08-17",
-  "total": 200000,
+  "total": 600000,
   "counts": {
-    "wikipedia": 80000,
-    "hn": 60000,
-    "majestic": 60000
+    "wikipedia": 300000,
+    "hackernews": 168000,
+    "tranco": 132000
   },
-  "sha256": "a1542c1e80aacad6d093ecc50d7ea73cf3adcd7d116294196f021810b26dd0a5",
-  "bytes": 9367600,
+  "rankedDomains": 1000000,
+  "sha256": "f6d3ccd25b4e195cdaa21284efbcdcd25c5dda5b7ae6d3ae05712b793c052b54",
+  "bytes": 31075976,
   "sources": {
-    "wikipedia": "en.wikipedia.org/w/api.php?action=query&list=exturlusage",
-    "hn": "hn.algolia.com/api/v1/search_by_date?tags=story",
-    "majestic": "downloads.majestic.com/majestic_million.csv"
+    "wikipedia": "{lang}.wikipedia.org/w/api.php?action=query&list=exturlusage, 30 editions",
+    "hackernews": "hn.algolia.com/api/v1/search_by_date?tags=story",
+    "gdelt": "api.gdeltproject.org/api/v2/doc/doc",
+    "stackexchange": "api.stackexchange.com/2.3/questions?filter=withbody",
+    "tranco": "tranco-list.eu — ranked domains, sampled across the full range"
   }
 }

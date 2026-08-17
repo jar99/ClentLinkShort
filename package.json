@@ -1,6 +1,6 @@
 {
   "name": "clent",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "A stateless URL shortener codec \u2014 the destination is packed into the link, so nothing is ever stored",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,8 @@
   "files": [
     "src/clent.js",
     "src/clent.d.ts",
-    "src/hosts.js"
+    "src/hosts.js",
+    "src/tokens.js"
   ],
   "sideEffects": false,
   "engines": {
@@ -30,7 +31,9 @@
     "build": "node tools/build.mjs",
     "dev": "node tools/serve.mjs src",
     "preview": "node tools/build.mjs && node tools/serve.mjs dist",
-    "test:browser": "node tools/browser-test.mjs dist"
+    "test:browser": "node tools/browser-test.mjs dist",
+    "coverage": "node tools/coverage.mjs",
+    "coverage:sweep": "node tools/coverage.mjs --sweep"
   },
   "keywords": [
     "url-shortener",

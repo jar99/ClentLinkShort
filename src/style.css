@@ -157,6 +157,11 @@ code {
 }
 
 .card.tool { margin-top: 36px; }
+
+/* The trade-off section: present, but not shouting. */
+.note-card { margin-top: 56px; background: var(--bg-sunk); }
+.note-card h2 { margin-bottom: 10px; }
+.note-card p:last-child { margin-bottom: 0; }
 .card.center { text-align: center; padding: 44px 24px; }
 
 /* ── the tool ────────────────────────────────────────────────────────── */

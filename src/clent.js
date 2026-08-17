@@ -7,7 +7,7 @@
  * Zero dependencies. Runs unmodified in browsers and in Node >= 18.
  *
  * ---------------------------------------------------------------------------
- * Wire format v2
+ * Wire format v3
  *
  * A continuous bit stream written straight into the Base64url alphabet at
  * 6 bits per character. Nothing rounds up to a byte, so nothing is wasted.
@@ -21,22 +21,24 @@
  *           raw     UTF-8 bytes, 8 bits each
  *           deflate DEFLATE-raw bytes, 8 bits each
  *
- * All body modes are built and the shortest is kept, so the codec never
- * loses to itself. text6 wins on ordinary lowercase URLs (one output
- * character per input character — Base64 is also 6 bits, so packing text at
- * 6 bits costs nothing), raw wins on mixed-case ID tokens, and deflate wins
- * once a URL is long enough to repay its overhead.
+ * The encoder does not decide anything by rule that it could decide by
+ * measurement. Every legal way of splitting the URL is crossed with every
+ * body mode, and the smallest result wins. text6 wins on ordinary lowercase
+ * URLs (one output character per input character — Base64 is also 6 bits, so
+ * packing text at 6 bits costs nothing), raw wins on uppercase-dense ID
+ * tokens, and deflate wins once a URL is long enough to repay its overhead.
  * ---------------------------------------------------------------------------
  *
  * @module clent
  */
 
 import { HOSTS, HOST_INDEX } from "./hosts.js";
+import { TOKENS } from "./tokens.js";
 
-export { HOSTS };
+export { HOSTS, TOKENS };
 
 /** Wire format version this build reads and writes. */
-export const VERSION = 2;
+export const VERSION = 3;
 
 export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_VERBATIM = 2;
 export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
@@ -81,18 +83,31 @@ export const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567
 const B64_INDEX = new Map([...B64].map((c, i) => [c, i]));
 
 /**
- * text6 symbol table. Symbols 0..60 are literal bytes; the three control
- * symbols below cover everything else.
+ * text6 symbol table. Symbols 0..58 are literal bytes; the control symbols
+ * below cover everything else. Symbol 60 is unassigned.
  */
 export const T6 = "abcdefghijklmnopqrstuvwxyz0123456789/-_.?=&%+,:~#@!$*();'[]";
 const T6_INDEX = new Map([...T6].map((c, i) => [c.charCodeAt(0), i]));
 
+/** A 6-bit index into TOKENS follows. */
+const TOKEN = 59;
 /** Uppercase the next symbol. */
 const SHIFT = 61;
 /** One raw 8-bit byte follows. */
 const ESC = 62;
 /** End of body. */
 const END = 63;
+
+const tokenEncoder = new TextEncoder();
+/** @type {Uint8Array[]} tokens as bytes, indexed as they are on the wire */
+const TOKEN_BYTES = TOKENS.map((token) => tokenEncoder.encode(token));
+/** First byte -> token indices, so matching only considers plausible tokens. */
+const TOKEN_BY_FIRST = new Map();
+for (let i = 0; i < TOKEN_BYTES.length; i++) {
+  const first = TOKEN_BYTES[i][0];
+  if (!TOKEN_BY_FIRST.has(first)) TOKEN_BY_FIRST.set(first, []);
+  TOKEN_BY_FIRST.get(first).push(i);
+}
 
 /** Thrown for any malformed, truncated or unsafe payload. */
 export class ClentError extends Error {
@@ -264,11 +279,16 @@ export function parse(input) {
 }
 
 /**
- * Split a parsed URL into the pieces the wire format stores.
+ * Every way this URL could legitimately be split for the wire format.
+ *
+ * More than one, because the choices interact — see the note on "www." below.
+ * The encoder builds all of them and keeps the smallest result, so the choice
+ * is measured rather than assumed.
+ *
  * @param {URL} url
- * @returns {{flags: number, hostByte: number|null, body: string, host: string|null}}
+ * @returns {Array<{flags: number, hostByte: number|null, body: string, host: string|null}>}
  */
-function canonicalise(url) {
+function shapesFor(url) {
   // The compact form has nowhere to keep userinfo, and silently dropping it
   // would repoint the link — so those go verbatim.
   const compact =
@@ -276,28 +296,37 @@ function canonicalise(url) {
     !url.username && !url.password;
 
   if (!compact) {
-    return { flags: SCHEME_VERBATIM, hostByte: null, body: url.href, host: null };
+    return [{ flags: SCHEME_VERBATIM, hostByte: null, body: url.href, host: null }];
   }
 
-  let flags = url.protocol === "http:" ? SCHEME_HTTP : SCHEME_HTTPS;
-  let host = url.host; // includes a non-default port
-
-  // "www." is worth a bit, but not when the dictionary already has the full host.
-  if (host.startsWith("www.") && !HOST_INDEX.has(host)) {
-    host = host.slice(4);
-    flags |= F_WWW;
-  }
+  const scheme = url.protocol === "http:" ? SCHEME_HTTP : SCHEME_HTTPS;
 
   // Sliced out of href rather than assembled from pathname + search + hash:
   // those drop a trailing empty "?" or "#", which changes the destination.
   let tail = url.href.slice(url.origin.length);
   if (tail === "/") tail = ""; // implied on the way back
 
-  const index = HOST_INDEX.get(host);
-  if (index !== undefined) {
-    return { flags: flags | F_HOST, hostByte: index, body: tail, host };
+  // Both spellings of the host, where there is a choice.
+  //
+  // Stripping "www." looks free — four characters traded for one header bit
+  // that is already paid for — and it is not. The body dictionary holds
+  // entries like ".wikipedia", which match inside "www.wikipedia.org" and
+  // cannot match "wikipedia.org", so stripping can cost more than it saves.
+  // Rather than encode a rule about that, both are built and measured.
+  const spellings = [{ host: url.host, extra: 0 }];
+  if (url.host.startsWith("www.")) {
+    spellings.push({ host: url.host.slice(4), extra: F_WWW });
   }
-  return { flags, hostByte: null, body: host + tail, host };
+
+  const shapes = [];
+  for (const { host, extra } of spellings) {
+    const index = HOST_INDEX.get(host);
+    if (index !== undefined) {
+      shapes.push({ flags: scheme | extra | F_HOST, hostByte: index, body: tail, host });
+    }
+    shapes.push({ flags: scheme | extra, hostByte: null, body: host + tail, host });
+  }
+  return shapes;
 }
 
 /* -------------------------------------------------------------------------- *
@@ -318,26 +347,86 @@ export function build(flags, mode, hostByte, bytes) {
   if (hostByte !== null) w.push(hostByte, 8);
 
   if (mode === MODE_TEXT6) {
-    for (const byte of bytes) {
-      const direct = T6_INDEX.get(byte);
-      if (direct !== undefined) {
-        w.push(direct, 6);
-        continue;
-      }
-      const upper = byte >= 65 && byte <= 90 ? T6_INDEX.get(byte + 32) : undefined;
-      if (upper !== undefined) {
-        w.push(SHIFT, 6);
-        w.push(upper, 6);
-      } else {
-        w.push(ESC, 6);
-        w.push(byte, 8);
-      }
-    }
-    w.push(END, 6);
+    emitText6(w, bytes);
   } else {
     for (const byte of bytes) w.push(byte, 8);
   }
   return w.finish();
+}
+
+/** Bits to write one literal byte: direct symbol, SHIFT + symbol, or ESC + byte. */
+function literalCost(byte) {
+  if (T6_INDEX.has(byte)) return 6;
+  if (byte >= 65 && byte <= 90 && T6_INDEX.has(byte + 32)) return 12;
+  return 14;
+}
+
+/**
+ * Write a body as text6, choosing tokens by dynamic programming.
+ *
+ * Greedy longest-match is the obvious approach and is not optimal: taking a
+ * long token here can step over the start of a better one, or over a run of
+ * cheap literals that would have let two tokens line up. Working backwards
+ * from the end and keeping the best cost for every suffix gives the genuinely
+ * smallest text6 encoding of the body, which is what the mode is then judged
+ * on against raw and deflate.
+ *
+ * @param {BitWriter} w
+ * @param {Uint8Array} bytes
+ */
+function emitText6(w, bytes) {
+  const n = bytes.length;
+  const cost = new Int32Array(n + 1);
+  /** -1 = emit a literal here, otherwise the token index to emit. */
+  const choice = new Int32Array(n + 1).fill(-1);
+
+  for (let i = n - 1; i >= 0; i--) {
+    let best = literalCost(bytes[i]) + cost[i + 1];
+    let pick = -1;
+
+    for (const index of TOKEN_BY_FIRST.get(bytes[i]) ?? []) {
+      const token = TOKEN_BYTES[index];
+      if (i + token.length > n) continue;
+      let matched = true;
+      for (let k = 1; k < token.length; k++) {
+        if (bytes[i + k] !== token[k]) {
+          matched = false;
+          break;
+        }
+      }
+      if (!matched) continue;
+      const candidate = 12 + cost[i + token.length];
+      if (candidate < best) {
+        best = candidate;
+        pick = index;
+      }
+    }
+
+    cost[i] = best;
+    choice[i] = pick;
+  }
+
+  for (let i = 0; i < n;) {
+    const pick = choice[i];
+    if (pick >= 0) {
+      w.push(TOKEN, 6);
+      w.push(pick, 6);
+      i += TOKEN_BYTES[pick].length;
+      continue;
+    }
+    const byte = bytes[i++];
+    const direct = T6_INDEX.get(byte);
+    if (direct !== undefined) {
+      w.push(direct, 6);
+    } else if (byte >= 65 && byte <= 90 && T6_INDEX.has(byte + 32)) {
+      w.push(SHIFT, 6);
+      w.push(T6_INDEX.get(byte + 32), 6);
+    } else {
+      w.push(ESC, 6);
+      w.push(byte, 8);
+    }
+  }
+  w.push(END, 6);
 }
 
 /**
@@ -385,38 +474,46 @@ export async function analyze(input, options = {}) {
     ? stripTracking(url)
     : [];
 
-  const { flags, hostByte, body, host } = canonicalise(url);
-  const bytes = encoder.encode(body);
-  const zipped = await deflate(bytes);
+  // Every shape crossed with every body mode. The smallest payload wins, so
+  // no combination of choices can beat what comes out of here.
+  const shapes = shapesFor(url);
+  /** @type {{payload: string, shape: shapes[0], mode: number}|null} */
+  let winner = null;
+  /** Best length seen per mode, across all shapes. */
+  const candidates = { text6: null, raw: null, deflate: null };
 
-  /** @type {Record<number, string>} */
-  const built = {
-    [MODE_TEXT6]: build(flags, MODE_TEXT6, hostByte, bytes),
-    [MODE_RAW]: build(flags, MODE_RAW, hostByte, bytes),
-  };
-  if (zipped) built[MODE_DEFLATE] = build(flags, MODE_DEFLATE, hostByte, zipped);
+  for (const shape of shapes) {
+    const bytes = encoder.encode(shape.body);
+    const zipped = await deflate(bytes);
 
-  let mode = MODE_TEXT6;
-  for (const key of Object.keys(built).map(Number)) {
-    if (built[key].length < built[mode].length) mode = key;
+    for (const mode of [MODE_TEXT6, MODE_RAW, MODE_DEFLATE]) {
+      if (mode === MODE_DEFLATE && !zipped) continue;
+      const payload = build(shape.flags, mode, shape.hostByte,
+        mode === MODE_DEFLATE ? zipped : bytes);
+
+      const name = MODE_NAMES[mode];
+      if (candidates[name] === null || payload.length < candidates[name]) {
+        candidates[name] = payload.length;
+      }
+      if (!winner || payload.length < winner.payload.length) {
+        winner = { payload, shape, mode };
+      }
+    }
   }
 
-  const headerBits = 6 + (hostByte === null ? 0 : 8);
+  const { payload, shape, mode } = winner;
+  const headerBits = 6 + (shape.hostByte === null ? 0 : 8);
   return {
-    payload: built[mode],
+    payload,
     url,
     mode,
     modeName: MODE_NAMES[mode],
     removed,
-    host,
-    hostByte,
+    host: shape.host,
+    hostByte: shape.hostByte,
     headerBits,
-    bodyBits: built[mode].length * 6 - headerBits,
-    candidates: {
-      text6: built[MODE_TEXT6].length,
-      raw: built[MODE_RAW].length,
-      deflate: zipped ? built[MODE_DEFLATE].length : null,
-    },
+    bodyBits: payload.length * 6 - headerBits,
+    candidates,
   };
 }
 
@@ -462,6 +559,13 @@ export async function expand(payload) {
       }
       if (symbol === ESC) {
         bytes.push(reader.read(8));
+        shifted = false;
+        continue;
+      }
+      if (symbol === TOKEN) {
+        const token = TOKEN_BYTES[reader.read(6)];
+        if (!token) throw new ClentError("This link uses an unknown token.");
+        for (const byte of token) bytes.push(byte);
         shifted = false;
         continue;
       }
