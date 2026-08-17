@@ -11,7 +11,7 @@ import {
   SCHEME_HTTPS, SCHEME_OTHER, F_WWW, F_HOST, MODE_HOST, MODE_TEXT,
   SCHEME_IN_BODY,
 } from "../src/clent.js";
-import { HOST_CODE_LENGTHS, SUFFIX_BASE, SUFFIXES } from "../src/hostcode.js";
+import { HOST_CODE_LENGTHS, SUFFIX_BASE, SUFFIXES, HOST_TOKEN_BASE, HOST_TOKENS } from "../src/hostcode.js";
 
 /** Round-trip a bare host through the field codec. */
 function fieldTrip(host) {
@@ -120,7 +120,8 @@ test("a damaged host field fails loudly, never silently", async () => {
 
 test("the host code tables hold their wire invariants", () => {
   // The lengths array must describe a usable canonical code.
-  assert.equal(HOST_CODE_LENGTHS.length, SUFFIX_BASE + SUFFIXES.length);
+  assert.equal(HOST_TOKEN_BASE, SUFFIX_BASE + SUFFIXES.length);
+  assert.equal(HOST_CODE_LENGTHS.length, HOST_TOKEN_BASE + HOST_TOKENS.length);
   let kraft = 0;
   for (const length of HOST_CODE_LENGTHS) {
     assert.ok(length >= 0 && length <= 15, `code length ${length} out of range`);

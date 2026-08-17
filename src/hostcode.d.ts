@@ -9,3 +9,9 @@ export declare const SUFFIX_BASE: 258;
 
 /** Suffix per terminal symbol, longest first. */
 export declare const SUFFIXES: readonly string[];
+
+/** First host-token symbol; token k lives at HOST_TOKEN_BASE + k. */
+export declare const HOST_TOKEN_BASE: number;
+
+/** Common host fragments as their own symbols, indexed as on the wire. */
+export declare const HOST_TOKENS: readonly string[];

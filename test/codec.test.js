@@ -225,7 +225,7 @@ test("shopping and social tracking is removed without breaking the link", async 
   const cases = [
     // Amazon: affiliate tag and referral crumbs go, the variant selector stays.
     ["https://www.amazon.com/dp/B08N5WRWNW/ref=sr_1_3?tag=aff-20&th=1&pd_rd_w=abc",
-     "https://www.amazon.com/dp/B08N5WRWNW/ref=sr_1_3?th=1"],
+     "https://www.amazon.com/dp/B08N5WRWNW?th=1"],  // path rule folds /ref= away
     // eBay campaign parameters.
     ["https://www.ebay.com/itm/123?_trkparms=x&campid=5338&mkevt=1",
      "https://www.ebay.com/itm/123"],

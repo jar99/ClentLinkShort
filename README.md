@@ -25,10 +25,10 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **57% of the URL it came from** (median). Every link also
+The encoded destination is **56% of the URL it came from** (median). Every link also
 carries the site's address — 16 characters on `nul.im` — so a URL only has to be
-longer than about **30 characters** before the whole link comes out shorter. That is
-most links people actually share: **78% of deep links** (anything past a bare
+longer than about **25 characters** before the whole link comes out shorter. That is
+most links people actually share: **79% of deep links** (anything past a bare
 homepage) shrink, and popular shapes do far better still — a timestamped YouTube
 share is 49 characters in, 17 out.
 
@@ -36,8 +36,8 @@ Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~30 | 45.4% |
-| a github.io project page (40c) | ~110 | 8.8% |
+| `nul.im/#` (16c) | ~25 | 46.7% |
+| a github.io project page (40c) | ~110 | 8.9% |
 | payload alone, no prefix | ~10 | 99.9% |
 
 Bare homepages (43% of the corpus) are the one shape that rarely wins — there is
@@ -89,11 +89,11 @@ people actually shorten:
 | URLs round-tripped | **643,949** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **63.4%** overall, median **56.5%** |
+| Payload vs input URL | **62.9%** overall, median **56.1%** |
 | Payload shorter than input | **99.9%** |
 | Host dictionary hit rate | **11.2%** |
 | Carried tracking parameters | **3.6%**, worth 26% of the payload on those |
-| Winning body mode | host 75.5%, text 18.4%, template 5.7%, deflate 0.3%, raw 0.1% |
+| Winning body mode | host 78.1%, text 15.8%, template 5.7%, deflate 0.3%, raw 0.1% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -243,7 +243,7 @@ Append `~` to a link to preview where it goes instead of going there.
 1. **Tracking parameters are removed** — `utm_*`, `fbclid`, `gclid` and similar. Worth
    about 25% of the payload on a link that has them. It's the only step that changes
    the destination, so it's a switch rather than a default.
-2. **Known URL shapes collapse to an ID.**  86 templates cover YouTube, Amazon,
+2. **Known URL shapes collapse to an ID.**  90 templates cover YouTube, Amazon,
    imgur, X, Facebook, Instagram, Reddit, TikTok, GitHub, Spotify, eBay, Etsy, arXiv
    and others. `youtube.com/watch?v=dQw4w9WgXcQ` is 43 characters carrying 11 of
    information; templated it is 15. Each slot is encoded at its own alphabet's width —
@@ -281,7 +281,7 @@ Append `~` to a link to preview where it goes instead of going there.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: host wins 75.5%, text 18.4%, templates 5.7%, deflate 0.3%, raw 0.1%.
+On the corpus: host wins 78.1%, text 15.8%, templates 5.7%, deflate 0.3%, raw 0.1%.
 
 ## Tamper resistance
 

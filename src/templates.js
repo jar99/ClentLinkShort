@@ -158,6 +158,12 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://youtube.com/watch?v={0}", slots: ["b64"] },
   { pattern: "https://youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
   { pattern: "https://youtube.com/shorts/{0}", slots: ["b64"] },
+  // Short-link services people re-shorten from — a.co is Amazon's own,
+  // amzn.to its bitly, vm.tiktok the app's share button:
+  { pattern: "https://a.co/d/{0}", slots: ["b64"] },
+  { pattern: "https://amzn.to/{0}", slots: ["b64"] },
+  { pattern: "https://amzn.eu/d/{0}", slots: ["b64"] },
+  { pattern: "https://vm.tiktok.com/{0}/", slots: ["b64"] },
   // Proposed by tools/mine-templates.mjs from corpus coverage:
   { pattern: "https://www.ft.com/content/{0}", slots: ["b64"] },
   { pattern: "https://www.bbc.com/news/articles/{0}", slots: ["b64"] },

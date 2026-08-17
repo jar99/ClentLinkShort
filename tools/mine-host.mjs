@@ -30,7 +30,9 @@ import { HOST_INDEX } from "../src/hosts.js";
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
 const at = args.indexOf("--suffixes");
-const SUFFIX_COUNT = at === -1 ? 96 : Number(args[at + 1]);
+const SUFFIX_COUNT = at === -1 ? 192 : Number(args[at + 1]);
+const tt = args.indexOf("--tokens");
+const TOKEN_COUNT = tt === -1 ? 64 : Number(args[tt + 1]);
 
 const SAMPLE = 120000;
 const HOLDOUT = 30000;
@@ -38,8 +40,9 @@ const HOLDOUT = 30000;
 const MIN_NAMES = 30;
 const MAX_CODE_LEN = 15;
 
-/** Symbols: 0..255 bytes, END, ESC, then one terminal per suffix. */
+/** Symbols: bytes, END, ESC, suffix terminals, then one per host token. */
 const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
+const TOKEN_BASE = () => SUFFIX_BASE + SUFFIX_COUNT;
 
 /* -------------------------------------------------------------------------- *
  * Hosts as the encoder sees them: www-stripped, weighted by occurrence
@@ -169,26 +172,100 @@ function bestTerminal(lengths, suffixes, host) {
   return { pick, margin, suffixLen };
 }
 
-/** Bits for one host under the given lengths and suffix list. */
-function hostBits(lengths, suffixes, host) {
-  let bits = bestTerminal(lengths, suffixes, host).margin;
-  for (let k = 0; k < host.length; k++) bits += litCost(lengths, host.charCodeAt(k));
+/** Greedy token cost for the name part (the real encoder uses DP). */
+function nameBits(lengths, tokens, text) {
+  let bits = 0;
+  let i = 0;
+  outer: while (i < text.length) {
+    for (let t = 0; t < tokens.length; t++) {
+      if (text.startsWith(tokens[t], i)) {
+        bits += lengths[TOKEN_BASE() + t] || 10;
+        i += tokens[t].length;
+        continue outer;
+      }
+    }
+    bits += litCost(lengths, text.charCodeAt(i++));
+  }
   return bits;
 }
 
-/** Frequencies over the sample with the current suffix table applied. */
-function countFrequencies(lengths, suffixes) {
-  const freq = new Float64Array(SUFFIX_BASE + suffixes.length);
+/** Bits for one host under the given lengths, suffixes and tokens. */
+function hostBits(lengths, suffixes, tokens, host) {
+  const { margin, suffixLen } = bestTerminal(lengths, suffixes, host);
+  // margin already subtracts the spelled suffix; approximate by pricing the
+  // whole host then applying the terminal margin over plain literals.
+  let bits = margin;
+  bits += nameBits(lengths, tokens, host.slice(0, host.length - suffixLen));
+  for (let k = host.length - suffixLen; k < host.length; k++) {
+    bits += litCost(lengths, host.charCodeAt(k));
+  }
+  // bestTerminal's margin includes -spelled(suffix); the loop above re-adds
+  // exactly those literals, so the sum is name + terminal (or +END).
+  return bits;
+}
+
+/** Frequencies over the sample: suffix terminals and tokens included. */
+function countFrequencies(lengths, suffixes, tokens) {
+  const freq = new Float64Array(TOKEN_BASE() + tokens.length);
   for (const host of sample) {
     const { pick, suffixLen } = bestTerminal(lengths, suffixes, host);
-    const upto = host.length - suffixLen;
-    for (let k = 0; k < upto; k++) freq[host.charCodeAt(k)]++;
+    const name = host.slice(0, host.length - suffixLen);
+    let i = 0;
+    outer: while (i < name.length) {
+      for (let t = 0; t < tokens.length; t++) {
+        if (name.startsWith(tokens[t], i)) {
+          freq[TOKEN_BASE() + t]++;
+          i += tokens[t].length;
+          continue outer;
+        }
+      }
+      freq[name.charCodeAt(i++)]++;
+    }
     if (pick >= 0) freq[SUFFIX_BASE + pick]++;
     else freq[HOST_END]++;
   }
   if (!freq[HOST_ESC]) freq[HOST_ESC] = 1;
   if (!freq[HOST_END]) freq[HOST_END] = 1;
   return freq;
+}
+
+/**
+ * Mine host tokens from the name parts: substrings that recur across many
+ * DISTINCT names — "blog.", "mail.", "cloud", "shop" — so one company's
+ * subdomain farm can't vote its own quirks in.
+ */
+function mineHostTokens(lengths, suffixes) {
+  const counts = new Map();
+  const names = new Map();
+  for (const host of sample) {
+    const { suffixLen } = bestTerminal(lengths, suffixes, host);
+    const name = host.slice(0, host.length - suffixLen);
+    for (let n = 3; n <= 10; n++) {
+      for (let j = 0; j + n <= name.length; j++) {
+        const g = name.slice(j, j + n);
+        counts.set(g, (counts.get(g) || 0) + 1);
+        let set = names.get(g);
+        if (!set) names.set(g, (set = new Set()));
+        if (set.size <= 40) set.add(name);
+      }
+    }
+  }
+  const scored = [];
+  for (const [g, n] of counts) {
+    if (n < 40 || (names.get(g)?.size ?? 0) < 40) continue;
+    let saved = -10; // estimated token cost pre-fit
+    for (let k = 0; k < g.length; k++) saved += litCost(lengths, g.charCodeAt(k));
+    if (saved > 0) scored.push([g, n * saved]);
+  }
+  scored.sort((a, b) => b[1] - a[1]);
+  const tokens = [];
+  for (const [g] of scored) {
+    if (tokens.length >= TOKEN_COUNT) break;
+    if (tokens.some((t) => t.includes(g) || g.includes(t))) continue;
+    tokens.push(g);
+  }
+  tokens.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  return tokens;
 }
 
 /* -------------------------------------------------------------------------- *
@@ -199,6 +276,7 @@ const { count, names } = collectCandidates(sample);
 
 // Bootstrap costs: flat-ish.
 let suffixes = [];
+let tokens = [];
 let lengths = new Uint8Array(SUFFIX_BASE);
 for (let b = 45; b < 123; b++) lengths[b] = 6;
 lengths[HOST_END] = 6; lengths[HOST_ESC] = 6;
@@ -227,11 +305,12 @@ for (let iteration = 0; iteration < 3; iteration++) {
     carried[SUFFIX_BASE + i] = previous.get(suffixes[i]) ?? 0;
   }
 
-  lengths = huffmanLengths(countFrequencies(carried, suffixes));
+  tokens = mineHostTokens(carried, suffixes);
+  lengths = huffmanLengths(countFrequencies(carried, suffixes, tokens));
   let bits = 0;
-  for (const host of sample) bits += hostBits(lengths, suffixes, host);
+  for (const host of sample) bits += hostBits(lengths, suffixes, tokens, host);
   console.error(`iteration ${iteration}: ${suffixes.length} suffixes, ` +
-    `${(bits / sample.length).toFixed(1)} bits/host on the sample`);
+    `${tokens.length} tokens, ${(bits / sample.length).toFixed(1)} bits/host`);
 }
 
 /* -------------------------------------------------------------------------- *
@@ -241,7 +320,7 @@ for (let iteration = 0; iteration < 3; iteration++) {
 {
   let bits = 0, chars = 0;
   for (const host of holdout) {
-    bits += hostBits(lengths, suffixes, host);
+    bits += hostBits(lengths, suffixes, tokens, host);
     chars += host.length;
   }
   console.error(`holdout: ${(bits / holdout.length).toFixed(1)} bits/host, ` +
@@ -254,6 +333,7 @@ for (let iteration = 0; iteration < 3; iteration++) {
 
 const lengthsLiteral = `[..."${[...lengths].map((v) => v.toString(16)).join("")}"].map((c) => parseInt(c, 16))`;
 const suffixesLiteral = suffixes.map((s) => JSON.stringify(s)).join(", ");
+const tokensLiteral = tokens.map((s) => JSON.stringify(s)).join(", ");
 
 const file = `/**
  * The host code: canonical Huffman lengths over hostname bytes plus END,
@@ -266,13 +346,14 @@ const file = `/**
  * also ends the field. A host whose suffix is not listed ends with the plain
  * END symbol instead; nothing needs this table to grow per domain.
  *
- * Symbols 0..255 are bytes; 256 = END, 257 = ESC (a raw 8-bit byte follows),
- * 258+k = "append SUFFIXES[k], then end". Codes are canonical: assigned by
- * ascending length, ties by ascending symbol, so the lengths array IS the
- * whole code.
+ * Symbols 0..255 are bytes; 256 = END, 257 = ESC (a raw 8-bit byte
+ * follows), 258+k = "append SUFFIXES[k], then end", and past those one
+ * symbol per HOST_TOKEN — "blog.", "mail." and friends cost a few bits
+ * instead of being spelled. Codes are canonical: assigned by ascending
+ * length, ties by ascending symbol, so the lengths array IS the whole code.
  *
- * Table format for wire v1. Any change to either table changes what existing
- * payloads decode to, so a change here is a wire version bump, never a patch.
+ * Beta: re-mining replaces these tables and invalidates existing links;
+ * after 1.0 this file is frozen by test/compat.test.js.
  *
  * @module hostcode
  */
@@ -289,12 +370,23 @@ export const HOST_END = 256, HOST_ESC = 257, SUFFIX_BASE = 258;
 export const SUFFIXES = Object.freeze([
   ${suffixesLiteral.replace(/(.{70,}?), /g, "$1,\n  ")}
 ]);
+
+/** First host-token symbol; token k lives at HOST_TOKEN_BASE + k. */
+export const HOST_TOKEN_BASE = ${SUFFIX_BASE + suffixes.length};
+
+/**
+ * Common host fragments as their own symbols, indexed as on the wire.
+ * @type {readonly string[]}
+ */
+export const HOST_TOKENS = Object.freeze([
+  ${tokensLiteral.replace(/(.{70,}?), /g, "$1,\n  ")}
+]);
 `;
 
 if (WRITE) {
   await writeFile(path.join(ROOT, "src", "hostcode.js"), file);
   console.error(`wrote src/hostcode.js (${suffixes.length} suffixes, ` +
-    `${[...lengths].filter(Boolean).length} coded symbols)`);
+    `${tokens.length} tokens, ${[...lengths].filter(Boolean).length} coded symbols)`);
 } else {
   console.log(file);
 }

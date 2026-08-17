@@ -90,6 +90,30 @@ export const TRACKING_BY_HOST = Object.freeze([
  * @param {URL} url
  * @returns {string[]} the parameter names removed
  */
+/**
+ * Path rewrites for sites that bury tracking in the path itself. Amazon is
+ * the canonical case: the title slug and the `/ref=…` crumb around
+ * `/dp/<ASIN>` are decoration — `/dp/<ASIN>` alone lands on the same page.
+ * Only applied under stripTracking, which is already the "may change the
+ * URL's bytes" switch.
+ *
+ * @type {ReadonlyArray<{host: RegExp, match: RegExp, rewrite: string, label: string}>}
+ */
+export const PATH_BY_HOST = Object.freeze([
+  {
+    host: /(?:^|\.)amazon\.[a-z.]+$/i,
+    match: /^(?:\/[^/]+)*?\/dp\/([A-Z0-9]{9,10})(?:\/.*)?$/i,
+    rewrite: "/dp/$1",
+    label: "amazon path clutter",
+  },
+  {
+    host: /(?:^|\.)amazon\.[a-z.]+$/i,
+    match: /^\/gp\/product\/([A-Z0-9]{9,10})(?:\/.*)?$/i,
+    rewrite: "/dp/$1",
+    label: "amazon path clutter",
+  },
+]);
+
 export function stripTracking(url) {
   const scoped = TRACKING_BY_HOST
     .filter((rule) => rule.host.test(url.hostname))
@@ -101,5 +125,14 @@ export function stripTracking(url) {
   for (const key of hits) url.searchParams.delete(key);
   // Re-serialising an emptied query leaves a bare "?" behind.
   if (![...url.searchParams].length) url.search = "";
+
+  for (const rule of PATH_BY_HOST) {
+    if (!rule.host.test(url.hostname) || !rule.match.test(url.pathname)) continue;
+    const cleaned = url.pathname.replace(rule.match, rule.rewrite);
+    if (cleaned !== url.pathname) {
+      url.pathname = cleaned;
+      hits.push(rule.label);
+    }
+  }
   return hits;
 }

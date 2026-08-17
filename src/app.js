@@ -13,6 +13,7 @@ import {
 import {
   checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
 } from "./sign.js";
+import { toEmoji, decodeTransport } from "./transport.js";
 import { qrMatrix } from "./qr.js";
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -74,7 +75,14 @@ async function runRedirect() {
     fragment = fragment.slice(1);
   }
 
-  const { payload, kind, tag } = split(fragment);
+  const { payload: dressed, kind, tag } = split(fragment);
+  let payload;
+  try {
+    payload = decodeTransport(dressed);
+  } catch (error) {
+    showLinkFailure(error instanceof ClentError ? error.message : "This link is damaged.");
+    return;
+  }
 
   // An integrity check is verified before the destination is shown, let alone
   // followed: if the payload was altered, whatever it decodes to is not what
@@ -365,12 +373,14 @@ function setUpCreate(prefill = "") {
 
     // Tags are computed over the payload, so they never change where the link
     // goes — stripping one leaves a working link, it just stops being checkable.
-    let fragment = analysis.payload;
+    let fragment = field("emoji").checked ? toEmoji(analysis.payload) : analysis.payload;
     const passphrase = field("passphrase").value.trim();
     try {
       if (passphrase) {
         fragment = join(fragment, TAG_SIGNED, await sign(analysis.payload, passphrase));
       } else if (field("tamper").checked && canSign) {
+        // Computed over the canonical payload, so the tag is the same
+        // whichever dress the link wears.
         fragment = join(fragment, TAG_CHECK, await checksum(analysis.payload));
       }
     } catch {

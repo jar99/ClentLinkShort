@@ -24,7 +24,8 @@
     "./templates.js": "./src/templates.js",
     "./text.js": "./src/text.js",
     "./textcode.js": "./src/textcode.js",
-    "./tracking.js": "./src/tracking.js"
+    "./tracking.js": "./src/tracking.js",
+    "./transport.js": "./src/transport.js"
   },
   "files": [
     "src/bits.d.ts",
@@ -56,7 +57,9 @@
     "src/textcode.d.ts",
     "src/textcode.js",
     "src/tracking.d.ts",
-    "src/tracking.js"
+    "src/tracking.js",
+    "src/transport.d.ts",
+    "src/transport.js"
   ],
   "sideEffects": false,
   "engines": {

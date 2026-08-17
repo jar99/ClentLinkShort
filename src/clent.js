@@ -82,6 +82,7 @@ import {
   ENCODABLE_ORDER, SCHEME_INDEX, SCHEME_BITS, SCHEME_IN_BODY,
   ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
+import { decodeTransport } from "./transport.js";
 
 // One import serves every caller; the module boundaries stay an internal
 // affair. (The page bundler strips these re-export lines when it merges the
@@ -99,6 +100,7 @@ export { TEMPLATES } from "./templates.js";
 export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
+export { isEmoji, toEmoji, fromEmoji, decodeTransport } from "./transport.js";
 
 /**
  * Wire format version this build writes. Version 1 is FROZEN: its tables
@@ -495,9 +497,11 @@ function finishAnalysis(payload, url, mode, removed, shape, candidates, template
  * @throws {ClentError}
  */
 export async function expand(payload) {
-  const code = String(payload ?? "");
+  let code = String(payload ?? "");
   if (!code) throw new ClentError("This link is empty.");
   if (code.length > MAX_PAYLOAD) throw new ClentError("This link is far too long.");
+  // An emoji-dressed payload undresses to the canonical form first.
+  code = decodeTransport(code);
   if (!/^[A-Za-z0-9_-]+$/.test(code)) throw new ClentError("This isn't a valid Clent link.");
 
   const reader = new BitReader(code);
