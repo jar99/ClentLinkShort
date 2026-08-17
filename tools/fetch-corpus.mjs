@@ -120,8 +120,23 @@ function usable(raw) {
   if (!url || url.length > 4000) return null;
   if (!/^https?:\/\//i.test(url)) return null;
   if (/[\s<>"]/.test(url)) return null;
-  // Links lifted out of prose and code drag punctuation along with them.
-  url = url.replace(/[).,;'\]]+$/, "");
+  // Unescaped feed markup means the extractor mangled it; not a real link.
+  if (url.includes("&amp;")) return null;
+  // Whitespace percent-encoded onto the tail is extraction residue.
+  url = url.replace(/(?:%0A|%0D|%09)+$/gi, "");
+  // Links lifted out of prose and code drag punctuation along with them —
+  // but a ")" that closes a "(" inside the URL is part of it. Wiki titles
+  // love parentheses; stripping blindly damaged forty thousand of them.
+  for (;;) {
+    const before = url;
+    url = url.replace(/[.,;'\]]+$/, "");
+    if (url.endsWith(")")) {
+      const open = (url.match(/\(/g) ?? []).length;
+      const close = (url.match(/\)/g) ?? []).length;
+      if (close > open) url = url.slice(0, -1);
+    }
+    if (url === before) break;
+  }
   try {
     const parsed = new URL(url);
     if (!parsed.hostname.includes(".")) return null;
