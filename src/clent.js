@@ -19,7 +19,7 @@
  *   templates.js   known URL shapes         (data table, append-only)
  *
  * ---------------------------------------------------------------------------
- * Wire format v6
+ * Wire format v7
  *
  * A continuous bit stream written straight into the Base64url alphabet at
  * 6 bits per character. Nothing rounds up to a byte, so nothing is wasted.
@@ -28,7 +28,7 @@
  *                                     3 template
  *                   bit  2    "www." was stripped from the host
  *                   bit  3    host came from the dictionary
- *                   bits 4-5  body mode: 0 text6, 1 raw, 2 deflate
+ *                   bits 4-5  body mode: 0 text, 1 raw, 2 deflate
  *   8 bits  host dictionary index, present only when bit 3 is set
  *   body    text6   6-bit symbols, terminated by END
  *           raw     UTF-8 bytes, 8 bits each
@@ -59,11 +59,10 @@
 
 import { B64, BitWriter, BitReader, ClentError } from "./bits.js";
 import { canCompress, deflate, inflate } from "./deflate.js";
-import { T6, emitText6, decodeText6 } from "./text6.js";
+import { emitText, decodeText } from "./text.js";
 import { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
 import { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
 import { HOSTS, HOST_INDEX } from "./hosts.js";
-import { TOKENS } from "./tokens.js";
 import {
   TEMPLATES, asTemplate, writeTemplate, readTemplate,
 } from "./templates.js";
@@ -77,25 +76,27 @@ import {
 // modules into a single scope.)
 export { B64, BitWriter, BitReader, ClentError } from "./bits.js";
 export { canCompress, deflate, inflate, MAX_INFLATED } from "./deflate.js";
-export { T6, emitText6, decodeText6 } from "./text6.js";
+export { emitText, decodeText, textBits } from "./text.js";
 export { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
 export { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
 export { HOSTS } from "./hosts.js";
-export { TOKENS } from "./tokens.js";
+export { TOKENS } from "./textcode.js";
 export { TEMPLATES } from "./templates.js";
 export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
 
 /** Wire format version this build reads and writes. */
-export const VERSION = 6;
+export const VERSION = 7;
 
 export const SCHEME_HTTPS = 0, SCHEME_HTTP = 1, SCHEME_OTHER = 2,
   SCHEME_TEMPLATE = 3;
 /** @deprecated v5 name for {@link SCHEME_OTHER}. */
 export const SCHEME_VERBATIM = SCHEME_OTHER;
 
-export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
+export const MODE_TEXT = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
+/** @deprecated v6 name for {@link MODE_TEXT}. */
+export const MODE_TEXT6 = MODE_TEXT;
 /**
  * Analysis-level marker for a template win. NEVER a wire value — on the wire
  * a template is scheme 3 and the mode bits stay zero.
@@ -103,7 +104,7 @@ export const MODE_TEXT6 = 0, MODE_RAW = 1, MODE_DEFLATE = 2;
 export const MODE_TEMPLATE = 3;
 
 /** @type {readonly string[]} Human-readable mode names, indexed by mode. */
-export const MODE_NAMES = Object.freeze(["text6", "raw", "deflate", "template"]);
+export const MODE_NAMES = Object.freeze(["text", "raw", "deflate", "template"]);
 
 const SCHEME_MASK = 0b11;
 /** Header bit: "www." was stripped from the host. */
@@ -201,6 +202,18 @@ function shapesFor(url) {
   let tail = url.href.slice(url.origin.length);
   if (tail === "/") tail = ""; // implied on the way back
 
+  // The scheme-index form is legal for http/https too, and the oracle proved
+  // it can win: its body starts "//", and a host that begins with a token
+  // suffix ("//index...") gets the token where the compact body cannot. Two
+  // extra characters of body usually lose — the measurement decides.
+  const shapes = [{
+    flags: SCHEME_OTHER,
+    schemeIndex: SCHEME_INDEX.get(url.protocol),
+    hostByte: null,
+    body: url.href.slice(url.protocol.length),
+    host: null,
+  }];
+
   // Both spellings of the host, where there is a choice.
   //
   // Stripping "www." looks free — four characters traded for one header bit
@@ -213,7 +226,6 @@ function shapesFor(url) {
     spellings.push({ host: url.host.slice(4), extra: F_WWW });
   }
 
-  const shapes = [];
   for (const { host, extra } of spellings) {
     const index = HOST_INDEX.get(host);
     if (index !== undefined) {
@@ -253,8 +265,8 @@ export function build(flags, mode, hostByte, bytes, schemeIndex = null) {
   }
   if (hostByte !== null) w.push(hostByte, 8);
 
-  if (mode === MODE_TEXT6) {
-    emitText6(w, bytes);
+  if (mode === MODE_TEXT) {
+    emitText(w, bytes);
   } else {
     for (const byte of bytes) w.push(byte, 8);
   }
@@ -328,7 +340,7 @@ export async function analyze(input, options = {}) {
       }
     : null;
   /** Best length seen per mode, across all shapes. */
-  const candidates = { text6: null, raw: null, deflate: null };
+  const candidates = { text: null, raw: null, deflate: null };
 
   // Deflate costs about three quarters of the time spent encoding, so it runs
   // once rather than once per shape, on the shortest body. That is the one
@@ -351,7 +363,7 @@ export async function analyze(input, options = {}) {
     const bytes = encoded[index];
     const zipped = index === shortest ? zippedShortest : null;
 
-    for (const mode of [MODE_TEXT6, MODE_RAW, MODE_DEFLATE]) {
+    for (const mode of [MODE_TEXT, MODE_RAW, MODE_DEFLATE]) {
       if (mode === MODE_DEFLATE && !zipped) continue;
       const payload = build(shape.flags, mode, shape.hostByte,
         mode === MODE_DEFLATE ? zipped : bytes, shape.schemeIndex);
@@ -453,8 +465,8 @@ export async function expand(payload) {
   const hostIndex = flags & F_HOST ? reader.read(8) : null;
 
   let body;
-  if (mode === MODE_TEXT6) {
-    body = decodeText6(reader);
+  if (mode === MODE_TEXT) {
+    body = decodeText(reader);
   } else if (mode === MODE_RAW || mode === MODE_DEFLATE) {
     const count = Math.floor(reader.left / 8); // trailing padding is under 8 bits
     const bytes = new Uint8Array(count);

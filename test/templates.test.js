@@ -58,8 +58,8 @@ test("a template is only used when it actually wins", async () => {
     const a = await analyze(url, { stripTracking: false });
     if (a.template !== null) {
       used++;
-      assert.ok(a.payload.length <= a.candidates.text6,
-        `${url}: template ${a.payload.length} should beat text6 ${a.candidates.text6}`);
+      assert.ok(a.payload.length <= a.candidates.text,
+        `${url}: template ${a.payload.length} should beat text ${a.candidates.text}`);
     }
   }
   assert.ok(used > TEMPLATED.length * 0.7,
@@ -109,7 +109,8 @@ test("filling a template is the exact inverse of matching it", () => {
     const template = COMPILED[i];
     // Build a value for each slot from its own alphabet, then check the
     // rebuilt URL matches its own pattern again.
-    const values = template.slots.map((name) => CHARSETS[name].chars.slice(1, 6));
+    const values = template.slots.map((name) =>
+      name === "text" ? "SomeMixed_Title" : CHARSETS[name].chars.slice(1, 6));
     const built = fill(i, values);
     const found = template.match.exec(built);
     assert.ok(found, `${template.pattern} did not match its own output ${built}`);

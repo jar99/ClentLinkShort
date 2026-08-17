@@ -10,18 +10,18 @@
 
 export { B64, BitWriter, BitReader, ClentError } from "./bits.js";
 export { canCompress, deflate, inflate, MAX_INFLATED } from "./deflate.js";
-export { T6, emitText6, decodeText6 } from "./text6.js";
+export { emitText, decodeText, textBits } from "./text.js";
 export { TRACKING_PARAMS, TRACKING_BY_HOST, stripTracking } from "./tracking.js";
 export { RISK_NONE, RISK_NOTE, RISK_BLOCK, assess } from "./risk.js";
 export { HOSTS } from "./hosts.js";
-export { TOKENS } from "./tokens.js";
+export { TOKENS } from "./textcode.js";
 export { TEMPLATES } from "./templates.js";
 export {
   ENCODABLE_ORDER, SCHEME_BITS, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE,
 } from "./schemes.js";
 
 /** Wire format version this build reads and writes. */
-export declare const VERSION: 6;
+export declare const VERSION: 7;
 
 export declare const SCHEME_HTTPS: 0;
 export declare const SCHEME_HTTP: 1;
@@ -30,6 +30,8 @@ export declare const SCHEME_TEMPLATE: 3;
 /** @deprecated v5 name for SCHEME_OTHER. */
 export declare const SCHEME_VERBATIM: 2;
 
+export declare const MODE_TEXT: 0;
+/** @deprecated v6 name for MODE_TEXT. */
 export declare const MODE_TEXT6: 0;
 export declare const MODE_RAW: 1;
 export declare const MODE_DEFLATE: 2;
@@ -37,7 +39,7 @@ export declare const MODE_DEFLATE: 2;
 export declare const MODE_TEMPLATE: 3;
 
 export type Mode = 0 | 1 | 2 | 3;
-export type ModeName = "text6" | "raw" | "deflate" | "template";
+export type ModeName = "text" | "raw" | "deflate" | "template";
 
 /** Human-readable mode names, indexed by mode. */
 export declare const MODE_NAMES: readonly ModeName[];
@@ -83,7 +85,7 @@ export interface Analysis {
   bodyBits: number;
   /** Best payload length per mode; null where a mode was unavailable. */
   candidates: {
-    text6: number | null;
+    text: number | null;
     raw: number | null;
     deflate: number | null;
     template: number | null;

@@ -51,7 +51,7 @@ export function emptyStats() {
     failures: [],
     /** @type {Array<{url: string, wasted: number}>} */
     suboptimal: [],
-    modes: { text6: 0, raw: 0, deflate: 0, template: 0 },
+    modes: { text: 0, raw: 0, deflate: 0, template: 0 },
     inputBytes: 0,
     payloadBytes: 0,
     /** payload length / input length, per URL */

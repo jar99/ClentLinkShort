@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { HOSTS } from "../src/hosts.js";
-import { TOKENS } from "../src/tokens.js";
+import { TOKENS, CODE_LENGTHS, TOKEN_INDEX_BITS, SYM_TOKEN, SYM_END, SYM_ESC } from "../src/textcode.js";
 import { TEMPLATES, CHARSETS } from "../src/templates.js";
 import { ENCODABLE_ORDER, SCHEME_IN_BODY, ENCODABLE, FOLLOWABLE } from "../src/schemes.js";
 
@@ -23,13 +23,29 @@ test("HOSTS fits its 8-bit index and every entry is usable", () => {
   }
 });
 
-test("TOKENS fills its 6-bit index exactly and every entry pays for itself", () => {
-  assert.equal(TOKENS.length, 64, "the token index is exactly 6 bits");
+test("TOKENS fits its index width and every entry can pay for itself", () => {
+  assert.ok(TOKENS.length <= 1 << TOKEN_INDEX_BITS,
+    `${TOKENS.length} tokens do not fit ${TOKEN_INDEX_BITS} index bits`);
   assert.equal(new Set(TOKENS).size, TOKENS.length, "duplicate tokens waste slots");
   for (const token of TOKENS) {
-    assert.ok(token.length >= 3, `"${token}" is too short to pay for its 12-bit reference`);
+    assert.ok(token.length >= 3, `"${token}" is too short to ever pay for its reference`);
     assert.ok([...token].every((c) => c.charCodeAt(0) < 128),
       `"${token}" must be ASCII to match on bytes`);
+  }
+});
+
+test("the text code is a valid canonical Huffman table", () => {
+  assert.equal(CODE_LENGTHS.length, 259, "256 bytes + TOKEN + END + ESC");
+  // Kraft inequality: the lengths must describe a real prefix code.
+  let kraft = 0;
+  for (const length of CODE_LENGTHS) {
+    assert.ok(length >= 0 && length <= 15, `code length ${length} out of range`);
+    if (length) kraft += 2 ** -length;
+  }
+  assert.ok(kraft <= 1 + 1e-9, `Kraft sum ${kraft} > 1: not decodable`);
+  // The controls must always be codable.
+  for (const symbol of [SYM_TOKEN, SYM_END, SYM_ESC]) {
+    assert.ok(CODE_LENGTHS[symbol] > 0, `control symbol ${symbol} has no code`);
   }
 });
 
@@ -39,7 +55,9 @@ test("TEMPLATES fits its 8-bit index and slots agree with their patterns", () =>
     const holes = [...pattern.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
     assert.equal(holes.length, slots.length, `${pattern}: slot count`);
     assert.deepEqual(holes, holes.map((_, n) => n), `${pattern}: slots must be in order`);
-    for (const slot of slots) assert.ok(CHARSETS[slot], `${pattern}: unknown charset "${slot}"`);
+    for (const slot of slots) {
+      assert.ok(slot === "text" || CHARSETS[slot], `${pattern}: unknown charset "${slot}"`);
+    }
     assert.ok(pattern.startsWith("https://"), `${pattern}: must be absolute https`);
   }
 });

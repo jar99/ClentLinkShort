@@ -25,10 +25,18 @@
  */
 
 import { ClentError } from "./bits.js";
+import { emitText, decodeText, textBits } from "./text.js";
+
+const slotEncoder = new TextEncoder();
 
 /**
  * Slot alphabets. `bits` is what one character costs; a character outside the
  * alphabet disqualifies the template for that URL.
+ *
+ * The special slot type "text" is not listed here: it is Huffman-coded by
+ * text.js, END-terminated instead of length-prefixed, and accepts any value —
+ * capitals, dots, percent-escapes — at the text mode's own cost. Use it for
+ * slugs and titles; use a charset for dense IDs, which beat it.
  * @type {Readonly<Record<string, {chars: string, bits: number}>>}
  */
 export const CHARSETS = Object.freeze({
@@ -93,13 +101,44 @@ export const TEMPLATES = Object.freeze([
   { pattern: "https://github.com/{0}/{1}", slots: ["slug", "slug"] },
   { pattern: "https://github.com/{0}/{1}/issues/{2}", slots: ["slug", "slug", "dec"] },
   { pattern: "https://github.com/{0}/{1}/pull/{2}", slots: ["slug", "slug", "dec"] },
-  { pattern: "https://en.wikipedia.org/wiki/{0}", slots: ["slug"] },
+  { pattern: "https://en.wikipedia.org/wiki/{0}", slots: ["text"] },
   { pattern: "https://arxiv.org/abs/{0}", slots: ["slug"] },
   { pattern: "https://doi.org/10.{0}", slots: ["slug"] },
   { pattern: "https://open.spotify.com/track/{0}", slots: ["b64"] },
   { pattern: "https://open.spotify.com/album/{0}", slots: ["b64"] },
   { pattern: "https://news.ycombinator.com/item?id={0}", slots: ["dec"] },
   { pattern: "https://stackoverflow.com/questions/{0}/{1}", slots: ["dec", "slug"] },
+
+  // ---- v7 additions ------------------------------------------------------
+  // The timestamped YouTube share — the most-shared link shape there is.
+  { pattern: "https://www.youtube.com/watch?v={0}&t={1}s", slots: ["b64", "dec"] },
+  { pattern: "https://www.youtube.com/watch?v={0}&t={1}", slots: ["b64", "dec"] },
+  { pattern: "https://youtu.be/{0}?t={1}s", slots: ["b64", "dec"] },
+  { pattern: "https://youtu.be/{0}?t={1}", slots: ["b64", "dec"] },
+  // Real article names carry capitals, parentheses and percent-escapes; the
+  // old slug slot silently missed nearly all of them.
+  { pattern: "https://de.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://fr.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://es.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://ru.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://ja.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://it.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://pl.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://nl.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://pt.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://zh.wikipedia.org/wiki/{0}", slots: ["text"] },
+  { pattern: "https://github.com/{0}/{1}/blob/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://github.com/{0}/{1}/tree/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://github.com/{0}/{1}/releases/tag/{2}", slots: ["slug", "slug", "text"] },
+  { pattern: "https://www.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
+  { pattern: "https://old.reddit.com/r/{0}/comments/{1}/{2}/", slots: ["slug", "slug", "text"] },
+  { pattern: "https://stackoverflow.com/a/{0}", slots: ["dec"] },
+  { pattern: "https://stackoverflow.com/q/{0}", slots: ["dec"] },
+  { pattern: "https://vimeo.com/{0}", slots: ["dec"] },
+  { pattern: "https://www.twitch.tv/videos/{0}", slots: ["dec"] },
+  { pattern: "https://open.spotify.com/episode/{0}", slots: ["b64"] },
+  { pattern: "https://open.spotify.com/playlist/{0}", slots: ["b64"] },
+  { pattern: "https://commons.wikimedia.org/wiki/File:{0}", slots: ["text"] },
 ]);
 
 /** Longest slot value a template will hold; the length field is 6 bits. */
@@ -202,8 +241,17 @@ export function asTemplate(url) {
 
     for (let slot = 0; slot < values.length; slot++) {
       const value = values[slot];
+      if (!value) { usable = false; break; }
+
+      if (template.slots[slot] === "text") {
+        // Huffman-coded and END-terminated: any value works, at text cost.
+        if (value.length > 255) { usable = false; break; }
+        bits += textBits(slotEncoder.encode(value));
+        continue;
+      }
+
       const charset = CHARSET_INDEX[template.slots[slot]];
-      if (!value || value.length > MAX_SLOT) { usable = false; break; }
+      if (value.length > MAX_SLOT) { usable = false; break; }
       for (const character of value) {
         if (!charset.index.has(character)) { usable = false; break; }
       }
@@ -232,6 +280,10 @@ export function writeTemplate(w, { index, values }) {
   w.push(index, 8);
   const slots = COMPILED[index].slots;
   for (let slot = 0; slot < values.length; slot++) {
+    if (slots[slot] === "text") {
+      emitText(w, slotEncoder.encode(values[slot]));
+      continue;
+    }
     const charset = CHARSET_INDEX[slots[slot]];
     w.push(values[slot].length, 6);
     for (const character of values[slot]) {
@@ -254,6 +306,12 @@ export function readTemplate(reader) {
 
   const values = [];
   for (const name of template.slots) {
+    if (name === "text") {
+      const value = decodeText(reader);
+      if (!value) throw new ClentError("This link is damaged — an empty field.");
+      values.push(value);
+      continue;
+    }
     const charset = CHARSETS[name];
     const length = reader.read(6);
     if (length === 0) throw new ClentError("This link is damaged — an empty field.");

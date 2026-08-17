@@ -274,12 +274,12 @@
         becomes 8 bits.
       </li>
       <li>
-        <b>The rest is encoded three ways, and the shortest is kept.</b> Text
-        packing writes each character straight into the Base64url alphabet at 6
-        bits. Base64 is also 6 bits per character, so a lowercase URL comes out the
-        same length it went in. Encoding it as bytes and then Base64 would cost
-        1.33× as much. A 64-entry table of common runs — <code>.com</code>,
-        <code>article</code>, <code>/index</code> — takes another 12% off the body.
+        <b>The rest is encoded three ways, and the shortest is kept.</b> Text is
+        Huffman-coded: each character costs what its real frequency in URLs
+        earns it — <code>/</code> and <code>e</code> under 5 bits, rare ones
+        more — with a 128-entry table of whole runs like <code>.com</code>,
+        <code>article</code> and <code>/index</code> coded as single symbols.
+        The code was measured from the test corpus, not guessed.
       </li>
       <li>
         <b>The payload goes after the <code>#</code>.</b> Browsers don't send that
@@ -289,7 +289,7 @@
 
     <pre class="wire"><code>6 bits  header   scheme · www · dictionary · body mode
 8 bits  host     dictionary index, when the host is known
-  body  text6    6-bit symbols: literal, TOKEN, SHIFT, ESC, END
+  body  text     Huffman symbols: literals, tokens, escapes, END
         raw      UTF-8 bytes, 8 bits each
         deflate  DEFLATE-raw bytes, 8 bits each</code></pre>
   </section>

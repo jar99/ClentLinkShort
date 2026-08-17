@@ -26,7 +26,7 @@ test("the minified library behaves identically to the source", async () => {
   const { code } = await bundle(path.join(ROOT, "src", "clent.js"));
   const minified = minifyJS(code);
 
-  const exported = "export { shorten, expand, analyze, T6, B64 };";
+  const exported = "export { shorten, expand, analyze, B64, TOKENS };";
   const built = await load(minified + "\n" + exported);
 
   const urls = [
@@ -41,8 +41,9 @@ test("the minified library behaves identically to the source", async () => {
     "https://example.com/;,/?:@&=+$-_.!~*'()#",
   ];
 
-  // Byte-identical constants: a mangled T6 table would silently repoint links.
-  assert.equal(built.T6, source.T6, "text6 symbol table must survive minification");
+  // Byte-identical tables: a mangled token list would silently repoint links.
+  assert.deepEqual([...built.TOKENS], [...source.TOKENS],
+    "the token dictionary must survive minification");
   assert.equal(built.B64, source.B64, "Base64url alphabet must survive minification");
 
   for (const url of urls) {

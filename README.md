@@ -13,7 +13,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 112 tests, no dependencies
+npm test              # 113 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -22,25 +22,50 @@ npm run coverage      # how much of the ranked web the corpus reaches
 
 ## Is it actually shorter?
 
-Usually not, and that's worth saying up front.
+More often than before, and the numbers are measured, not hoped.
 
-The encoded destination is **68% of the URL it came from** (median). But every link
-also carries this site's address, which is 40 characters before the payload starts. A
-URL has to be longer than about **180 characters** before that trade comes out ahead on
-`jar99.github.io/ClentLinkShort/`.
+The encoded destination is **61% of the URL it came from** (median). Every link also
+carries this site's address — 40 characters before the payload starts — so a URL has
+to be longer than about **130 characters** before the whole link wins on this domain.
+Popular shapes do far better: a timestamped YouTube share is 49 characters in, 17 out.
 
 Measured over 643,949 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `jar99.github.io/ClentLinkShort/#` (40c) | ~180 | 3.6% |
-| `jar99.github.io/l/#` (27c) | ~170 | 6.8% |
-| `clent.link/#` (20c) | ~105 | 13.7% |
-| payload alone, no prefix | ~10 | 99.1% |
+| `jar99.github.io/ClentLinkShort/#` (40c) | ~130 | 7.9% |
+| `jar99.github.io/l/#` (27c) | ~90 | 14.0% |
+| `clent.link/#` (20c) | ~65 | 22.6% |
+| payload alone, no prefix | ~10 | 99.7% |
 
-The domain matters more than the codec does. What you get regardless of length is a
-link nothing is storing, that can't be revoked or logged, and that still resolves when
-whoever made it has forgotten about it.
+The domain still matters more than the codec does. What you get regardless of length
+is a link nothing is storing, that can't be revoked or logged, and that still resolves
+when whoever made it has forgotten about it.
+
+## Compared to ha.mr
+
+[ha.mr](https://github.com/p2r3/ha.mr) is the other static URL compressor — bit-level
+canonicalisation, a Huffman-coded domain dictionary, Huffman text. Running its actual
+encoder head-to-head over 3,999 corpus URLs:
+
+| | Clent | ha.mr |
+| --- | --- | --- |
+| Total payload, same 3,999 URLs | **150,717 chars** | 151,216 chars |
+| Decodes back byte-identical | **100%** | 83.4% |
+| Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
+| `watch?v=…&t=36s` (its own demo) | **17** | 27 |
+| `upload.wikimedia.org/...%22Agnese%22...` | **82** | 160 |
+| Shorter link, per URL | 14.7% | 81.0% |
+
+Read the last row with the others: ha.mr's per-URL edge is many 1–3-character wins on
+long-tail text, bought mostly by the wider output alphabet — and characters like
+`[](),'` are exactly the ones chat apps cut links off at, which is why Clent refuses
+them. Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
+slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
+page. Clent holds byte-exactness at 100% across the full 643,949 and fails loudly
+otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and
+decode, phishing-shape interception, hash-pinned CSP, integrity tags and signing, and
+bounded decompression are all Clent-only.
 
 ## Validation
 
@@ -65,7 +90,7 @@ people actually shorten:
 | Payload shorter than input | **99.1%** |
 | Host dictionary hit rate | **16.8%** |
 | Carried tracking parameters | **3.6%**, worth 25% of the payload on those |
-| Winning body mode | text6 98.1%, deflate 1.5%, raw 0.4% |
+| Winning body mode | text 95.7%, template 3.9%, deflate 0.4%, raw 0.1% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -100,9 +125,11 @@ keeps the smallest, so that class of bug can't come back — and the check still
 over the corpus as an independent implementation of the same question. It currently
 finds no URL that could have been encoded smaller.
 
-Within text6, token selection is a shortest-path problem rather than a greedy one:
-taking a long token can step over the start of a better one. The encoder solves it with
-dynamic programming, so the text6 body it produces is provably minimal.
+Within the text mode, token selection is a shortest-path problem rather than a greedy
+one: taking a long token can step over the start of a better one. The encoder solves it
+with dynamic programming against the shipped Huffman costs, so the text body it
+produces is provably minimal for those tables — and an independent DP in the tests
+checks exactly that.
 
 ### About covering "95% of the internet"
 
@@ -231,19 +258,18 @@ Append `~` to a link to preview where it goes instead of going there.
    included, chosen by category rather than mined — corpus frequency measures what
    Wikipedia cites, not what people shorten.
 5. **The rest is encoded three ways and the shortest is kept:**
-   - **text6** packs each byte as a 6-bit symbol written straight into the Base64url
-     alphabet. Base64 is also 6 bits per character, so a lowercase URL comes out the
-     same length it went in. A 64-entry substring dictionary (`.com`, `article`,
-     `/index`, `wiki`…) replaces common runs with 12 bits each, which removes about
-     12% of the body. Capitals cost a shift symbol; anything else escapes to a literal
-     byte.
-   - **raw** is plain 8-bit bytes, which wins on uppercase-dense IDs.
+   - **text** is canonical-Huffman-coded: every byte costs what its measured
+     frequency in real URLs earns it — `/` and `e` under 5 bits, capitals their own
+     longer codes, unknown bytes an escape — and a 128-entry substring dictionary
+     (`.com`, `article`, `/index`, `wiki`…) rides in the same code as one more
+     symbol. The tables live in `src/textcode.js`, mined from the corpus by
+     `tools/mine-text.mjs`; on held-out URLs the mode averages **0.78 payload
+     characters per body character**, against 1.0 for the old flat 6-bit code and
+     1.33 for bytes-then-Base64.
+   - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-   Encoding naively as bytes-then-Base64 costs 1.33 characters per character. text6
-   costs 1.0 or less.
-
-On the corpus: text6 wins 96.3%, templates 2.0%, deflate 1.5%, raw 0.2%.
+On the corpus: text wins 95.7%, templates 3.9%, deflate 0.4%, raw 0.1%.
 
 ## Tamper resistance
 
@@ -283,17 +309,18 @@ Substack, TikTok, Pinterest, Booking and others — along with the rest of their
 site-specific tracking. `?ref=Matt.+6:1` on a Bible site survives; `?ref=sr_1_3` on
 Amazon does not.
 
-### Wire format v6
+### Wire format v7
 
 ```
 6 bits   header   bits 0-1  scheme: 0 = https://, 1 = http://, 2 = other,
                                     3 = template
                   bit  2    "www." was stripped
                   bit  3    host came from the dictionary
-                  bits 4-5  body mode: 0 = text6, 1 = raw, 2 = deflate
+                  bits 4-5  body mode: 0 = text, 1 = raw, 2 = deflate
 8 bits   host     dictionary index — only when bit 3 is set
-body     text6    6-bit symbols: 0-58 literal, 59 TOKEN (+6-bit index),
-                  61 SHIFT, 62 ESC (+8-bit byte), 63 END
+body     text     canonical-Huffman symbols (table in src/textcode.js):
+                  literal bytes, TOKEN + 7-bit index into 128 mined
+                  substrings, ESC + raw byte, END
          raw      UTF-8 bytes, 8 bits each
          deflate  DEFLATE-raw bytes, 8 bits each
 
@@ -331,13 +358,13 @@ so reordering one repoints every link that used it.
 ```
 src/clent.js      codec core and public API — one import serves everything
 src/bits.js       bit stream + ClentError
-src/text6.js      6-bit text encoding, token DP, strict decoder
+src/text.js       Huffman text mode, token DP, strict decoder
+src/textcode.js   its mined code + tokens   (data, append-only)
 src/deflate.js    bounded DEFLATE (16 KB inflate cap)
 src/tracking.js   tracking-parameter policy
 src/risk.js       phishing-shape assessment
 src/schemes.js    scheme table          (data, append-only)
 src/hosts.js      host dictionary       (data, append-only)
-src/tokens.js     text6 substrings      (data, append-only)
 src/templates.js  known URL shapes      (data, append-only)
 src/sign.js       integrity checks and signatures
 src/*.d.ts        types, one per module, pinned by test/exports.test.js
@@ -345,7 +372,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             112 tests on node:test
+test/             113 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the v6 scheme table, reserved indices, escape hatch

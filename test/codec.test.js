@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   shorten, expand, analyze, parse, HOSTS,
-  MODE_TEXT6, MODE_RAW, MODE_DEFLATE, ClentError,
+  MODE_TEXT, MODE_RAW, MODE_DEFLATE, ClentError,
 } from "../src/clent.js";
 import { roundTrip } from "./helpers.js";
 
@@ -100,25 +100,17 @@ test("a bare dictionary host costs almost nothing", async () => {
 });
 
 test("the shortest body mode wins", async () => {
-  // Lowercase text: text6 packs 1 char per char, beating raw's 1.33.
+  // Ordinary lowercase text is squarely the text mode's home ground.
   const lower = await analyze("https://example.com/a/lowercase/path/of/words", { stripTracking: false });
-  assert.equal(lower.mode, MODE_TEXT6);
-  assert.ok(lower.candidates.text6 < lower.candidates.raw);
+  assert.equal(lower.mode, MODE_TEXT);
+  assert.ok(lower.candidates.text < lower.candidates.raw);
 
   // A long repetitive URL is where DEFLATE finally pays for its overhead.
   const long = await analyze("https://example.com/" + "abcdefgh/".repeat(60), { stripTracking: false });
   assert.equal(long.mode, MODE_DEFLATE);
 
-  // Uppercase-dense IDs cost text6 a 6-bit SHIFT per character (12 bits vs
-  // raw's 8), which is the one place plain bytes win.
-  const token = await analyze(
-    "https://drive.google.com/file/d/1A2B3C4D5E6F7G8H9I0JKLMNOPQRSTUV/view",
-    { stripTracking: false });
-  assert.equal(token.mode, MODE_RAW);
-  assert.ok(token.candidates.raw < token.candidates.text6);
-
   // Whichever mode is chosen, it must be the shortest one available.
-  for (const a of [lower, long, token]) {
+  for (const a of [lower, long]) {
     const lengths = Object.values(a.candidates).filter((n) => n !== null);
     assert.equal(a.payload.length, Math.min(...lengths));
   }
@@ -152,7 +144,7 @@ test("forcing each mode still decodes correctly", async () => {
   // Guards the modes that would otherwise only be exercised when they win.
   const { build } = await import("../src/clent.js");
   const body = new TextEncoder().encode("example.com/forced/path");
-  for (const mode of [MODE_TEXT6, MODE_RAW]) {
+  for (const mode of [MODE_TEXT, MODE_RAW]) {
     const payload = build(0, mode, null, body);
     assert.equal((await expand(payload)).href, "https://example.com/forced/path");
   }
@@ -172,63 +164,56 @@ test("a URL instance is validated like a string", async () => {
 });
 
 test("the token dictionary shortens what it should", async () => {
+  // Compared at the text-candidate level with equal-length bodies: one made
+  // of dictionary tokens, one of deliberately token-free letters. The exact
+  // saving depends on the mined code, so the assertion is directional plus a
+  // sanity margin, not arithmetic.
   const { TOKENS } = await import("../src/clent.js");
-
-  // Compared at the text6 candidate level, not the winning payload: a control
-  // string repetitive enough to have no tokens is also repetitive enough for
-  // deflate to win, which would measure the wrong thing entirely.
-  const token = TOKENS.find((t) => t.length >= 6 && /^[a-z]+$/.test(t));
-  const repeats = 8;
-  const body = token.repeat(repeats);
-  // Same length, and built from letters no token contains, so the only
-  // difference measured is the tokenisation itself.
-  const control = "qzxvbj".repeat(Math.ceil(body.length / 6)).slice(0, body.length);
-
-  const tokenised = await analyze(`https://ex.example/${body}`, { stripTracking: false });
-  const plain = await analyze(`https://ex.example/${control}`, { stripTracking: false });
-
-  assert.ok(tokenised.candidates.text6 < plain.candidates.text6,
-    `tokenised text6 (${tokenised.candidates.text6}) should beat ` +
-    `untokenised (${plain.candidates.text6}) at the same body length`);
-
-  // Each hit replaces token.length symbols of 6 bits with 12 bits.
-  const savedChars = ((token.length * 6 - 12) * repeats) / 6;
-  assert.ok(plain.candidates.text6 - tokenised.candidates.text6 >= savedChars - 1,
-    `expected about ${savedChars} characters saved, got ` +
-    `${plain.candidates.text6 - tokenised.candidates.text6}`);
-});
-
-test("token selection is optimal, not greedy", async () => {
-  // Greedy longest-match can take a token that steps over the start of a
-  // better one. The encoder solves this by dynamic programming, so the only
-  // way to check it is that no alternative split is ever smaller.
-  const { TOKENS, T6, build, MODE_TEXT6 } = await import("../src/clent.js");
+  const { textBits } = await import("../src/text.js");
   const encoder = new TextEncoder();
 
-  for (const body of [
-    "article" + "news" + "media",
-    "the" + "article" + "the",
-    "searchable-articles/index.html",
-    "wikipedia.org/wiki/thing",
-    "storage.example/portal/technology",
-  ]) {
-    const actual = build(0, MODE_TEXT6, null, encoder.encode(body)).length;
+  const token = TOKENS.find((t) => t.length >= 6 && /^[a-z/.]+$/.test(t));
+  assert.ok(token, "expected at least one long lowercase token");
+  const body = token.repeat(8);
+  const control = "qzxvbj".repeat(Math.ceil(body.length / 6)).slice(0, body.length);
 
-    // Exhaustive shortest-path over the same choices, computed independently.
+  const tokenised = textBits(encoder.encode(body));
+  const plain = textBits(encoder.encode(control));
+  assert.ok(tokenised < plain * 0.7,
+    `tokenised body (${tokenised} bits) should be far below token-free (${plain} bits)`);
+});
+
+test("token selection is optimal against the shipped cost model", async () => {
+  // An independent shortest-path over the same published tables: for a set of
+  // bodies, no split into tokens and literals may beat what emitText chose.
+  const { textBits } = await import("../src/text.js");
+  const { CODE_LENGTHS, SYM_TOKEN, SYM_END, SYM_ESC, TOKEN_INDEX_BITS, TOKENS } =
+    await import("../src/textcode.js");
+  const encoder = new TextEncoder();
+
+  const literalCost = (byte) => CODE_LENGTHS[byte] || CODE_LENGTHS[SYM_ESC] + 8;
+  const tokenCost = CODE_LENGTHS[SYM_TOKEN] + TOKEN_INDEX_BITS;
+
+  for (const body of [
+    "article-news-media/index.html",
+    "the-article-of-the-day",
+    "en.m.wikipedia.org/wiki/thing",
+    "storage.example/portal/technology?id=1",
+    "MiXeD_Case/With%20Escapes",
+  ]) {
     const bytes = encoder.encode(body);
-    const cost = new Array(bytes.length + 1).fill(Infinity);
-    cost[bytes.length] = 6; // END
+    const best = new Array(bytes.length + 1).fill(Infinity);
+    best[bytes.length] = CODE_LENGTHS[SYM_END];
     for (let i = bytes.length - 1; i >= 0; i--) {
-      const c = bytes[i];
-      const direct = T6.includes(String.fromCharCode(c));
-      const upper = c >= 65 && c <= 90 && T6.includes(String.fromCharCode(c + 32));
-      cost[i] = (direct ? 6 : upper ? 12 : 14) + cost[i + 1];
-      for (const t of TOKENS) {
-        if (body.startsWith(t, i)) cost[i] = Math.min(cost[i], 12 + cost[i + t.length]);
+      best[i] = literalCost(bytes[i]) + best[i + 1];
+      for (const token of TOKENS) {
+        if (body.startsWith(token, i)) {
+          best[i] = Math.min(best[i], tokenCost + best[i + token.length]);
+        }
       }
     }
-    const ideal = Math.ceil((6 + cost[0]) / 6); // header + body, in characters
-    assert.equal(actual, ideal, `${body}: encoder used ${actual} chars, ideal is ${ideal}`);
+    assert.equal(textBits(bytes), best[0],
+      `${body}: emitText planned ${textBits(bytes)} bits, independent DP says ${best[0]}`);
   }
 });
 
