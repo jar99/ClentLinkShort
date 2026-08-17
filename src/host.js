@@ -39,13 +39,16 @@ function hostLiteralCost(byte) {
   return HLEN[byte] || HOST_ESC_COST;
 }
 
-/** Token index -> indices, keyed by first character, for the planner. */
-const HOST_TOKEN_BY_FIRST = new Map();
+/**
+ * Token indices keyed by first character — a flat 256-slot array for the
+ * same reason as text.js's TOKEN_BY_FIRST: this is planHost's inner loop.
+ * @type {Array<number[]|null>}
+ */
+const HOST_TOKEN_BY_FIRST = new Array(256).fill(null);
 for (let i = 0; i < HOST_TOKENS.length; i++) {
   if (!HLEN[HOST_TOKEN_BASE + i]) continue;
   const first = HOST_TOKENS[i].charCodeAt(0);
-  if (!HOST_TOKEN_BY_FIRST.has(first)) HOST_TOKEN_BY_FIRST.set(first, []);
-  HOST_TOKEN_BY_FIRST.get(first).push(i);
+  (HOST_TOKEN_BY_FIRST[first] ??= []).push(i);
 }
 
 /** Suffix indices keyed by final character, for the planner's terminals. */
@@ -75,24 +78,40 @@ function planHost(host) {
   cost[n] = HLEN[HOST_END];
   choice[n] = -2 - SUFFIXES.length; // sentinel meaning plain END
 
+  // The suffix-terminal candidates depend only on the host's LAST character,
+  // so the list — and which of its entries actually end this host — is the
+  // same at every position; resolve both once, not once per position.
+  /** @type {number[]} */
+  const endings = [];
+  if (n > 0) {
+    for (const index of SUFFIX_BY_LAST.get(host.charCodeAt(n - 1)) ?? []) {
+      if (host.endsWith(SUFFIXES[index])) endings.push(index);
+    }
+  }
+
   for (let i = n - 1; i >= 0; i--) {
+    const byte = host.charCodeAt(i);
     // Cheapest way forward: literal or token, then the rest.
-    let best = hostLiteralCost(host.charCodeAt(i)) + cost[i + 1];
+    let best = (HLEN[byte] || HOST_ESC_COST) + cost[i + 1];
     let pick = -1;
-    for (const index of HOST_TOKEN_BY_FIRST.get(host.charCodeAt(i)) ?? []) {
-      const token = HOST_TOKENS[index];
-      if (host.startsWith(token, i)) {
-        const candidate = HLEN[HOST_TOKEN_BASE + index] + cost[i + token.length];
-        if (candidate < best) {
-          best = candidate;
-          pick = index;
+    const tokens = byte < 256 ? HOST_TOKEN_BY_FIRST[byte] : null;
+    if (tokens !== null) {
+      for (let t = 0; t < tokens.length; t++) {
+        const index = tokens[t];
+        const token = HOST_TOKENS[index];
+        if (host.startsWith(token, i)) {
+          const candidate = HLEN[HOST_TOKEN_BASE + index] + cost[i + token.length];
+          if (candidate < best) {
+            best = candidate;
+            pick = index;
+          }
         }
       }
     }
     // Or end right here: a suffix terminal that IS the remaining text.
-    for (const index of SUFFIX_BY_LAST.get(host.charCodeAt(n - 1)) ?? []) {
-      const suffix = SUFFIXES[index];
-      if (n - i === suffix.length && host.endsWith(suffix)) {
+    for (let e = 0; e < endings.length; e++) {
+      const index = endings[e];
+      if (n - i === SUFFIXES[index].length) {
         const candidate = HLEN[SUFFIX_BASE + index];
         if (candidate < best) {
           best = candidate;

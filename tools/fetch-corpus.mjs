@@ -62,9 +62,14 @@ async function request(url, { json = true, retries = 4 } = {}) {
   }
 }
 
+// Sources run concurrently, so carriage-return progress lines would fight
+// over the same terminal row; a quiet milestone line per 100k keeps the log
+// readable from several writers at once.
 const progress = (label, n, target) => {
-  const pct = target ? ` ${Math.min(100, Math.round((100 * n) / target))}%` : "";
-  process.stdout.write(`\r  ${label.padEnd(14)} ${String(n).padStart(7)}${pct}   `);
+  if (n && n % 100000 === 0) {
+    const pct = target ? ` (${Math.min(100, Math.round((100 * n) / target))}%)` : "";
+    console.log(`  …${label} ${n.toLocaleString()}${pct}`);
+  }
 };
 
 const context = { get: request, progress, sleep };
@@ -160,12 +165,12 @@ async function main() {
   // tidy: lemmy and the feeds are shallow and will fall short of their target,
   // which is fine — they are here for the shapes they contribute, not volume.
   const plan = {
-    wikipedia: 0.30,
-    tranco: 0.30,
-    hackernews: 0.18,
-    lemmy: 0.13,
-    commons: 0.06,
-    feeds: 0.03,
+    wikipedia: 0.34,
+    tranco: 0.32,
+    hackernews: 0.17,
+    commons: 0.16,
+    lemmy: 0.005,
+    feeds: 0.005,
   };
   const generators = {
     wikipedia: (n) => wikipedia(n, context),
@@ -187,7 +192,10 @@ async function main() {
   const seen = new Set();
   const counts = {};
 
-  for (const [name, share] of Object.entries(wanted)) {
+  // All sources at once: the run takes as long as its slowest source, not
+  // the sum of them. The shared dedup set is safe — generators only hand
+  // over between awaits, and Node runs this on one thread.
+  await Promise.all(Object.entries(wanted).map(async ([name, share]) => {
     const target = Math.round(TOTAL * share);
     counts[name] = 0;
     const started = Date.now();
@@ -199,13 +207,11 @@ async function main() {
         if (++counts[name] >= target) break;
       }
     } catch (error) {
-      process.stdout.write("\n");
       console.warn(`  ! ${name} stopped early: ${error.message}`);
     }
-    process.stdout.write("\n");
     console.log(`  ${name.padEnd(14)} ${counts[name].toLocaleString()} URLs in ` +
       `${((Date.now() - started) / 1000).toFixed(0)}s`);
-  }
+  }));
 
   // Shuffle deterministically so reading the first N lines still gives a
   // representative mix rather than one source's block.

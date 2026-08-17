@@ -6,11 +6,11 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.6181861986928493,
+  "payloadRatio": 0.6181863340305118,
   "payloadShorterPct": 99.92949752231931,
   "medianRatio": 0.5454545454545454,
   "p90Ratio": 0.7102803738317757,
-  "linkSavingsMean": -0.01248370560872076,
+  "linkSavingsMean": -0.012483713969796438,
   "linkSavingsMedian": 0,
   "linkShorterPct": 49.056524662667385,
   "bareShorterPct": 4.991417732839071,
@@ -18,7 +18,7 @@
   "bareCount": 277316,
   "deepCount": 366633,
   "deepSavingsMedian": 0.11475409836065575,
-  "deepSavingsMean": 0.11331169325005319,
+  "deepSavingsMean": 0.11331167856477807,
   "breakEvenLength": 25,
   "prefixes": [
     {
@@ -53,5 +53,5 @@
   "templatePct": 6.450666124180642,
   "dictHitPct": 10.524280649554546,
   "trackingPct": 3.645785613456966,
-  "trackingSavingPct": 25.685951537223552
+  "trackingSavingPct": 25.68591919102878
 }

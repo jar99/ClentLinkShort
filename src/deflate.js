@@ -19,6 +19,28 @@ export const canCompress = typeof CompressionStream !== "undefined";
 export const MAX_INFLATED = 16384;
 
 /**
+ * Node's zlib, where this is running under Node: synchronous, an order of
+ * magnitude cheaper than spinning a CompressionStream per call — the
+ * stream's async machinery dominated the whole encoder's profile — and it
+ * accepts a compression level where the web API does not. The probe settles
+ * once at load; in a browser the import rejects and the stream path below
+ * remains the implementation.
+ * @type {{
+ *   deflateRawSync: (bytes: Uint8Array, options?: {level?: number}) => Uint8Array,
+ *   inflateRawSync: (bytes: Uint8Array, options?: {maxOutputLength?: number}) => Uint8Array,
+ * }|null}
+ */
+let nodeZlib = null;
+// The specifier rides a variable so the browser-targeted type check doesn't
+// try to resolve a Node module it has no types for — and the import is only
+// attempted where process.versions.node says it can succeed, because in a
+// browser the attempt itself would surface as a CSP violation in the console.
+const NODE_ZLIB = "node:zlib";
+const zlibProbe = globalThis.process?.versions?.node
+  ? import(NODE_ZLIB).then((mod) => { nodeZlib = mod; }, () => {})
+  : Promise.resolve();
+
+/**
  * @param {typeof CompressionStream | typeof DecompressionStream} Ctor
  * @param {Uint8Array<ArrayBuffer>} bytes
  * @param {number} limit abort once the output passes this many bytes
@@ -65,6 +87,14 @@ async function runStream(Ctor, bytes, limit) {
  * @returns {Promise<Uint8Array|null>} null where the runtime can't compress
  */
 export async function deflate(bytes) {
+  await zlibProbe;
+  if (nodeZlib) {
+    try {
+      return new Uint8Array(nodeZlib.deflateRawSync(bytes, { level: 9 }));
+    } catch {
+      return null;
+    }
+  }
   if (!canCompress) return null;
   try {
     return await runStream(CompressionStream, bytes, Infinity);
@@ -79,6 +109,19 @@ export async function deflate(bytes) {
  * @throws {ClentError} on corrupt input or output past MAX_INFLATED
  */
 export async function inflate(bytes) {
+  await zlibProbe;
+  if (nodeZlib) {
+    try {
+      // maxOutputLength is the same bound the stream path enforces: a
+      // hostile stream is stopped before it has been materialised.
+      return new Uint8Array(
+        nodeZlib.inflateRawSync(bytes, { maxOutputLength: MAX_INFLATED }));
+    } catch (error) {
+      if (/** @type {{code?: string}} */ (error)?.code === "ERR_BUFFER_TOO_LARGE")
+        throw new ClentError("This link decompresses to something far too large.");
+      throw new ClentError("This link is damaged — decompression failed.");
+    }
+  }
   if (typeof DecompressionStream === "undefined")
     throw new ClentError("This browser can't decompress the link (needs DecompressionStream).");
   try {

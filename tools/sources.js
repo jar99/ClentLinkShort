@@ -42,38 +42,75 @@ const SE_SITES = [
 /**
  * External links cited in articles, across many language editions. Deep,
  * messy, and full of URLs typed by hand a decade ago.
+ *
+ * A FEW editions page concurrently — one polite sequential stream each. A
+ * large run would take the sum of thirty round-trip chains run one after
+ * another, but thirty at once trips the API's rate limiting and every
+ * stream dies early; six is measured to sail through. A tiny channel hands
+ * their results to the single consumer.
  */
 export async function* wikipedia(target, { get, progress }) {
+  const CONCURRENT = 6;
   const perWiki = Math.ceil(target / WIKIS.length);
-  let total = 0;
+  /** @type {string[]} */
+  const queue = [];
+  /** @type {(() => void)|null} */
+  let wake = null;
+  let running = CONCURRENT;
+  let stop = false;
+  let nextWiki = 0;
+  const notify = () => { if (wake) { wake(); wake = null; } };
 
-  for (const lang of WIKIS) {
-    let cont = "";
-    let fromWiki = 0;
-    while (fromWiki < perWiki) {
-      const url = `https://${lang}.wikipedia.org/w/api.php?action=query` +
-        "&list=exturlusage&eulimit=500&format=json&formatversion=2" +
-        (cont ? `&eucontinue=${encodeURIComponent(cont)}` : "");
-      let body;
-      try {
-        body = await get(url);
-      } catch {
-        break; // a single wiki being unavailable should not stop the run
-      }
-      const rows = body?.query?.exturlusage ?? [];
-      if (!rows.length) break;
-      for (const row of rows) {
-        if (row.url) {
-          yield row.url;
-          fromWiki++;
-          total++;
+  for (let runner = 0; runner < CONCURRENT; runner++) {
+    (async () => {
+      while (!stop) {
+        const at = nextWiki++;
+        if (at >= WIKIS.length) break;
+        const lang = WIKIS[at];
+        let cont = "";
+        let fromWiki = 0;
+        while (fromWiki < perWiki && !stop) {
+          const url = `https://${lang}.wikipedia.org/w/api.php?action=query` +
+            "&list=exturlusage&eulimit=500&format=json&formatversion=2" +
+            (cont ? `&eucontinue=${encodeURIComponent(cont)}` : "");
+          let body;
+          try {
+            body = await get(url);
+          } catch {
+            break; // a single wiki being unavailable should not stop the run
+          }
+          const rows = body?.query?.exturlusage ?? [];
+          if (!rows.length) break;
+          for (const row of rows) {
+            if (row.url) {
+              queue.push(row.url);
+              fromWiki++;
+            }
+          }
+          notify();
+          cont = body?.continue?.eucontinue;
+          if (!cont) break;
         }
       }
-      progress("wikipedia", total, target);
-      cont = body?.continue?.eucontinue;
-      if (!cont) break;
+      running--;
+      notify();
+    })();
+  }
+
+  let total = 0;
+  while (running > 0 || queue.length) {
+    if (!queue.length) {
+      await new Promise((resolve) => { wake = resolve; });
+      continue;
     }
-    if (total >= target) return;
+    while (queue.length) {
+      yield queue.shift();
+      if (++total >= target) {
+        stop = true; // wind the streams down instead of fetching past the quota
+        return;
+      }
+    }
+    progress("wikipedia", total, target);
   }
 }
 
@@ -345,7 +382,7 @@ export async function* lemmy(target, { get, progress }) {
  * host — the shape an image share actually has, and one nothing else here
  * produces.
  */
-export async function* commons(target, { get, progress, sleep, deadline = 420000 }) {
+export async function* commons(target, { get, progress, sleep, deadline = 1500000 }) {
   const until = Date.now() + deadline;
   let cont = "";
   let seen = 0;

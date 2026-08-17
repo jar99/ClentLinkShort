@@ -14,11 +14,32 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
+import { availableParallelism } from "node:os";
 
 import {
   readCorpus, hasCorpus, emptyStats, check, percentile, mean, breakEven, DEFAULT_ORIGIN,
 } from "./corpus.js";
 import { ROOT } from "./bundle.js";
+
+/* -------------------------------------------------------------------------- *
+ * Worker: check a stripe of the corpus, hand the tallies back.
+ *
+ * Each worker decompresses and reads the corpus itself and takes every Kth
+ * line — the file is small and brotli is fast, so re-reading beats cloning
+ * millions of strings across a thread boundary.
+ * -------------------------------------------------------------------------- */
+if (!isMainThread) {
+  const { stripe, stripes, limit, origin } = workerData;
+  const stats = emptyStats();
+  let at = 0;
+  for await (const url of readCorpus(limit)) {
+    if (at++ % stripes !== stripe) continue;
+    await check(url, stats, { maxFailures: 25, origin });
+  }
+  parentPort.postMessage(stats);
+  process.exit(0);
+}
 
 const args = process.argv.slice(2);
 const value = (name, fallback) => {
@@ -28,6 +49,7 @@ const value = (name, fallback) => {
 const LIMIT = Number(value("limit", Infinity));
 const ORIGIN = value("origin", DEFAULT_ORIGIN);
 const AS_JSON = args.includes("--json");
+const SERIAL = args.includes("--serial");
 
 if (!hasCorpus()) {
   console.error("No corpus found. Run: npm run corpus:fetch");
@@ -37,15 +59,48 @@ if (!hasCorpus()) {
 const manifest = await readFile(path.join(ROOT, "corpus", "manifest.json"), "utf8")
   .then(JSON.parse).catch(() => ({}));
 
+/** Append that survives million-element arrays; spread would blow the stack. */
+function append(into, from) {
+  for (let i = 0; i < from.length; i++) into.push(from[i]);
+}
+
+/** Fold one worker's tallies into the main accumulator, field by kind. */
+function merge(into, from) {
+  for (const key of ["checked", "skipped", "inputBytes", "payloadBytes",
+    "payloadShorter", "linkShorter", "dictHits", "withTracking",
+    "trackingSavedBytes", "trackingBaseBytes"]) into[key] += from[key];
+  for (const key of ["failures", "suboptimal", "ratios", "linkSavings", "pairs"]) {
+    append(into[key], from[key]);
+  }
+  for (const mode of Object.keys(into.modes)) into.modes[mode] += from.modes[mode];
+  for (const side of ["bare", "deep"]) {
+    into[side].count += from[side].count;
+    into[side].linkShorter += from[side].linkShorter;
+    append(into[side].savings, from[side].savings);
+  }
+}
+
 const stats = emptyStats();
 const started = Date.now();
-let n = 0;
 
-for await (const url of readCorpus(LIMIT)) {
-  await check(url, stats, { maxFailures: 25, origin: ORIGIN });
-  if (!AS_JSON && ++n % 25000 === 0) {
-    process.stdout.write(`\r  ${n.toLocaleString()} checked…`);
+const stripes = SERIAL ? 1 : Math.max(1, availableParallelism());
+if (stripes === 1) {
+  let n = 0;
+  for await (const url of readCorpus(LIMIT)) {
+    await check(url, stats, { maxFailures: 25, origin: ORIGIN });
+    if (!AS_JSON && ++n % 25000 === 0) {
+      process.stdout.write(`\r  ${n.toLocaleString()} checked…`);
+    }
   }
+} else {
+  await Promise.all(Array.from({ length: stripes }, (_, stripe) =>
+    new Promise((resolve, reject) => {
+      const worker = new Worker(new URL(import.meta.url), {
+        workerData: { stripe, stripes, limit: LIMIT, origin: ORIGIN },
+      });
+      worker.once("message", (part) => { merge(stats, part); resolve(null); });
+      worker.once("error", reject);
+    })));
 }
 
 const seconds = (Date.now() - started) / 1000;

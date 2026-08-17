@@ -37,13 +37,18 @@ export const END_BITS = LEN[SYM_END];
 
 /** @type {Uint8Array[]} tokens as bytes, indexed as on the wire */
 const TOKEN_BYTES = TOKENS.map((token) => textEncoder.encode(token));
-/** First byte -> token indices, so matching only considers plausible tokens. */
-const TOKEN_BY_FIRST = new Map();
+/**
+ * First byte -> token indices, so matching only considers plausible tokens.
+ * A flat 256-slot array, not a Map: planText hits this once per body byte,
+ * and an indexed load with a null check is measurably cheaper than a Map
+ * probe returning a fresh empty array on every miss.
+ * @type {Array<number[]|null>}
+ */
+const TOKEN_BY_FIRST = new Array(256).fill(null);
 for (let i = 0; i < TOKEN_BYTES.length; i++) {
   if (!LEN[TOKEN_BASE + i]) continue; // uncoded token: never emittable
   const first = TOKEN_BYTES[i][0];
-  if (!TOKEN_BY_FIRST.has(first)) TOKEN_BY_FIRST.set(first, []);
-  TOKEN_BY_FIRST.get(first).push(i);
+  (TOKEN_BY_FIRST[first] ??= []).push(i);
 }
 
 const ESC_COST = LEN[SYM_ESC] + 8;
@@ -73,24 +78,29 @@ export function planText(bytes) {
   const choice = new Int32Array(n + 1).fill(-1);
 
   for (let i = n - 1; i >= 0; i--) {
-    let best = literalCost(bytes[i]) + cost[i + 1];
+    const byte = bytes[i];
+    let best = (LEN[byte] || ESC_COST) + cost[i + 1];
     let pick = -1;
 
-    for (const index of TOKEN_BY_FIRST.get(bytes[i]) ?? []) {
-      const token = TOKEN_BYTES[index];
-      if (i + token.length > n) continue;
-      let matched = true;
-      for (let k = 1; k < token.length; k++) {
-        if (bytes[i + k] !== token[k]) {
-          matched = false;
-          break;
+    const tokens = TOKEN_BY_FIRST[byte];
+    if (tokens !== null) {
+      for (let t = 0; t < tokens.length; t++) {
+        const index = tokens[t];
+        const token = TOKEN_BYTES[index];
+        if (i + token.length > n) continue;
+        let matched = true;
+        for (let k = 1; k < token.length; k++) {
+          if (bytes[i + k] !== token[k]) {
+            matched = false;
+            break;
+          }
         }
-      }
-      if (!matched) continue;
-      const candidate = LEN[TOKEN_BASE + index] + cost[i + token.length];
-      if (candidate < best) {
-        best = candidate;
-        pick = index;
+        if (!matched) continue;
+        const candidate = LEN[TOKEN_BASE + index] + cost[i + token.length];
+        if (candidate < best) {
+          best = candidate;
+          pick = index;
+        }
       }
     }
 
