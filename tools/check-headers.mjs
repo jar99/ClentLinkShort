@@ -20,6 +20,11 @@ const target = process.argv[2] ?? configuredOrigin.replace(/#$/, "");
  * Each check gets a predicate rather than an expected string: several of these
  * are satisfied by more than one value, and a check that only accepts the
  * exact wording in the README would report a working header as missing.
+ *
+ * A predicate returns `true` to pass, a string to fail with a reason, or
+ * `{ note }` to pass with a caveat — a header can be present, valid and still
+ * weaker than what this page wants, which is neither a pass worth nothing nor
+ * a failure worth alarming about.
  */
 const WANTED = [
   {
@@ -51,10 +56,30 @@ const WANTED = [
     // Either header satisfies this; the page's in-document guard is a
     // fallback for hosts that can send neither, not a replacement.
     read: (h) => h.get("content-security-policy") ?? h.get("x-frame-options") ?? "",
-    ok: (v) => /frame-ancestors|DENY|SAMEORIGIN/i.test(v),
+    ok: (v) => {
+      if (/frame-ancestors\s+'none'|DENY/i.test(v)) return true;
+      if (/SAMEORIGIN|frame-ancestors\s+'self'/i.test(v)) {
+        return { note: "this still lets the origin frame itself. A redirector " +
+          "never needs to, so `DENY` (or `frame-ancestors 'none'`) costs " +
+          "nothing and leaves no same-origin path to a click overlay" };
+      }
+      return "does not restrict framing";
+    },
   },
-  { name: "referrer-policy", why: "the meta tag covers this page's own requests only",
-    ok: (v) => /no-referrer|strict-origin/i.test(v) },
+  {
+    name: "referrer-policy",
+    why: "the meta tag covers this page's own requests only",
+    ok: (v) => {
+      if (/no-referrer(?!-)/i.test(v)) return true;
+      if (/strict-origin|same-origin|origin/i.test(v)) {
+        return { note: "the page's own meta tag says `no-referrer`, and a " +
+          "document-level meta wins over the header — so this is weaker than " +
+          "what actually applies, and would become the real policy if the " +
+          "meta were ever dropped" };
+      }
+      return "permits a referrer this page does not want to send";
+    },
+  },
   { name: "permissions-policy", why: "declines camera, microphone and geolocation",
     ok: (v) => v.length > 0 },
   { name: "cross-origin-opener-policy", why: "isolates the browsing context",
@@ -71,13 +96,18 @@ let missing = 0;
 for (const check of WANTED) {
   const value = (check.read ?? ((h) => h.get(check.name) ?? ""))(response.headers);
   const verdict = value ? check.ok(value) : false;
-  if (verdict === true) {
+  if (verdict === true || verdict?.note) {
     console.log(`  ok    ${check.name}`);
     console.log(`        ${value}`);
+    if (verdict?.note) console.log(`        note: ${verdict.note}`);
   } else {
     missing++;
     console.log(`  MISS  ${check.name} — ${check.why}`);
-    if (typeof verdict === "string") console.log(`        ${value}\n        ${verdict}`);
+    // A header that is present but unacceptable is not the same as an absent
+    // one, and reporting both as a bare MISS sends you looking for a rule you
+    // already wrote.
+    if (value) console.log(`        found: ${value}`);
+    if (typeof verdict === "string") console.log(`        ${verdict}`);
   }
 }
 
