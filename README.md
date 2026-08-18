@@ -1,8 +1,10 @@
 # Clent
 
 A privacy-focused, open-source link shortener, live at **[nul.im](https://nul.im)**.
-No database, no backend, no accounts, no logs — the whole URL is compressed into the
-link itself, so there is nothing to store and nothing that can stop working later.
+No database, no backend, no accounts — the whole URL is compressed into the link
+itself, so there is nothing to store and nothing that can stop working later. Any host
+logs that a page was served, the way every web server does; no log anywhere can contain
+a destination, because destinations never travel in a request.
 MIT-licensed; fork it and it runs on any static host.
 
 ```
@@ -454,6 +456,46 @@ future wire formats their own envelope; and `test/compat.test.js` pins golden
 payloads plus table hashes. Declaring 1.0 means freezing that file — after that, a
 link made on any day decodes forever.
 
+## What this does not protect against
+
+The privacy claim is narrow and worth stating exactly: **nothing in this system ever
+learns a destination**, because destinations ride in the fragment and fragments are not
+part of an HTTP request. That is airtight for the parts this project controls. It says
+nothing about what happens to a link once it is out in the world, and a few of those
+paths are worth knowing.
+
+- **URL-rewriting scanners.** Microsoft Defender Safe Links, Proofpoint, Mimecast and
+  similar rewrite links in email and chat into `https://scanner.example/?url=<the whole
+  original URL>` — fragment included. Send a Clent link through corporate mail and that
+  vendor has the destination in plaintext. This is the most common way the promise
+  breaks in practice, and nothing client-side can prevent it.
+- **Browser and OS sync.** The fragment is part of the URL, so the destination lands in
+  browser history — and with Chrome or Firefox Sync on, that history is uploaded.
+  Copying a link puts the destination on the clipboard, which Windows Cloud Clipboard
+  and Apple Universal Clipboard also sync off-device.
+- **The address bar.** Typing or pasting a Clent link into the omnibox can send it to
+  the default search engine's suggestion endpoint before it is ever loaded.
+- **Whoever serves the page.** A host that terminates TLS can rewrite the page it
+  serves, including its Content-Security-Policy. The hash pinning stops third parties
+  from injecting script; it cannot stop the party doing the serving. Self-host if that
+  matters to you — the whole point of a static build is that you can.
+- **The link's recipient.** Anyone holding the link holds the destination. That is what
+  a link is. There is no revocation, because there is nothing stored to revoke.
+
+**Integrity tags are not a defence against a determined attacker.** The tag travels in
+the link, so someone rewriting a link in transit simply removes it and substitutes a
+destination; the recipient sees an ordinary untagged link, because an absent tag looks
+exactly like a link that never had one. Tags catch clipping and corruption, and a
+signature proves authorship to someone who already expects one — neither turns a link
+into a channel you can trust against tampering.
+
+**One thing that does work in your favour, though it is easy to miss.** There are no
+per-link OpenGraph tags, deliberately. When a Clent link is pasted into Slack, Discord,
+WhatsApp or anywhere else that unfurls links, the preview fetcher requests the page
+*without* the fragment — so it renders a generic Clent card. The unfurler learns that a
+Clent link was shared; it never learns where the link points. Conventional shorteners
+resolve server-side and hand the destination to every preview bot that asks.
+
 ## Project layout
 
 ```
@@ -520,9 +562,10 @@ does not rename identifiers.
 
 It's verified rather than trusted. `test/minify.test.js` minifies the real library,
 loads it, and asserts byte-identical payloads to the source.
-`tools/browser-test.mjs` drives the built page in Chromium — 19 checks covering
+`tools/browser-test.mjs` drives the built page in Chromium — 64 checks covering
 redirects, preview mode, hostile fragments, that the creator UI never flashes during a
-redirect, that nothing is written to storage, and that the built page is one request.
+redirect, that the page refuses to run in a frame, that no cached entry can carry a
+payload, and that decoding a link needs one request.
 
 That caught two real bugs: the minifier turning `const a = 1\nb()` into a syntax error
 by replacing a newline with a space (only a line terminator triggers semicolon
@@ -575,6 +618,19 @@ silently break the page:
    a deploy that changes the tables. Returning visitors keep an offline
    fallback via the service worker, which otherwise prefers the network for
    exactly this reason.
+
+Two things Cloudflare turns on by default are worth knowing about, because both make
+the browser do something the page itself never asked for. Neither can carry a
+destination — fragments are not in requests — but "the page makes no third-party
+requests" is only true of the page:
+
+- **Speed Brain** injects a `speculation-rules` header pointing at `/cdn-cgi/speculation`,
+  which asks the browser to prefetch same-origin links. Harmless here; disable it under
+  Speed → Optimization if you want the page's network behaviour to be exactly what the
+  source says.
+- **Network Error Logging** is advertised via `NEL` and `Report-To` headers pointing at
+  `a.nel.cloudflare.com`, so browsers report failed requests to Cloudflare. Reports
+  carry the request URL, which never includes the fragment.
 
 ### Analytics without tracking
 
