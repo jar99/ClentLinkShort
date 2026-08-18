@@ -15,12 +15,17 @@
  *   node tools/mine-text.mjs               # evaluate only
  *   node tools/mine-text.mjs --write
  *   node tools/mine-text.mjs --tokens 128
+ *   node tools/mine-text.mjs --force    # mine even if nothing changed
+ *
+ * Skips entirely when the corpus, this file and the sampler are all as they
+ * were when the shipped table was written — the run would only reproduce it.
  */
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { fnv1a, sampleCorpus } from "./corpus.js";
+import { mineGuard } from "./mine-stamp.js";
 import { ROOT } from "./bundle.js";
 
 const args = process.argv.slice(2);
@@ -35,6 +40,18 @@ const MIN_LEN = 3, MAX_LEN = 12;
 const MIN_HOSTS = 25;
 /** Cap code length so the canonical decoder stays a small table. */
 const MAX_CODE_LEN = 15;
+
+// Nothing to do if the corpus, this miner and the sampler are all as they
+// were when the shipped table was written.
+const guard = await mineGuard("text", {
+  files: ["tools/mine-text.mjs", "tools/corpus.js"],
+  params: { TOKEN_COUNT, SAMPLE, HOLDOUT, MIN_LEN, MAX_LEN, MIN_HOSTS, MAX_CODE_LEN },
+  force: args.includes("--force"),
+});
+if (guard.unchanged) {
+  console.log(guard.message);
+  process.exit(0);
+}
 
 /**
  * Symbols: 0..255 bytes, END, ESC, then ONE SYMBOL PER TOKEN — a frequent
@@ -326,6 +343,8 @@ export const TOKENS = Object.freeze([
 
 if (WRITE) {
   await writeFile(path.join(ROOT, "src", "textcode.js"), file);
+  // Record what produced this table, so an identical re-run can skip.
+  await guard.save();
   console.error(`wrote src/textcode.js (${tokens.length} tokens, ` +
     `${[...lengths].filter(Boolean).length} coded symbols)`);
 } else {

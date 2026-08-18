@@ -540,9 +540,22 @@ test/             134 tests on node:test
   readme          this file's quoted numbers against corpus/stats.json
 
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
-                  optimality, mine-text, mine-host, mine-header, bundle,
-                  minify, build, serve, browser-test
+                  optimality, mine-text, mine-host, mine-header,
+                  mine-templates, mine-stamp, bundle, minify, build, serve,
+                  browser-test
 ```
+
+Mining reads millions of URLs to emit a few kilobytes of table, so the miners
+refuse to do it twice for the same answer. Each one declares what its output
+actually depends on — its own source, the shared sampler, whichever shipped
+tables it consults, and its parameters — and hashes those together with the
+corpus's own content hash. If that matches the stamp recorded in
+`tools/mine-stamp.json` when the shipped table was written, the run is a no-op:
+the sampler admits each URL by its own hash, so identical inputs give a
+byte-identical table. `--force` mines regardless. The failure mode is
+one-sided on purpose: declaring a dependency that does not matter costs a
+needless re-mine, while missing one would let a stale table outlive a change
+that should have moved it.
 
 ## Build and delivery
 

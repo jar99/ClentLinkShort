@@ -8,7 +8,7 @@
  * the decoder can still parse (and then reject) them — and the length cap
  * keeps the worst legal header readable in one readSymbol walk.
  *
- * Usage: node tools/mine-header.mjs
+ * Usage: node tools/mine-header.mjs [--force]
  * Paste the printed array over HEADER_CODE_LENGTHS in src/clent.js, then
  * regenerate the compat goldens in the same commit (beta stance).
  */
@@ -16,12 +16,32 @@ import { shorten, HEADER_CODE_LENGTHS } from "../src/clent.js";
 import { BitReader } from "../src/bits.js";
 import { buildCode, readSymbol } from "../src/huffman.js";
 import { sampleCorpus } from "./corpus.js";
+import { mineGuard } from "./mine-stamp.js";
 
 const MAX_CODE_LEN = 12;
 const SYMBOLS = 64;
 // A capped whole-corpus sample rather than every line: the raw corpus
 // over-holds a few registry hosts, and their header values with them.
 const SAMPLE = 400000;
+
+// This one runs the whole encoder to see which header each URL ends up with,
+// so every table it consults is an input — hence all of src/, not a subset.
+// Over-declaring costs an unnecessary re-mine; under-declaring would ship a
+// header code fitted to a wire that has since moved.
+const guard = await mineGuard("header", {
+  files: [
+    "tools/mine-header.mjs", "tools/corpus.js",
+    "src/clent.js", "src/bits.js", "src/huffman.js", "src/text.js",
+    "src/textcode.js", "src/host.js", "src/hostcode.js", "src/hosts.js",
+    "src/templates.js", "src/schemes.js", "src/deflate.js", "src/tracking.js",
+  ],
+  params: { SAMPLE, MAX_CODE_LEN, SYMBOLS },
+  force: process.argv.includes("--force"),
+});
+if (guard.unchanged) {
+  console.log(guard.message);
+  process.exit(0);
+}
 
 // Decode each payload's first symbol with the SHIPPED code, so the miner
 // keeps working after its own output lands.
@@ -76,3 +96,5 @@ for (let i = 0; i < SYMBOLS; i += 16) {
   out += "  " + [...lengths.slice(i, i + 16)].join(", ") + ",\n";
 }
 console.log(out.replace(/,\n$/, ",\n"));
+
+await guard.save();

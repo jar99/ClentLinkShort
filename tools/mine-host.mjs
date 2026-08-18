@@ -18,12 +18,17 @@
  *   node tools/mine-host.mjs               # evaluate only
  *   node tools/mine-host.mjs --write
  *   node tools/mine-host.mjs --suffixes 96
+ *   node tools/mine-host.mjs --force    # mine even if nothing changed
+ *
+ * Skips entirely when nothing that affects the table has changed since it was
+ * mined; see tools/mine-stamp.js.
  */
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { fnv1a, sampleCorpus } from "./corpus.js";
+import { mineGuard } from "./mine-stamp.js";
 import { ROOT } from "./bundle.js";
 import { HOST_INDEX } from "../src/hosts.js";
 
@@ -36,6 +41,19 @@ const TOKEN_COUNT = tt === -1 ? 64 : Number(args[tt + 1]);
 
 const SAMPLE = 200000;
 const HOLDOUT = 50000;
+
+// The host code also depends on which hosts ride the dictionary instead, so
+// src/hosts.js is a real input here.
+const guard = await mineGuard("host", {
+  files: ["tools/mine-host.mjs", "tools/corpus.js", "src/hosts.js"],
+  params: { SUFFIX_COUNT, TOKEN_COUNT, SAMPLE, HOLDOUT },
+  force: args.includes("--force"),
+});
+if (guard.unchanged) {
+  console.log(guard.message);
+  process.exit(0);
+}
+
 /** A suffix must span this many distinct names before it or it is a quirk. */
 const MIN_NAMES = 30;
 const MAX_CODE_LEN = 15;
@@ -390,6 +408,7 @@ export const HOST_TOKENS = Object.freeze([
 
 if (WRITE) {
   await writeFile(path.join(ROOT, "src", "hostcode.js"), file);
+  await guard.save();
   console.error(`wrote src/hostcode.js (${suffixes.length} suffixes, ` +
     `${tokens.length} tokens, ${[...lengths].filter(Boolean).length} coded symbols)`);
 } else {

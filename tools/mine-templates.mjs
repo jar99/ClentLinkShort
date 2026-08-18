@@ -19,9 +19,14 @@
  *   node tools/mine-templates.mjs             # top 30
  *   node tools/mine-templates.mjs --top 60
  *   node tools/mine-templates.mjs --host reddit.com
+ *   node tools/mine-templates.mjs --force   # scan even if nothing changed
+ *
+ * Skips entirely when the corpus, this file and the shipped table are all
+ * unchanged, since the proposals would be identical.
  */
 
 import { sampleCorpus } from "./corpus.js";
+import { mineGuard } from "./mine-stamp.js";
 import { TEMPLATES } from "../src/templates.js";
 
 const args = process.argv.slice(2);
@@ -33,6 +38,18 @@ const SCAN = 400000;
 const MIN_HOST_URLS = 60;
 /** A shape must cover this share of its host's URLs to be worth a slot. */
 const MIN_COVERAGE = 0.25;
+
+// Suggestions are relative to what is already covered, so the shipped table
+// is an input: adding a template changes what this reports next time.
+const guard = await mineGuard("templates", {
+  files: ["tools/mine-templates.mjs", "tools/corpus.js", "src/templates.js"],
+  params: { TOP, ONLY, SCAN, MIN_HOST_URLS, MIN_COVERAGE },
+  force: args.includes("--force"),
+});
+if (guard.unchanged) {
+  console.log(guard.message);
+  process.exit(0);
+}
 
 const covered = new Set(TEMPLATES.map((t) => t.pattern));
 
@@ -109,3 +126,7 @@ for (const p of proposals.slice(0, TOP)) {
   console.log(`  // ${p.host}: ${p.count} URLs, ${(100 * p.share).toFixed(0)}% of host`);
   console.log(`  { pattern: ${JSON.stringify(p.shape)}, slots: ${JSON.stringify(p.slots)} },`);
 }
+
+// Nothing was written, but the proposals are a pure function of these inputs,
+// so the same scan need not be paid for twice.
+await guard.save();
