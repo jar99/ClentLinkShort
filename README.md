@@ -304,6 +304,14 @@ the page:
 | `Referrer-Policy` | `no-referrer` |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+
+`max-age` is a year for a reason: the preload list will not accept anything
+shorter, so `preload` on a six-month policy is a token that does nothing.
+
+`npm run headers` asks the deployed origin which of these actually arrived, and
+exits non-zero if any are missing — whether a header was applied is a fact
+about a host, not something this repository can know.
 
 Two CSPs — the header and the page's own meta tag — are enforced *together*, each in
 full, so a header carrying only `frame-ancestors` adds clickjacking protection without
@@ -605,7 +613,7 @@ test/             172 tests on node:test
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
                   optimality, mine-text, mine-host, mine-header,
                   mine-templates, mine-stamp, bundle, minify, build, serve,
-                  browser-test, perf, make-og
+                  browser-test, perf, make-og, check-headers
 ```
 
 Mining reads millions of URLs to emit a few kilobytes of table, so the miners

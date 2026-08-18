@@ -78,6 +78,7 @@
     "test:browser": "node tools/browser-test.mjs dist",
     "perf": "node tools/build.mjs && node tools/perf.mjs dist",
     "og": "node tools/make-og.mjs",
+    "headers": "node tools/check-headers.mjs",
     "coverage": "node tools/coverage.mjs",
     "coverage:sweep": "node tools/coverage.mjs --sweep",
     "types": "tsc --noEmit"
