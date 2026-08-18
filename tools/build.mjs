@@ -55,17 +55,48 @@ async function readCorpusStats() {
  * Outside a git checkout the commit reads "untracked" rather than failing
  * the build.
  */
+/**
+ * Everything the built page is made from. A commit that touches only the
+ * README, the corpus or the miners cannot change a byte of the page, so it
+ * must not change the stamp either.
+ */
+const PAGE_INPUTS = [
+  "src", "corpus/stats.json", "package.json",
+  "tools/build.mjs", "tools/bundle.js", "tools/minify.js",
+];
+
+/**
+ * Identify the build by what it contains, not by when it ran.
+ *
+ * The stamp used to carry `new Date()` and `HEAD`, which meant two builds of
+ * the same commit differed, and every commit — README, corpus, tooling —
+ * produced a "new" page. Since the page is one file, that republished all of
+ * it and invalidated every visitor's cached copy for nothing. Naming the last
+ * commit that touched a page input instead makes the build reproducible: the
+ * same inputs give the same bytes, so "has anything changed?" is answerable
+ * by comparing them.
+ */
 async function buildStamp() {
   const pkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8"));
+  const git = (args) => execSync(`git ${args}`, {
+    cwd: ROOT, stdio: ["ignore", "pipe", "ignore"],
+  }).toString().trim();
+
   let commit = "untracked";
+  // Fall back to the wall clock only outside a checkout, where there is
+  // nothing better; inside one this is the page's own last-changed date.
+  let when = new Date();
   try {
-    commit = execSync("git rev-parse --short HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] })
-      .toString().trim();
-  } catch { /* not a git checkout */ }
-  const built = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    const paths = PAGE_INPUTS.join(" ");
+    commit = git(`log -1 --format=%h -- ${paths}`) || git("rev-parse --short HEAD");
+    const iso = git(`log -1 --format=%cI -- ${paths}`);
+    if (iso) when = new Date(iso);
+  } catch { /* not a git checkout, or no history: keep the fallbacks */ }
+
+  const built = when.toISOString().slice(0, 16).replace("T", " ") + " UTC";
   // "git+https://github.com/owner/repo.git" -> "https://github.com/owner/repo"
   const repo = (pkg.repository?.url ?? "").replace(/^git\+/, "").replace(/\.git$/, "");
-  return { version: pkg.version ?? "0.0.0", commit, built, repo };
+  return { version: pkg.version ?? "0.0.0", commit, built, repo, when };
 }
 
 function substituteStats(html, stats, stamp) {
@@ -251,7 +282,8 @@ async function main() {
   // Where to send a security report. A project whose pitch is "we handle
   // hostile input safely" should say where to tell it when that is wrong.
   // Expiry is a year out; RFC 9116 wants it absolute, so the build stamps it.
-  const expires = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+  // Anchored to the stamp, not the clock, so the file is reproducible too.
+  const expires = new Date(stamp.when.getTime() + 365 * 24 * 3600 * 1000);
   await mkdir(path.join(DIST, ".well-known"), { recursive: true });
   await writeFile(path.join(DIST, ".well-known", "security.txt"),
     [

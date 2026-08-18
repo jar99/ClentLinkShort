@@ -104,19 +104,48 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # Full history: the build stamp names the last commit that touched a
+      # page input, which a shallow clone cannot answer.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 22
 
+      # Publishing is not free: the page is one file, so a deploy invalidates
+      # every visitor's cached copy. The build is reproducible from a known
+      # set of inputs, so if this push touched none of them the page would be
+      # byte-identical and there is nothing to publish. Fails open — an
+      # unknown or unreachable base deploys rather than silently skipping.
+      - id: inputs
+        name: Did anything the page is built from change?
+        run: |
+          paths="src corpus/stats.json package.json tools/build.mjs tools/bundle.js tools/minify.js"
+          before="${{ github.event.before }}"
+          changed=yes
+          if [ "${{ github.event_name }}" = "push" ] && \
+             [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && \
+             git cat-file -e "$before^{commit}" 2>/dev/null; then
+            if git diff --quiet "$before" "${{ github.sha }}" -- $paths; then
+              changed=no
+            fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          if [ "$changed" = no ]; then
+            echo "No page input changed in this push; the built page would be identical." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Builds from the committed corpus stats, which the test job has already
       # confirmed match the corpus.
       - name: Build
+        if: steps.inputs.outputs.changed == 'yes'
         run: node tools/build.mjs
 
       # enablement: true flips the Pages source to "GitHub Actions" by API,
       # so no dashboard step is needed and the Jekyll branch builds stop.
       - uses: actions/configure-pages@v5
+        if: steps.inputs.outputs.changed == 'yes'
         with:
           enablement: true
 
@@ -126,14 +155,17 @@ jobs:
       # Same archive, same artifact name deploy-pages expects, minus the
       # exclusion. (.git and .github are not in dist; excluded anyway to match.)
       - name: Archive the site, hidden files included
+        if: steps.inputs.outputs.changed == 'yes'
         run: |
           tar --dereference --hard-dereference --directory dist \
             -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
       - uses: actions/upload-artifact@v4
+        if: steps.inputs.outputs.changed == 'yes'
         with:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar
           retention-days: 1
           include-hidden-files: true
       - id: deploy
+        if: steps.inputs.outputs.changed == 'yes'
         uses: actions/deploy-pages@v4
