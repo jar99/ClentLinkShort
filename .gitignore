@@ -1,3 +1,8 @@
 dist/
 node_modules/
 *.log
+
+# The corpus is a release asset, not a committed file: brotli does not
+# delta-compress, so each snapshot would add its whole size to every clone.
+# Fetch it with `npm run corpus:get`.
+corpus/urls.txt.br

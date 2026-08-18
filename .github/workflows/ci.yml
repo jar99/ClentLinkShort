@@ -21,6 +21,12 @@ jobs:
       - name: Unit, property, security and minifier tests
         run: node --test test/*.test.js
 
+      # The corpus is a release asset rather than a committed file, so it has
+      # to be fetched. get-corpus verifies it against the manifest, which is
+      # what keeps "validated against the corpus" meaning a specific corpus.
+      - name: Fetch the corpus
+        run: node tools/get-corpus.mjs
+
       - name: Validate against the frozen real-URL corpus
         run: node tools/validate-corpus.mjs
 
@@ -30,22 +36,6 @@ jobs:
       - name: The committed corpus stats must match the corpus
         run: git diff --exit-code corpus/stats.json
 
-      # GitHub refuses a push containing a file over 100 MB, and the refusal
-      # arrives at push time, after the corpus run that produced it. Fail here
-      # instead, while there is still room to do something about it.
-      - name: The corpus must stay pushable
-        run: |
-          bytes=$(stat -c%s corpus/urls.txt.br)
-          mb=$((bytes / 1048576))
-          echo "corpus/urls.txt.br is ${mb} MB"
-          if [ "$mb" -ge 90 ]; then
-            echo "::error::corpus/urls.txt.br is ${mb} MB; GitHub rejects pushes over 100 MB." \
-                 "Move the corpus to a release asset or Git LFS before growing it further."
-            exit 1
-          fi
-          if [ "$mb" -ge 75 ]; then
-            echo "::warning::corpus/urls.txt.br is ${mb} MB, approaching GitHub's 100 MB limit."
-          fi
 
   types:
     runs-on: ubuntu-latest

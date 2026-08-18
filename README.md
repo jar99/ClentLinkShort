@@ -19,6 +19,7 @@ sees where anyone is going.
 npm test              # 153 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
+npm run corpus:get    # fetch the corpus (a release asset, not committed)
 npm run validate      # round-trip the whole corpus
 npm run coverage      # how much of the ranked web the corpus reaches
 ```
@@ -108,16 +109,26 @@ without ever invalidating a link:
 | Carried tracking parameters | **2.2%**, worth 25% of the payload on those |
 | Winning body mode | host 59.1%, text 24.3%, template 16.2%, deflate 0.4%, raw 0.0% |
 
-The corpus is committed, which is what makes every number above reproducible
-from a clone — but it is 66 MB of brotli, and brotli does not delta-compress,
-so each corpus update stores another whole copy forever. Four versions have
-already put 144 MB of corpus blobs in the history. Two more updates and a
-clone costs a quarter of a gigabyte, and at 100 MB GitHub refuses the push
-outright. CI fails at 90 MB so that arrives as a build failure rather than as
-a rejected push after an overnight fetch. The fix, when it comes, is to move
-the corpus to a release asset or Git LFS and have `npm run corpus:update`
-fetch it; that is a history rewrite, so it is a deliberate decision rather
-than a drive-by one.
+The corpus is **not** in the repository. It is 66 MB of brotli, and brotli does not
+delta-compress, so committing each snapshot added its whole size to every future clone
+— four snapshots had already put 144 MB of blobs in a 158 MB `.git`. It lives as a
+release asset instead:
+
+```sh
+npm run corpus:get      # download and verify; no-op once it is present
+```
+
+`corpus/manifest.json` names the snapshot and carries two hashes — one over the
+decompressed corpus, which is its identity, and one over the compressed bytes, so a
+download is checked without inflating 238 MB first. A truncated or swapped file fails
+there rather than quietly changing what "validated" means, and the file is only put in
+place once the hash matches. CI fetches it the same way, so the numbers below are still
+measured against a specific, named corpus rather than whatever happened to be on disk.
+
+Publishing a new snapshot is the **Publish corpus** workflow, which verifies the
+manifest before uploading. (Clones made before this change still carry the old blobs in
+their history; shrinking that needs a history rewrite, which is a separate and
+deliberately disruptive step.)
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -275,9 +286,11 @@ discovering.
 a meta tag; it has to arrive as a real header. The page therefore refuses to run framed
 on its own — the pre-paint script swaps the whole document for a "can't run in a frame"
 notice, so a transparent overlay has nothing to aim a click at. That works on any static
-host. If you also control a proxy, set the header properly; on Cloudflare, add a Rules →
-Transform Rules → **Modify Response Header** rule matching `Hostname equals nul.im` and
-set these static values:
+host, which is the point: it needs no cooperation from whatever is serving the files.
+
+If you *can* set response headers — most static hosts and every reverse proxy can, and
+GitHub Pages on its own cannot — set these as well. They are worth having whoever serves
+the page:
 
 | Header | Value |
 | --- | --- |
@@ -285,20 +298,24 @@ set these static values:
 | `X-Frame-Options` | `DENY` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `no-referrer` |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), interest-cohort=()` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
 
-A `Content-Security-Policy` header and the page's own meta policy are enforced
-*together*, and each is applied in full — so a header carrying only `frame-ancestors`
-adds clickjacking protection without weakening any of the hash pinning above.
+Two CSPs — the header and the page's own meta tag — are enforced *together*, each in
+full, so a header carrying only `frame-ancestors` adds clickjacking protection without
+weakening any of the hash pinning above. Where they go depends on the host: a `_headers`
+file (Netlify, Cloudflare Pages), `add_header` in an nginx `server` block, a `header`
+directive in a Caddyfile, a response-header transform rule on a CDN. None of that is
+this project's business — it ships a page that is safe without them and better with
+them.
 
 **Privacy.** No cookies, no `localStorage`, no `sessionStorage`, no analytics — asserted
 in the browser tests rather than claimed. Decoding a link takes exactly **one** request,
 for the document itself; the service worker and the four files it precaches load
 afterwards and never block a redirect, which the tests now count on the browser context
-rather than the page, so a regression is visible. `Referrer-Policy: no-referrer` (a meta
-tag — GitHub Pages cannot send headers unless you add the Cloudflare rule above) means
-the destination isn't told where you came from.
+rather than the page, so a regression is visible. `Referrer-Policy: no-referrer` — set as
+a meta tag, so it holds even where response headers are not available — means the
+destination isn't told where you came from.
 
 The page does write to Cache Storage — that is what makes it work offline. It holds the
 app itself and provably cannot hold a destination: fragments are excluded from a request
