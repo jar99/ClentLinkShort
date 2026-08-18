@@ -4,9 +4,13 @@
  * its whole destination, so decoding one needs no network, and the only
  * thing standing between an offline phone and its destination is this file.
  *
- * Strategy: cache-first with background refresh. The cache name carries the
- * build hash ("{{cacheVersion}}" is substituted by tools/build.mjs), so a
- * new deploy activates a fresh cache and the old one is deleted.
+ * Strategy: network-first with cache fallback. A cached page is only ever
+ * served when the network can't answer — because the page embeds the wire
+ * tables, and a page cached before a deploy can mis-decode a link made
+ * after it. Freshness is correctness here, not a nicety; the cache exists
+ * for offline, and offline still works. The cache name carries the build
+ * hash ("{{cacheVersion}}" is substituted by tools/build.mjs), so a new
+ * deploy activates a fresh cache and the old one is deleted.
  *
  * This is a classic script, deliberately not part of the page bundle: a
  * service worker must be its own same-origin file.
@@ -47,19 +51,17 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== location.origin) return;
 
   event.respondWith(
-    caches.match(request, { ignoreSearch: request.mode === "navigate" }).then((cached) => {
-      // Refresh in the background so the next load is current; serve the
-      // cached copy now so this load is instant and offline-safe.
-      const refresh = fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || refresh;
-    }),
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() =>
+        caches.match(request, { ignoreSearch: request.mode === "navigate" })
+          .then((cached) => cached ?? Response.error()),
+      ),
   );
 });

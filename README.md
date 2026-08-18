@@ -534,8 +534,12 @@ silently break the page:
 3. **Caching**: a Cache Rule for `nul.im/*` with "Cache eligible" and an edge
    TTL of an hour or more serves the page from Cloudflare's edge worldwide.
    GitHub Pages only sends `max-age=600`; the rule lifts that at the edge.
-   Deploys still propagate within the TTL, and returning visitors don't
-   touch the network at all — the service worker has the page already.
+   Deploys still propagate within the TTL — worth remembering while the
+   beta's wire format is still moving: a link made on the new build can't
+   be read by a stale copy of the page, so purge the Cloudflare cache after
+   a deploy that changes the tables. Returning visitors keep an offline
+   fallback via the service worker, which otherwise prefers the network for
+   exactly this reason.
 
 ### Analytics without tracking
 
@@ -582,10 +586,13 @@ whole experience. Three things follow from that:
 - **The view switch is CSS**, driven by an attribute set before first paint, so someone
   who merely clicked a link never sees the creator UI flash past.
 - **One request.** Everything is inlined, so there is no second round trip.
-- **After the first visit, no requests at all.** A service worker caches the
-  page (cache-first, refreshed in the background, rotated per deploy by build
-  hash), so the site loads and links decode with no connection whatsoever —
-  the destination is inside the fragment, so nothing else was ever fetched.
+- **Offline after the first visit.** A service worker caches the page
+  (network-first with cache fallback, rotated per deploy by build hash), so
+  the site loads and links decode with no connection whatsoever — the
+  destination is inside the fragment, so nothing else was ever fetched.
+  Network-first is deliberate: the page embeds the wire tables, and during
+  the beta a stale cached copy could mis-read a link made after a deploy, so
+  a cached page is served only when the network can't answer.
   The page also installs as a lightweight app via a web manifest; the icon is
   SVG, which Chromium-family browsers use for install (Safari falls back to
   its screenshot behaviour — a deliberate trade against shipping a raster
