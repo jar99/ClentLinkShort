@@ -21,7 +21,7 @@
  *   node tools/mine-templates.mjs --host reddit.com
  */
 
-import { readCorpus } from "./corpus.js";
+import { sampleCorpus } from "./corpus.js";
 import { TEMPLATES } from "../src/templates.js";
 
 const args = process.argv.slice(2);
@@ -58,7 +58,7 @@ function charsetFor(values) {
 const hosts = new Map();
 let scanned = 0;
 
-for await (const raw of readCorpus(SCAN)) {
+for await (const raw of sampleCorpus(SCAN, { salt: "tpl|", hostCap: 0.01 })) {
   let url;
   try {
     url = new URL(raw);

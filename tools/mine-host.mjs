@@ -23,7 +23,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { readCorpus } from "./corpus.js";
+import { fnv1a, sampleCorpus } from "./corpus.js";
 import { ROOT } from "./bundle.js";
 import { HOST_INDEX } from "../src/hosts.js";
 
@@ -34,8 +34,8 @@ const SUFFIX_COUNT = at === -1 ? 192 : Number(args[at + 1]);
 const tt = args.indexOf("--tokens");
 const TOKEN_COUNT = tt === -1 ? 64 : Number(args[tt + 1]);
 
-const SAMPLE = 120000;
-const HOLDOUT = 30000;
+const SAMPLE = 200000;
+const HOLDOUT = 50000;
 /** A suffix must span this many distinct names before it or it is a quirk. */
 const MIN_NAMES = 30;
 const MAX_CODE_LEN = 15;
@@ -56,20 +56,19 @@ const TOKEN_BASE = () => SUFFIX_BASE + suffixes.length;
 
 const sample = [];
 const holdout = [];
-{
-  let n = 0;
-  for await (const url of readCorpus(SAMPLE + HOLDOUT)) {
-    try {
-      const p = new URL(url);
-      if (p.protocol !== "https:" && p.protocol !== "http:") continue;
-      let host = p.host;
-      if (host.startsWith("www.")) host = host.slice(4);
-      // Dictionary hosts ride the 8-bit index; the host code is for the rest.
-      if (HOST_INDEX.has(host)) continue;
-      (n < SAMPLE ? sample : holdout).push(host);
-    } catch { /* not this tool's problem */ }
-    if (++n >= SAMPLE + HOLDOUT) break;
-  }
+// Membership by hash, not position: both halves uniform over the whole
+// corpus (see sampleCorpus), disjoint by construction.
+const SPLIT = Math.round((SAMPLE + HOLDOUT) / HOLDOUT);
+for await (const url of sampleCorpus(SAMPLE + HOLDOUT, { salt: "host|" })) {
+  try {
+    const p = new URL(url);
+    if (p.protocol !== "https:" && p.protocol !== "http:") continue;
+    let host = p.host;
+    if (host.startsWith("www.")) host = host.slice(4);
+    // Dictionary hosts ride their own index; the host code is for the rest.
+    if (HOST_INDEX.has(host)) continue;
+    (fnv1a("split|" + url) % SPLIT === 0 ? holdout : sample).push(host);
+  } catch { /* not this tool's problem */ }
 }
 
 /* -------------------------------------------------------------------------- *

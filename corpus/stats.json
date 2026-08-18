@@ -6,52 +6,52 @@
   "failures": 0,
   "suboptimal": 0,
   "origin": "https://nul.im/#",
-  "payloadRatio": 0.57607383,
-  "payloadShorterPct": 99.67487919,
-  "medianRatio": 0.5087719298,
-  "p90Ratio": 0.6833333333,
-  "linkSavingsMean": 0.06568953885,
-  "linkSavingsMedian": 0.1224489796,
-  "linkShorterPct": 63.42338831,
-  "bareShorterPct": 3.825164649,
-  "deepShorterPct": 84.5098362,
+  "payloadRatio": 0.5718933099,
+  "payloadShorterPct": 99.69177909,
+  "medianRatio": 0.5094339623,
+  "p90Ratio": 0.6818181818,
+  "linkSavingsMean": 0.06547218069,
+  "linkSavingsMedian": 0.125,
+  "linkShorterPct": 63.19372535,
+  "bareShorterPct": 3.277233985,
+  "deepShorterPct": 84.39277954,
   "bareCount": 1130435,
   "deepCount": 3195034,
-  "deepSavingsMedian": 0.1860465116,
-  "deepSavingsMean": 0.1532158555,
+  "deepSavingsMedian": 0.1904761905,
+  "deepSavingsMean": 0.1554271927,
   "breakEvenLength": 20,
   "prefixes": [
     {
       "label": "this site",
       "length": 16,
       "breakEven": 20,
-      "shorterPct": 63.42338831,
-      "medianSaving": 0.1224489796
+      "shorterPct": 63.19372535,
+      "medianSaving": 0.125
     },
     {
       "label": "a github.io project page",
       "length": 40,
       "breakEven": 105,
-      "shorterPct": 5.675546397,
-      "medianSaving": -0.3777777778
+      "shorterPct": 5.89579997,
+      "medianSaving": -0.375
     },
     {
       "label": "payload alone, no prefix",
       "length": 0,
       "breakEven": 10,
-      "shorterPct": 99.67487919,
-      "medianSaving": 0.4912280702
+      "shorterPct": 99.69177909,
+      "medianSaving": 0.4905660377
     }
   ],
   "modes": {
-    "text": 1038734,
-    "raw": 30,
-    "deflate": 16856,
-    "host": 2584452,
-    "template": 685397
+    "text": 1052636,
+    "raw": 11,
+    "deflate": 15410,
+    "host": 2555153,
+    "template": 702259
   },
-  "templatePct": 15.84561119,
-  "dictHitPct": 22.90031439,
+  "templatePct": 16.23544175,
+  "dictHitPct": 22.85863105,
   "trackingPct": 2.167279433,
-  "trackingSavingPct": 26.42485821
+  "trackingSavingPct": 24.9345014
 }

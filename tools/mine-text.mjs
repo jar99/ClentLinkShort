@@ -20,7 +20,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { readCorpus } from "./corpus.js";
+import { fnv1a, sampleCorpus } from "./corpus.js";
 import { ROOT } from "./bundle.js";
 
 const args = process.argv.slice(2);
@@ -28,8 +28,8 @@ const WRITE = args.includes("--write");
 const at = args.indexOf("--tokens");
 const TOKEN_COUNT = at === -1 ? 256 : Number(args[at + 1]);
 
-const SAMPLE = 60000;
-const HOLDOUT = 20000;
+const SAMPLE = 120000;
+const HOLDOUT = 30000;
 const MIN_LEN = 3, MAX_LEN = 12;
 /** A token must appear across many hosts or it is one site's quirk. */
 const MIN_HOSTS = 25;
@@ -54,21 +54,20 @@ const encoder = new TextEncoder();
 // host still travels alongside each body: token generality is judged by how
 // many distinct hosts a substring spans, and that must come from the URL,
 // not from the body text.
-const bodies = [];
-{
-  let n = 0;
-  for await (const url of readCorpus(SAMPLE + HOLDOUT)) {
-    try {
-      const p = new URL(url);
-      let tail = p.href.slice(p.origin.length);
-      if (tail === "/") tail = "";
-      bodies.push({ bytes: encoder.encode(tail), host: p.host });
-    } catch { /* not this tool's problem */ }
-    if (++n >= SAMPLE + HOLDOUT) break;
-  }
+// Train/holdout membership hangs off a second hash rather than position, so
+// both halves are uniform over the whole corpus and can never overlap.
+const sample = [];
+const holdout = [];
+const SPLIT = Math.round((SAMPLE + HOLDOUT) / HOLDOUT);
+for await (const url of sampleCorpus(SAMPLE + HOLDOUT, { salt: "text|", hostCap: 0.01 })) {
+  try {
+    const p = new URL(url);
+    let tail = p.href.slice(p.origin.length);
+    if (tail === "/") tail = "";
+    const body = { bytes: encoder.encode(tail), host: p.host };
+    (fnv1a("split|" + url) % SPLIT === 0 ? holdout : sample).push(body);
+  } catch { /* not this tool's problem */ }
 }
-const sample = bodies.slice(0, SAMPLE);
-const holdout = bodies.slice(SAMPLE);
 
 /* -------------------------------------------------------------------------- *
  * Canonical Huffman over symbol frequencies

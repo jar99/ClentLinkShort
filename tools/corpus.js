@@ -3,7 +3,7 @@
  * so they cannot disagree about what passing means.
  */
 
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { createBrotliDecompress } from "node:zlib";
 import { createInterface } from "node:readline";
 import path from "node:path";
@@ -42,6 +42,60 @@ export async function* readLines(file, limit = Infinity) {
 
 export const readCorpus = (limit) => readLines(CORPUS_FILE, limit);
 export const readRanks = (limit) => readLines(RANKS_FILE, limit);
+
+/** How many URLs the corpus holds, per its manifest. */
+export function corpusTotal() {
+  const manifest = path.join(ROOT, "corpus", "manifest.json");
+  return JSON.parse(readFileSync(manifest, "utf8")).total;
+}
+
+/** 32-bit FNV-1a. Deterministic and cheap; used to admit sample members. */
+export function fnv1a(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Stream a uniform sample of the WHOLE corpus, not its head.
+ *
+ * The corpus file is insertion-ordered — oldest sources first — so taking
+ * the first N lines trains on a years-stale, source-clumped slice. Here each
+ * URL admits itself by its own hash, which makes the sample deterministic,
+ * independent of file order, spread evenly across every source, and largely
+ * stable as the corpus grows. A different `salt` yields a statistically
+ * independent sample; the same salt always yields the same one.
+ *
+ * `hostCap` bounds any one host's share of the sample. The corpus holds the
+ * registry giants (doi.org, npmjs, pypi) at ~14% from years of accumulation
+ * — far past their share of links people actually shorten — and a code
+ * trained on that mix spends its short codewords on package-page shapes.
+ * The cap only ever bites those few over-accumulated hosts.
+ */
+export async function* sampleCorpus(count, { salt = "", total, hostCap = 1 } = {}) {
+  total ??= corpusTotal();
+  // Slight overshoot so hash noise cannot leave the request short; the
+  // count cap below trims the excess (costing only a sliver of the tail).
+  const cut = Math.min(1, (1.05 * count) / total) * 2 ** 32;
+  const most = Math.max(1, Math.floor(hostCap * count));
+  const perHost = new Map();
+  let n = 0;
+  for await (const url of readLines(CORPUS_FILE)) {
+    if (fnv1a(salt + url) >= cut) continue;
+    if (hostCap < 1) {
+      let host;
+      try { host = new URL(url).host; } catch { continue; }
+      const seen = perHost.get(host) ?? 0;
+      if (seen >= most) continue;
+      perHost.set(host, seen + 1);
+    }
+    yield url;
+    if (++n >= count) break;
+  }
+}
 
 /** @returns {ReturnType<typeof emptyStats>} */
 export function emptyStats() {

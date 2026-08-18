@@ -12,25 +12,23 @@
  * Paste the printed array over HEADER_CODE_LENGTHS in src/clent.js, then
  * regenerate the compat goldens in the same commit (beta stance).
  */
-import fs from "node:fs";
-import zlib from "node:zlib";
-
 import { shorten, HEADER_CODE_LENGTHS } from "../src/clent.js";
 import { BitReader } from "../src/bits.js";
 import { buildCode, readSymbol } from "../src/huffman.js";
+import { sampleCorpus } from "./corpus.js";
 
 const MAX_CODE_LEN = 12;
 const SYMBOLS = 64;
-
-const urls = zlib.brotliDecompressSync(fs.readFileSync("corpus/urls.txt.br"))
-  .toString("utf8").split("\n").filter(Boolean);
+// A capped whole-corpus sample rather than every line: the raw corpus
+// over-holds a few registry hosts, and their header values with them.
+const SAMPLE = 400000;
 
 // Decode each payload's first symbol with the SHIPPED code, so the miner
 // keeps working after its own output lands.
 const shipped = buildCode(HEADER_CODE_LENGTHS);
 const freq = new Array(SYMBOLS).fill(1); // +1 smoothing: every value parses
 let counted = 0;
-for (const u of urls) {
+for await (const u of sampleCorpus(SAMPLE, { salt: "hdr|", hostCap: 0.01 })) {
   let p;
   try { p = await shorten(u, { stripTracking: false }); } catch { continue; }
   freq[readSymbol(new BitReader(p), shipped)]++;

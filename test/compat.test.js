@@ -26,24 +26,24 @@ import { TEMPLATES } from "../src/templates.js";
 import { ENCODABLE_ORDER } from "../src/schemes.js";
 
 const GOLDEN = [
-  ["B2QylAag", "https://example.com/"],
-  ["bH02JSZkGWM0ZZ4DiNxgA", "https://github.com/anthropics/claude-code"],
-  ["FPIdE4qIx0Lgcq6_2Lwz8c5xXEQQnZoVoyz30gA",
+  ["B2wjKA2W", "https://example.com/"],
+  ["ZB6jCg8nq4XzDlgJvkBFg", "https://github.com/anthropics/claude-code"],
+  ["GSI6qGwiepsklbZ_VPMvGlIC4WCyRWeSXJJUiW",
     "https://some-unseen-shop.com/products/blue-widget?size=m"],
-  ["TLdQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
-  ["XXi0zq9Vb44uowAkg", "https://www.youtube.com/watch?v=TOr1Vvji6jA&t=36s"],
-  ["XAa8fjsidWYA", "https://en.wikipedia.org/wiki/Alan_Turing"],
-  ["Ox4TTl1_m685yoKLpiQ", "https://blog.startup.io/posts/2026-hello"],
-  ["g4P0KTDue8dDzuk4A", "http://old-site.net/index.php?id=42"],
-  ["v8JfZup358osk0Z6JkyaFc79k5mX2jRQcaZ204A",
+  ["WLdQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+  ["XYC0zq9Vb44uowAkg", "https://www.youtube.com/watch?v=TOr1Vvji6jA&t=36s"],
+  ["XBqphxixZUZSw", "https://en.wikipedia.org/wiki/Alan_Turing"],
+  ["O0486S7LnSctqkCHrp1g", "https://blog.startup.io/posts/2026-hello"],
+  ["hIP1MUx3fOec8PQaW", "http://old-site.net/index.php?id=42"],
+  ["v8JPj-q7CTIHFIYk988WeTK9jkfVUz5ZzTGYgiw",
     "mailto:someone@example.com?subject=Hi%20there"],
-  ["B2QylAetGUb4zaHW3zOI5BYUWEA", "https://example.co.uk/a/b/c?q=test#frag"],
-  ["v8EY5-4bRNcvz5RZJoz0TJkGs5lHYA", "https://user:pw@example.com/secret"],
-  ["B2QylAajnlQbjB0MJqhgV6GE1QwGqGE3QrOUMJqhgNUMJqhgYFDCaoYGHQwmqGA7odbfGLYoYLtCu8A",
+  ["B2wjKA9iEYXgv57VVFcFzKwgdlY", "https://example.co.uk/a/b/c?q=test#frag"],
+  ["v8EIZfDZ2S5sJMgcUhiT3zxBSR9BFL", "https://user:pw@example.com/secret"],
+  ["B2wjKA2DLGV_toZ14xOrVZ14xOrMTrxmc41OvGJ1ZideMTq1adeMTq17OvGJ1ZvPaqo-OxOrtzqrqw",
     "https://example.com/unicode/%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%BE%D0%B3?q=caf%C3%A9"],
   ["wTS61IzC3ISdVLzs_VT0xKTklNS88YZdCWAQA",
     "https://example.com/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/abcdefgh/"],
-  ["XRiEpi-A", "https://news.ycombinator.com/item?id=39000000"],
+  ["XSSEpi-A", "https://news.ycombinator.com/item?id=39000000"],
 ];
 
 test("golden payloads decode to their destinations, forever", async () => {
@@ -58,20 +58,20 @@ const hash = (value) =>
 test("the frozen tables are byte-for-byte what v1 shipped", () => {
   // These four never change at all: every entry participates in a canonical
   // Huffman code, so any edit re-maps codes and repoints existing links.
-  assert.equal(hash([...CODE_LENGTHS]), "fa423ba8c8418225", "CODE_LENGTHS changed");
-  assert.equal(hash([...TOKENS]), "733fcde4555eeecb", "TOKENS changed");
-  assert.equal(hash([...HOST_CODE_LENGTHS]), "6b7e6a801690c585", "HOST_CODE_LENGTHS changed");
-  assert.equal(hash([...SUFFIXES]), "82bc2a7e43cc24ad", "SUFFIXES changed");
+  assert.equal(hash([...CODE_LENGTHS]), "6f65aea38c9890b5", "CODE_LENGTHS changed");
+  assert.equal(hash([...TOKENS]), "75d125d5afd15e22", "TOKENS changed");
+  assert.equal(hash([...HOST_CODE_LENGTHS]), "0cd172fdf782cbd5", "HOST_CODE_LENGTHS changed");
+  assert.equal(hash([...SUFFIXES]), "1b9bfe83f3a6b2a4", "SUFFIXES changed");
 });
 
 test("the indexed tables only ever grow", () => {
   // Position IS the wire encoding, so the shipped prefix must survive any
   // append. Appending new entries is fine — extend the pin when you do.
   assert.ok(HOSTS.length >= 512);
-  assert.equal(hash(HOSTS.slice(0, 512)), "56b35dac1268e1ed", "HOSTS prefix changed");
+  assert.equal(hash(HOSTS.slice(0, 512)), "e1fa941060b21162", "HOSTS prefix changed");
   assert.ok(TEMPLATES.length >= 258);
   assert.equal(hash(TEMPLATES.slice(0, 258).map((t) => [t.pattern, ...t.slots])),
-    "161f1acd5b3eae3d", "TEMPLATES prefix changed");
+    "8a9c14be6ca3744e", "TEMPLATES prefix changed");
   assert.ok(ENCODABLE_ORDER.length >= 13);
   assert.equal(hash(ENCODABLE_ORDER.slice(0, 13)), "b1811f4d592941c5",
     "ENCODABLE_ORDER prefix changed");

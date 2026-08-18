@@ -36,8 +36,8 @@ Measured over 4,325,469 real URLs:
 
 | Prefix | Break-even URL length | Links that come out shorter |
 | --- | --- | --- |
-| `nul.im/#` (16c) | ~20 | 63.4% |
-| a github.io project page (40c) | ~105 | 5.7% |
+| `nul.im/#` (16c) | ~20 | 63.2% |
+| a github.io project page (40c) | ~105 | 5.9% |
 | payload alone, no prefix | ~10 | 99.7% |
 
 Bare homepages (26% of the corpus) are the one shape that rarely wins — there is
@@ -49,22 +49,22 @@ it has forgotten about it.
 
 [ha.mr](https://github.com/p2r3/ha.mr) is the other static URL compressor — bit-level
 canonicalisation, a Huffman-coded domain dictionary, Huffman text. Running its actual
-encoder head-to-head over 3,999 corpus URLs:
+encoder head-to-head over a representative 3,538-URL corpus sample:
 
 | | Clent | ha.mr |
 | --- | --- | --- |
-| Total payload, same 3,999 URLs | **112,854 chars** | 125,326 chars |
-| Decodes back byte-identical | **100%** | 83.4% |
+| Total payload, same 3,538 URLs | **108,903 chars** | 119,333 chars |
+| Decodes back byte-identical | **100%** | 84.7% |
 | Output alphabet | 64 chars, Base64url | 84 chars incl. `[ ] ' ( ) , ;` |
 | `watch?v=…&t=36s` (its own demo) | **17** | 27 |
 | `zelda.fandom.com/wiki/Ice_Queen` | **16** | 25 |
-| Shorter link, per URL | **57.5%** | 32.2% |
+| Shorter link, per URL | **54.6%** | 35.9% |
 
 Clent wins the per-URL split outright now, with a 64-character safe alphabet against
 their 84 — characters like `[](),'` are exactly the ones chat apps cut links off at,
 which is why Clent's default refuses them. (The opt-in dense style plays the same
 alphabet game, base 87, while keeping the safe Base64url form the default and the
-canonical one.) Its 16.6% of non-identical decodes are lossy canonicalisation (dropped trailing
+canonical one.) Its 15.3% of non-identical decodes are lossy canonicalisation (dropped trailing
 slashes, `%28` decoded to `(`, case changes): usually harmless, sometimes a different
 page. Clent holds byte-exactness at 100% across the full 4,325,469 and fails loudly
 otherwise. On security, the comparison is one-sided: scheme allowlisting on encode and
@@ -100,11 +100,11 @@ without ever invalidating a link:
 | URLs round-tripped | **4,325,469** |
 | Decoded to the byte-identical original | **100%**, 0 failures |
 | Encoded worse than an available alternative | **0** |
-| Payload vs input URL | **57.6%** overall, median **50.9%** |
+| Payload vs input URL | **57.2%** overall, median **50.9%** |
 | Payload shorter than input | **99.7%** |
 | Host dictionary hit rate | **22.9%** |
-| Carried tracking parameters | **2.2%**, worth 26% of the payload on those |
-| Winning body mode | host 59.7%, text 24.0%, template 15.8%, deflate 0.4%, raw 0.0% |
+| Carried tracking parameters | **2.2%**, worth 25% of the payload on those |
+| Winning body mode | host 59.1%, text 24.3%, template 16.2%, deflate 0.4%, raw 0.0% |
 
 Plus a sweep of every domain in the Tranco top 1M:
 
@@ -314,7 +314,7 @@ spelling.
    - **raw** is plain 8-bit bytes, the fallback for byte soup.
    - **deflate** wins once a URL is long or repetitive enough to repay its overhead.
 
-On the corpus: host wins 59.7%, text 24.0%, templates 15.8%, deflate 0.4%, raw 0.0%.
+On the corpus: host wins 59.1%, text 24.3%, templates 16.2%, deflate 0.4%, raw 0.0%.
 
 ## Tamper resistance
 
@@ -524,7 +524,13 @@ silently break the page:
    Obfuscation, Mirage, and any minification/injection app. The page's CSP
    pins its inline scripts by hash — a proxy that edits or injects a single
    byte of script makes the page refuse to run itself. (This is a feature:
-   the same pin is what stops anyone else injecting script.)
+   the same pin is what stops anyone else injecting script.) **Bot Fight
+   Mode** is the common offender: it injects an inline challenge script
+   (`window.__CF$cv$params`) that the CSP blocks, which is harmless — the
+   page runs fine and no visitor is affected — but it logs a CSP violation
+   in every console and Cloudflare's bot scoring never runs. Turn Bot Fight
+   Mode off to quiet it, or leave it; blocking a third party's injected
+   script is exactly what the policy is for.
 3. **Caching**: a Cache Rule for `nul.im/*` with "Cache eligible" and an edge
    TTL of an hour or more serves the page from Cloudflare's edge worldwide.
    GitHub Pages only sends `max-age=600`; the rule lifts that at the edge.
