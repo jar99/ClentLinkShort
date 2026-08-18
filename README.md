@@ -250,6 +250,14 @@ million links, and the reader can still continue, is the right side of that trad
 It matches whole labels, so `notpaypal.com.au` is not a hit, and it understands a
 registry tail, so `google.com.au` and `apple.com.cn` are their owners' own sites.
 
+The punycode row is deliberately blunt in the other direction: it flags every
+internationalised name, which is 1,539 of the 4,325,469 corpus URLs (0.036%), most of
+them ordinary Japanese, Chinese and emoji domains rather than anything deceptive.
+Narrowing it to names that *mix* scripts would clear those, but it would also stop
+catching the whole-script homograph — every character Cyrillic, still reading as
+"paypal" — and telling those apart needs a confusables table this page will not carry.
+It shows a screen and lets you continue, which is what makes erring this way tolerable.
+
 **The page itself.** The built page ships a Content-Security-Policy that names its own
 script and style by SHA-256 hash and forbids everything else: `default-src 'none'`, no
 network of any kind, no form submission, no `<base>` rewriting. An injected script would

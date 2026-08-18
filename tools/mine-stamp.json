@@ -1,4 +1,9 @@
 {
+  "host": {
+    "fingerprint": "5db0eb3d844cd58220b926de167fbd71d20d78689509cb7f9b008945fc42cd61",
+    "corpus": "4325469 URLs, sha256 51a37e90bb81d436",
+    "mined": "2026-08-18"
+  },
   "templates": {
     "fingerprint": "813eb46ff245cb2ea53c0f3694982fddd09e79b0b1a0df2bad8d5e49c0f729e4",
     "corpus": "4325469 URLs, sha256 51a37e90bb81d436",

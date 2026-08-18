@@ -97,4 +97,32 @@ for (let i = 0; i < SYMBOLS; i += 16) {
 }
 console.log(out.replace(/,\n$/, ",\n"));
 
-await guard.save();
+// This miner prints; a human pastes. So the stamp — which claims the shipped
+// table came from these inputs — may only be written when the printed table
+// IS the shipped one. Otherwise a run that merely proposed a change would
+// silence the next one.
+//
+// Note a re-mine can differ from what ships without being an improvement:
+// canonical Huffman is not unique when frequencies tie, so an equal-cost
+// permutation is a real possibility. Since every changed length repoints
+// every link ever made, "different" is not a reason to paste — "cheaper" is.
+// What a re-paste has to buy. Every changed length repoints every link ever
+// made, so a saving that rounds away is not a reason to do it; floating-point
+// noise between two equal-cost codes is not an improvement.
+const WORTH_IT = 0.01; // bits per link
+
+const same = lengths.every((l, i) => l === HEADER_CODE_LENGTHS[i]);
+if (same) {
+  await guard.save();
+  console.log("// unchanged from the shipped table; stamped.");
+} else if (avgOld - avgNew > WORTH_IT) {
+  console.log(`// CHEAPER by ${(avgOld - avgNew).toFixed(3)} bits/link. Paste over ` +
+    "HEADER_CODE_LENGTHS in src/clent.js, regenerate the compat goldens in the same " +
+    "commit, and re-run this to stamp it.");
+} else {
+  console.log(`// different from the shipped table but not meaningfully cheaper ` +
+    `(${avgOld.toFixed(3)} vs ${avgNew.toFixed(3)} bits/link), so pasting it would ` +
+    "invalidate every existing link and buy nothing — canonical Huffman is not " +
+    "unique when frequencies tie. Not stamped: the shipped table is not what this " +
+    "run produced.");
+}
