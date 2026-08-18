@@ -605,7 +605,7 @@ test/             169 tests on node:test
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
                   optimality, mine-text, mine-host, mine-header,
                   mine-templates, mine-stamp, bundle, minify, build, serve,
-                  browser-test
+                  browser-test, perf
 ```
 
 Mining reads millions of URLs to emit a few kilobytes of table, so the miners
@@ -634,6 +634,26 @@ Built   ~117 kB raw · ~37 kB gzip · ~32 kB brotli · 1 request on the critical
 "One request" is the document: everything the codec needs to resolve a link is
 inlined, so a redirect never waits on a second round trip. The manifest and the
 service worker load after that and block nothing.
+
+Where the time actually goes, on Lighthouse's mobile profile (1.6 Mbps, 150 ms
+RTT, 4× CPU slowdown), median of nine cold loads — `npm run perf`:
+
+```
+redirect       218 ms   navigation to arriving at the destination
+interstitial   539 ms   navigation to the destination being clickable
+create         568 ms   first contentful paint
+```
+
+The redirect path never paints and never touches the DOM: it decodes in the
+head script and calls `location.replace`, which is why it is a third of the
+others. Of the create page's 568 ms, 224 ms is connection setup and 163 ms is
+downloading 33 kB — the page's own CPU work is the remaining ~180 ms.
+
+Roughly 30% of the compressed page is the mined tables, and both paths need
+them to decode, so that is a floor rather than an oversight. The QR encoder
+(~4 kB compressed) is the one part that is create-only and behind a button;
+splitting it out would mean a second request, which is the thing the design
+is built to avoid.
 
 The minifier is a tokeniser, not a pile of regexes: it tracks strings, template
 literals with nested `${}`, regex literals and both comment forms, and keeps newlines
@@ -783,6 +803,15 @@ whole experience. Three things follow from that:
 - **The view switch is CSS**, driven by an attribute set before first paint, so someone
   who merely clicked a link never sees the creator UI flash past.
 - **One request.** Everything is inlined, so there is no second round trip.
+- **The interstitial does not wait for the document.** When a link needs a look
+  before it is followed, the redirect card is rendered as soon as its own markup
+  has parsed rather than at `DOMContentLoaded`. The card is the first thing in
+  `<body>`; the maker, the explainer and the FAQ below it are most of the file
+  and nobody opening a link reads them. Measured, cold browser, 1.6 Mbps /
+  150 ms RTT / 4× CPU: destination clickable **595 ms → 453 ms**, first paint
+  **648 ms → 536 ms**.
+- **The service worker registers when the browser is idle**, not during load.
+  It is for the next visit, so it has no business competing with this one.
 - **Offline after the first visit.** A service worker caches the page
   (network-first with cache fallback, rotated per deploy by build hash), so
   the site loads and links decode with no connection whatsoever — the

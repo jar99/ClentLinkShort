@@ -10,6 +10,7 @@
  */
 
 import { createServer } from "node:http";
+import { brotliCompressSync, gzipSync, constants } from "node:zlib";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +32,28 @@ const TYPES = {
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".xml": "application/xml; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
+};
+
+/**
+ * Compress what a real host would compress.
+ *
+ * Serving plain bytes locally is not a small inaccuracy: the page is 120 kB
+ * raw and 33 kB brotli, so an uncompressed dev server makes every timing
+ * measurement one of a document nobody is ever sent. It quietly turned the
+ * performance harness into a test of the wrong page, so the server does what
+ * GitHub Pages and Cloudflare both do instead.
+ */
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".json", ".svg",
+  ".webmanifest", ".xml", ".txt"]);
+
+const compress = (body, extension, accept = "") => {
+  if (!COMPRESSIBLE.has(extension) || body.length < 512) return [body, null];
+  if (/\bbr\b/.test(accept)) {
+    return [brotliCompressSync(body,
+      { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }), "br"];
+  }
+  if (/\bgzip\b/.test(accept)) return [gzipSync(body, { level: 9 }), "gzip"];
+  return [body, null];
 };
 
 const server = createServer(async (request, response) => {
@@ -56,10 +79,15 @@ const server = createServer(async (request, response) => {
   }
 
   try {
-    const body = await readFile(file);
+    const raw = await readFile(file);
+    const extension = path.extname(file);
+    const [body, encoding] =
+      compress(raw, extension, request.headers["accept-encoding"]);
     response.writeHead(200, {
-      "content-type": TYPES[path.extname(file)] ?? "application/octet-stream",
+      "content-type": TYPES[extension] ?? "application/octet-stream",
       "cache-control": "no-store",
+      vary: "accept-encoding",
+      ...(encoding ? { "content-encoding": encoding } : {}),
     });
     response.end(body);
   } catch {

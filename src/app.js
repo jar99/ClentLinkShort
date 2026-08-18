@@ -77,10 +77,43 @@ function buildLanguagePicker() {
   $("lang-pick").hidden = false;
 }
 
-whenReady(() => {
-  translate();
-  buildLanguagePicker();
-});
+/**
+ * The head script has already chosen the view, so this reads its answer rather
+ * than deriving it again. It is also the cheapest thing on the redirect path:
+ * translating a maker nobody is looking at, and building a picker that view
+ * hides anyway, is work between someone clicking a link and arriving.
+ */
+const redirecting = () => document.documentElement.dataset.mode === "redirect";
+
+if (redirecting()) {
+  whenRedirectView(() => translate($("redirect")));
+} else {
+  whenReady(() => {
+    translate();
+    buildLanguagePicker();
+  });
+}
+
+/**
+ * Run once the redirect card is in the document — which is long before the
+ * document is finished.
+ *
+ * Everything the redirect view writes to lives inside that card, and #r-go is
+ * the last of it, so its arrival is the real signal. Waiting on
+ * DOMContentLoaded instead means waiting for the maker, the explainer and the
+ * FAQ underneath it: most of the page, and none of it on the path between
+ * clicking a link and seeing where it goes.
+ */
+function whenRedirectView(fn) {
+  if (document.getElementById("r-go")) return fn();
+  if (document.readyState !== "loading") return whenReady(fn);
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById("r-go")) return;
+    observer.disconnect();
+    fn();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+}
 
 /** Marks a link as "show me where this goes" rather than "take me there". */
 const PREVIEW_SUFFIX = "~";
@@ -91,7 +124,7 @@ const PREVIEW_SUFFIX = "~";
 
 /** Render the shared "this link didn't work" card. */
 function showLinkFailure(message) {
-  whenReady(() => {
+  whenRedirectView(() => {
     $("r-spinner")?.remove();
     $("r-title").textContent = "This link didn't work";
     $("r-note").textContent = message;
@@ -142,7 +175,7 @@ async function runRedirect() {
       tagState = { kind, ok: null };
       previewOnly = true;
     } else if (!result.ok) {
-      whenReady(() => {
+      whenRedirectView(() => {
         $("r-spinner").remove();
         $("r-title").textContent = t("tag.altered");
         $("r-note").textContent = result.reason ??
@@ -180,7 +213,7 @@ async function runRedirect() {
     return;
   }
 
-  whenReady(() => {
+  whenRedirectView(() => {
     $("r-spinner").remove();
     // textContent, never innerHTML: this string is attacker-controlled.
     $("r-dest").textContent = url.href;
@@ -629,7 +662,19 @@ addEventListener("hashchange", () => location.reload());
 // After one visit the page works with no connection: links decode locally,
 // so the network was only ever needed to fetch this document. Failure is
 // fine — the page just stays online-only.
-if ("serviceWorker" in navigator) {
+/**
+ * Registering fetches sw.js and runs an install, which on the redirect path
+ * competes with the one thing that matters. Nothing here is needed for this
+ * visit — the worker is for the *next* one — so it waits until the browser
+ * has nothing better to do. The timeout is the floor: an idle callback that
+ * never comes must not mean a page that never caches itself.
+ */
+const whenIdle = (fn) =>
+  ("requestIdleCallback" in globalThis
+    ? requestIdleCallback(fn, { timeout: 3000 })
+    : addEventListener("load", () => setTimeout(fn, 200), { once: true }));
+
+if ("serviceWorker" in navigator) whenIdle(() => {
   // register() takes a TrustedScriptURL under require-trusted-types-for, so
   // the one script URL this page ever mints goes through a named policy that
   // accepts exactly one literal and nothing else. The CSP allows that policy
@@ -645,4 +690,4 @@ if ("serviceWorker" in navigator) {
     if (policy) target = policy.createScriptURL("./sw.js");
   } catch { /* no Trusted Types here, or the policy already exists */ }
   navigator.serviceWorker.register(target).catch(() => {});
-}
+});

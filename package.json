@@ -76,6 +76,7 @@
     "dev": "node tools/serve.mjs src",
     "preview": "node tools/build.mjs && node tools/serve.mjs dist",
     "test:browser": "node tools/browser-test.mjs dist",
+    "perf": "node tools/build.mjs && node tools/perf.mjs dist",
     "coverage": "node tools/coverage.mjs",
     "coverage:sweep": "node tools/coverage.mjs --sweep",
     "types": "tsc --noEmit"

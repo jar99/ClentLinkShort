@@ -475,6 +475,65 @@ try {
       await page.locator("#qr-box svg").count() === 0);
   }
 
+  // ---- the interstitial renders before the document ends -----------------
+  // dist-only, and not an oversight: in dev the app is a real module script,
+  // which the spec defers until the document is parsed. Only the built page
+  // inlines it as a classic script that runs during head parsing, so only the
+  // built page can render anything before the document ends.
+  if (DIR === "dist") {
+    // The redirect card is the first thing in <body>; the maker, the explainer
+    // and the FAQ under it are most of the file and nobody opening a link
+    // reads them. So the destination must become clickable while the parser is
+    // still working, not at DOMContentLoaded. Measured as an ordering rather
+    // than a duration, because a threshold would just encode this machine.
+    // A fresh context, not the shared one: by now the shared context has an
+    // active service worker, and a page it serves does not go through the
+    // network stack the throttling below applies to. The measurement would
+    // silently be of a cache hit.
+    const cold = await browser.newContext();
+    const early = await cold.newPage();
+    // Localhost hands over the whole document in one piece, so the parser
+    // never yields and there is no "before the end" to be earlier than. A slow
+    // link is the condition this exists for, so the check runs under one.
+    const cdp = await cold.newCDPSession(early);
+    await cdp.send("Network.enable");
+    // Deliberately slower than the profile the numbers are quoted at. The
+    // claim being checked is an ordering, not a duration, and a slow link
+    // stretches the stream until the ordering is unmistakable instead of a
+    // millisecond apart on whatever machine happens to run this.
+    await cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      downloadThroughput: (400 * 1024) / 8,
+      uploadThroughput: (400 * 1024) / 8,
+      latency: 400,
+    });
+    await early.addInitScript(() => {
+      new MutationObserver((records, observer) => {
+        const go = /** @type {HTMLAnchorElement} */ (document.getElementById("r-go"));
+        if (!go || !go.href || go.href.endsWith("#")) return;
+        window.__destinationAt = performance.now();
+        window.__stateAt = document.readyState;
+        observer.disconnect();
+      }).observe(document, { childList: true, subtree: true, attributes: true });
+    });
+    const preview = await shorten("https://example.com/a/path/that/is/plausible");
+    await early.goto(`${BASE}#${preview}~`, { waitUntil: "load" });
+    const when = await early.evaluate(() => ({
+      destination: window.__destinationAt ?? Infinity,
+      state: window.__stateAt,
+      dcl: performance.getEntriesByType("navigation")[0].domContentLoadedEventEnd,
+    }));
+    check("the destination is ready before the document finishes parsing",
+      when.state === "loading" && when.destination < when.dcl,
+      `destination at ${when.destination.toFixed(0)}ms (readyState ${when.state}), ` +
+      `DOMContentLoaded at ${when.dcl.toFixed(0)}ms`);
+    // The card must also be visible by then, or rendering early buys nothing.
+    check("the redirect card is shown without waiting for the whole document",
+      await early.locator("#redirect").isVisible() &&
+      await early.locator("#create").isHidden());
+    await cold.close();
+  }
+
   // ---- language -----------------------------------------------------------
   {
     // The picker only exists when there is more than one catalogue, so this

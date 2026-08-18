@@ -49,10 +49,16 @@
   // exposed to the accessibility tree, as the spec asks.
   if (location.hash.length > 1 && !location.hash.startsWith("#s=")) {
     document.documentElement.dataset.mode = "redirect";
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("redirect").hidden = false;
-      document.getElementById("create").hidden = true;
-    });
+    // Swap the views as each one arrives, not when the document ends. The
+    // maker, the explainer and the FAQ below the redirect card are most of
+    // this file, and someone opening a link waits for none of it.
+    new MutationObserver((_, observer) => {
+      var view = document.getElementById("redirect");
+      var maker = document.getElementById("create");
+      if (view) view.hidden = false;
+      if (maker) maker.hidden = true;
+      if (view && maker) observer.disconnect();
+    }).observe(document.documentElement, { childList: true, subtree: true });
   }
 </script>
 <link rel="stylesheet" href="./style.css">
