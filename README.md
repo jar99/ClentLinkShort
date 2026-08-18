@@ -108,6 +108,17 @@ without ever invalidating a link:
 | Carried tracking parameters | **2.2%**, worth 25% of the payload on those |
 | Winning body mode | host 59.1%, text 24.3%, template 16.2%, deflate 0.4%, raw 0.0% |
 
+The corpus is committed, which is what makes every number above reproducible
+from a clone — but it is 66 MB of brotli, and brotli does not delta-compress,
+so each corpus update stores another whole copy forever. Four versions have
+already put 144 MB of corpus blobs in the history. Two more updates and a
+clone costs a quarter of a gigabyte, and at 100 MB GitHub refuses the push
+outright. CI fails at 90 MB so that arrives as a build failure rather than as
+a rejected push after an overnight fetch. The fix, when it comes, is to move
+the corpus to a release asset or Git LFS and have `npm run corpus:update`
+fetch it; that is a history rewrite, so it is a deliberate decision rather
+than a drive-by one.
+
 Plus a sweep of every domain in the Tranco top 1M:
 
 | | |
