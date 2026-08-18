@@ -71,3 +71,40 @@ for (const [name, palette] of Object.entries(themes)) {
     }
   });
 }
+
+test("every custom property the stylesheet uses is one it defines", () => {
+  // A var() naming a token that does not exist is silent: the declaration is
+  // dropped and the element inherits whatever its parent had. That is how
+  // .faq dd and .maker-note lost their muted colour, and how the language
+  // picker's select ended up transparent — all three looked plausible enough
+  // that nobody noticed. There is no browser warning for it, so this is it.
+  const defined = new Set(
+    [...css.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map(([, name]) => name));
+  const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map(([, name]) => name));
+  const missing = [...used].filter((name) => !defined.has(name));
+  assert.deepEqual(missing, [], "used but never defined");
+});
+
+test("the page tells the browser which palette its own widgets should use", () => {
+  // Without color-scheme the UA paints selects, their popups, checkboxes and
+  // scrollbars light no matter what the page does — so the dark theme opened
+  // a white popup holding near-white option text. Naming both schemes makes
+  // the UA follow prefers-color-scheme, which is what the palette already does.
+  assert.match(css, /color-scheme:\s*light dark/,
+    ":root needs `color-scheme: light dark` for native controls to follow the theme");
+});
+
+test("no form control is small enough to make iOS zoom on focus", () => {
+  // Safari zooms the viewport when a control under 16px takes focus, which
+  // throws the layout off and cannot be undone from inside the page. The rule
+  // was written in a comment beside the inputs and then not applied to the
+  // selects, so it is a test now.
+  const controls = /(^|,|\s)(textarea|select|input)\b[^{]*\{([^}]*)\}/g;
+  for (const [, , control, body] of css.matchAll(controls)) {
+    const size = /font(?:-size)?:\s*(?:[^;]*?\b)?(\d+(?:\.\d+)?)(px|rem)\b/.exec(body);
+    if (!size) continue;
+    const px = size[2] === "rem" ? Number(size[1]) * 16 : Number(size[1]);
+    assert.ok(px >= 16,
+      `<${control}> is ${px}px; anything under 16px makes iOS zoom on focus`);
+  }
+});

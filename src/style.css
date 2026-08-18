@@ -28,6 +28,13 @@
   --r-md: 10px;
   --r-lg: 14px;
 
+  /* Native widgets — the select popup above all — are painted by the browser,
+     not by anything here. Without this they are painted light whatever the
+     page does, so in dark mode the popup opened as a white menu holding the
+     page's near-white option text. Naming both schemes lets the UA follow
+     prefers-color-scheme, which is exactly what the palette below does. */
+  color-scheme: light dark;
+
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, sans-serif;
@@ -262,24 +269,37 @@ textarea::placeholder { color: var(--ink-faint); }
    a flex item beside its text it rendered before its own name. */
 .opt-choice { grid-template-columns: 1fr; }
 
-.opt-choice select {
-  grid-column: 1;
-  justify-self: start;
-  margin-top: 3px;
+/* Both selects on the page — the style picker and the language picker — get
+   one rule, so they cannot drift apart again. The options carry the colours
+   explicitly: a popup that inherits only a colour lands on the UA's own
+   background, which is how the dark theme ended up with white on white. */
+select {
   font: inherit;
-  font-size: .85rem;
+  /* 16px for the same reason the inputs are: iOS Safari zooms the viewport on
+     focus below that. A select is a form control like any other, and this one
+     was 13.6px — the rule was written down and then not applied to it. */
+  font-size: 16px;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 3px 6px;
+  min-height: 32px;
+}
+
+option {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.opt-choice select {
+  grid-column: 1;
+  justify-self: start;
+  margin-top: 3px;
 }
 
 .opt-choice > label,
 .opt-choice em { grid-column: 1; padding-inline-start: 0; }
-
-/* A select is its own target, so it gets the height directly. */
-.opt-choice select { min-height: 32px; }
 
 .error.is-shown { display: block; }
 
@@ -295,7 +315,10 @@ textarea::placeholder { color: var(--ink-faint); }
 #result { margin-top: 20px; }
 
 .out { display: flex; gap: 8px; }
-.out input { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+/* 16px, not 13: this field holds the finished link and people tap it to
+   select. Under 16px iOS zooms the viewport on that tap. A long link scrolls
+   inside the field instead, which is the cheaper of the two. */
+.out input { flex: 1 1 auto; min-width: 0; font-size: 16px; }
 
 .btn {
   font: 600 .9rem/1 var(--sans);
@@ -639,16 +662,6 @@ html[data-mode="redirect"] .langpick { display: none; }
   margin-top: 12px;
 }
 
-.langpick select {
-  min-height: 32px;
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-}
-
 footer .stamp {
   margin-top: 10px;
   font-size: .75rem;
@@ -683,7 +696,7 @@ footer .stamp {
   .bar-row, .mode-row { grid-template-columns: 2.8rem 1fr 3.4rem; }
 }
 
-.maker-note { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
+.maker-note { margin: 8px 0 0; font-size: .85rem; color: var(--ink-soft); }
 
 .qr-box { margin: 14px 0 0; text-align: center; }
 .qr-box svg {
@@ -694,7 +707,7 @@ footer .stamp {
 .qr-box figcaption { margin: 0; }
 
 .faq dt { font-weight: 600; margin: 14px 0 4px; }
-.faq dd { margin: 0 0 12px; color: var(--muted); line-height: 1.5; }
+.faq dd { margin: 0 0 12px; color: var(--ink-soft); line-height: 1.5; }
 
 /* Below-the-fold sections don't hold up first paint; the browser lays them
    out when they approach the viewport. The tool card is excluded — it IS
