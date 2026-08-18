@@ -104,7 +104,13 @@
   },
   "rankedDomains": 1000000,
   "sha256": "51a37e90bb81d436bc18c78a9c357a750668753f06f950d1b51b5c6116046882",
-  "bytes": 237928457,
+  "asset": {
+    "tag": "corpus-2026-08-18",
+    "url": "https://github.com/jar99/ClentLinkShort/releases/download/corpus-2026-08-18/urls.txt.br",
+    "sha256": "40071be0c205c35096a099f9b8e582e74faa38c51d90bb387df4a88a7d0f0bde",
+    "bytes": 69353416
+  },
+  "bytes": 237932368,
   "sources": {
     "wikipedia": "{lang}.wikipedia.org exturlusage, 40 editions — cited links",
     "hackernews": "hn.algolia.com search_by_date, stories — submitted links",

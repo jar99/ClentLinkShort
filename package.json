@@ -1,7 +1,7 @@
 {
   "name": "clent",
   "version": "1.0.0-beta.1",
-  "description": "A stateless URL shortener codec — the destination is packed into the link, so nothing is ever stored",
+  "description": "A stateless URL shortener codec \u2014 the destination is packed into the link, so nothing is ever stored",
   "type": "module",
   "license": "MIT",
   "main": "./src/clent.js",
@@ -69,6 +69,7 @@
     "test": "node --test test/*.test.js",
     "test:corpus": "node --test test/corpus.test.js",
     "corpus:fetch": "node tools/fetch-corpus.mjs",
+    "corpus:get": "node tools/get-corpus.mjs",
     "corpus:update": "node --max-old-space-size=10240 tools/fetch-corpus.mjs --merge --count 1000000",
     "validate": "node tools/validate-corpus.mjs",
     "build": "node tools/build.mjs",

@@ -15,6 +15,19 @@ export const CORPUS_FILE = path.join(ROOT, "corpus", "urls.txt.br");
 export const RANKS_FILE = path.join(ROOT, "corpus", "ranks.txt.br");
 
 export const hasCorpus = () => existsSync(CORPUS_FILE);
+
+/**
+ * The corpus lives in a release asset, not the repository, so a fresh clone
+ * has the manifest but not the file. Say that, rather than letting a stream
+ * fail later with a bare ENOENT on a path nobody expected to be missing.
+ */
+export function requireCorpus() {
+  if (existsSync(CORPUS_FILE)) return;
+  throw new Error(
+    "corpus/urls.txt.br is not here. It is a release asset rather than a " +
+    "committed file — run `npm run corpus:get` to fetch and verify it.");
+}
+
 export const hasRanks = () => existsSync(RANKS_FILE);
 
 /**
@@ -40,7 +53,10 @@ export async function* readLines(file, limit = Infinity) {
   lines.close();
 }
 
-export const readCorpus = (limit) => readLines(CORPUS_FILE, limit);
+export const readCorpus = (limit) => {
+  requireCorpus();
+  return readLines(CORPUS_FILE, limit);
+};
 export const readRanks = (limit) => readLines(RANKS_FILE, limit);
 
 /** How many URLs the corpus holds, per its manifest. */
