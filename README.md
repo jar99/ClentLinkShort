@@ -718,6 +718,14 @@ silently break the page:
    Mode off to quiet it, or leave it; blocking a third party's injected
    script is exactly what the policy is for.
 
+   **Bot Fight Mode is not the only toggle that injects it.** The script at
+   `/cdn-cgi/challenge-platform/scripts/precursor/main.js` is **JavaScript
+   Detections**, under Security → Bots, and it has its own switch — turning Bot
+   Fight Mode off leaves it injecting into every HTML response, 404s included.
+   You can tell it apart from a cached copy without guessing: the `r:` value in
+   `__CF$cv$params` is that request's `cf-ray`, so it is minted per request. If
+   the two match, the setting is still on.
+
    **There is no third option.** A CSP report will name the blocked script's
    hash, and Lighthouse will suggest adding it — do not. The injected script
    carries per-request tokens (`r`, `t`, `u` in `__CF$cv$params` change on

@@ -75,10 +75,16 @@ for (const check of WANTED) {
 // Anything injected into the page is worth knowing about too: a hash-pinned
 // policy blocks it, which is correct and also means it does nothing but log.
 const body = await response.text();
+// Named by the feature that actually controls each one, not by the feature
+// people reach for first. The challenge-platform script is JavaScript
+// Detections, which is its own toggle: turning Bot Fight Mode off leaves it
+// injecting, and the page keeps logging a violation for a setting that looks
+// disabled.
 const INJECTED = [
-  ["Bot Fight Mode challenge script", /__CF\$cv\$params/],
-  ["Web Analytics beacon", /cloudflareinsights/],
-  ["Speed Brain speculation rules", /cdn-cgi\/speculation/],
+  ["JavaScript Detections (Security \u2192 Bots), /cdn-cgi/challenge-platform/",
+    /__CF\$cv\$params|challenge-platform/],
+  ["Web Analytics beacon (Analytics \u2192 Web Analytics)", /cloudflareinsights/],
+  ["Speed Brain (Speed \u2192 Optimization)", /cdn-cgi\/speculation/],
 ];
 const found = INJECTED.filter(([, pattern]) => pattern.test(body) ||
   pattern.test(response.headers.get("speculation-rules") ?? ""));
