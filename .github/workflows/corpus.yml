@@ -1,0 +1,53 @@
+name: Publish corpus
+
+# The corpus is 66 MB of brotli and does not delta-compress, so every update
+# used to add another whole copy to the repository's history forever. It lives
+# as a release asset instead: one download, verified against its own hash, and
+# a clone stays small no matter how far the corpus grows.
+#
+# Run this after `npm run corpus:update` produces a new snapshot, then commit
+# the manifest pointing at the new tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag for this snapshot, e.g. corpus-2026-08-18"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      # Publishing a corpus whose hash disagrees with the manifest would give
+      # every later download something to verify against that never matches.
+      - name: The corpus must match its manifest
+        run: |
+          want=$(node -p "require('./corpus/manifest.json').sha256")
+          got=$(sha256sum corpus/urls.txt.br | cut -d' ' -f1)
+          echo "manifest $want"
+          echo "file     $got"
+          [ "$want" = "$got" ]
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          total=$(node -p "require('./corpus/manifest.json').total.toLocaleString('en-US')")
+          sha=$(node -p "require('./corpus/manifest.json').sha256")
+          gh release create "$TAG" corpus/urls.txt.br \
+            --title "Corpus snapshot $TAG" \
+            --notes "$total real URLs, brotli-compressed.
+
+          sha256 \`$sha\`
+
+          Fetched by \`npm run corpus:get\`, which verifies this hash against
+          \`corpus/manifest.json\`. Not committed to the repository: brotli does
+          not delta-compress, so each snapshot would otherwise add its whole
+          size to every future clone."
