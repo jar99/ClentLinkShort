@@ -31,6 +31,15 @@ const WANTED = [
         return `max-age is ${age}s; the preload list requires at least ` +
           "31536000 (one year), so `preload` does nothing below that";
       }
+      // A `preload` token is a claim about a list this cannot see. Say so
+      // rather than passing it silently: an unsubmitted domain advertises an
+      // intent nobody acted on, and submitting is close to irreversible.
+      if (/\bpreload\b/.test(v)) {
+        return "max-age is long enough for the preload list, but `preload` " +
+          "only means anything once the domain is submitted at " +
+          "hstspreload.org — and removal from that list takes months. Drop " +
+          "the token or submit it.";
+      }
       return true;
     },
   },
@@ -83,6 +92,8 @@ const body = await response.text();
 const INJECTED = [
   ["JavaScript Detections (Security \u2192 Bots), /cdn-cgi/challenge-platform/",
     /__CF\$cv\$params|challenge-platform/],
+  ["AI Labyrinth (Security \u2192 Settings) \u2014 a hidden nofollow link, first in <body>",
+    /cdn-cgi\/content\?id=/],
   ["Web Analytics beacon (Analytics \u2192 Web Analytics)", /cloudflareinsights/],
   ["Speed Brain (Speed \u2192 Optimization)", /cdn-cgi\/speculation/],
 ];

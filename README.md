@@ -307,11 +307,34 @@ the page:
 | `Cross-Origin-Opener-Policy` | `same-origin` |
 
 `max-age` is a year for a reason: the preload list will not accept anything
-shorter, so `preload` on a six-month policy is a token that does nothing.
+shorter, so `preload` on a six-month policy is a token that does nothing. The
+token is left off deliberately even at a year — submitting a domain to the
+preload list commits every present and future subdomain to valid HTTPS, and
+coming back off takes months and rides browser releases. A year of HSTS
+protects everyone who has visited once; preload closes only the very first
+request on a brand-new device, which is a small gain for a decision that is
+that hard to reverse.
 
 `npm run headers` asks the deployed origin which of these actually arrived, and
 exits non-zero if any are missing — whether a header was applied is a fact
-about a host, not something this repository can know.
+about a host, not something this repository can know. It also reports what the
+host is injecting into the page, since a hash-pinned policy blocks those, which
+means they log a violation and achieve nothing.
+
+**On Cloudflare specifically**, the five it cannot get from a settings toggle go
+in one place: Rules → Transform Rules → **Modify Response Header** → Create
+rule, matching *All incoming requests*, with a **Set static** entry per header
+from the table above. `Strict-Transport-Security` and `X-Content-Type-Options`
+are the exceptions — they come from SSL/TLS → Edge Certificates → HSTS, whose
+Max Age dropdown should be 12 months with *Apply to subdomains* on, *Preload*
+off, and *No-Sniff* on. Setting either one in both places gives you two sources
+for one header and something to debug later.
+
+The non-obvious part is the CSP row. A response header carrying only
+`frame-ancestors` does not replace the page's meta policy or weaken it: two
+policies are enforced together, each in full. So it adds the one protection a
+meta tag cannot express — browsers ignore `frame-ancestors` there — while every
+hash pin in the meta policy stays exactly as strict.
 
 Two CSPs — the header and the page's own meta tag — are enforced *together*, each in
 full, so a header carrying only `frame-ancestors` adds clickjacking protection without
@@ -707,7 +730,11 @@ silently break the page:
 1. **SSL/TLS mode: Full (strict)** — or Full if GitHub hasn't issued the
    domain certificate yet. *Flexible* causes redirect loops with GitHub Pages.
 2. **Anything that rewrites HTML must stay off**: Rocket Loader, Email
-   Obfuscation, Mirage, and any minification/injection app. The page's CSP
+   Obfuscation, Mirage, AI Labyrinth, and any minification/injection app.
+   AI Labyrinth is the quiet one — it inserts a hidden `rel="nofollow"` anchor
+   as the first element inside `<body>`, before any of the page's own markup.
+   It breaks nothing, since a link is not a script, but it means the document a
+   crawler reads is not the document the build produced. The page's CSP
    pins its inline scripts by hash — a proxy that edits or injects a single
    byte of script makes the page refuse to run itself. (This is a feature:
    the same pin is what stops anyone else injecting script.) **Bot Fight
@@ -725,6 +752,18 @@ silently break the page:
    You can tell it apart from a cached copy without guessing: the `r:` value in
    `__CF$cv$params` is that request's `cf-ray`, so it is minted per request. If
    the two match, the setting is still on.
+
+   The Bots card shows it as read-only text, so the switch is the API:
+
+   ```sh
+   curl -X PATCH "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/bot_management" \
+     -H "Authorization: Bearer $CF_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data '{"enable_js": false}'
+   ```
+
+   The token needs *Zone → Bot Management → Edit*, or *Zone → Zone Settings →
+   Edit* on plans without that scope.
 
    **There is no third option.** A CSP report will name the blocked script's
    hash, and Lighthouse will suggest adding it — do not. The injected script
