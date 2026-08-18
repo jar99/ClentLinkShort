@@ -9,8 +9,11 @@
  * keeps the worst legal header readable in one readSymbol walk.
  *
  * Usage: node tools/mine-header.mjs [--force]
- * Paste the printed array over HEADER_CODE_LENGTHS in src/clent.js, then
- * regenerate the compat goldens in the same commit (beta stance).
+ *
+ * DIAGNOSTIC ONLY as of 1.0. The header code is frozen; pasting a new one
+ * would repoint every link ever made. What this is still good for is telling
+ * you how far the shipped code has drifted from the corpus — a gap that grows
+ * is an argument for a future wire version, not for editing this one.
  */
 import { shorten, HEADER_CODE_LENGTHS } from "../src/clent.js";
 import { BitReader } from "../src/bits.js";

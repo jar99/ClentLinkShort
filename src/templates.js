@@ -63,7 +63,8 @@ export const CHARSETS = Object.freeze({
  * ORDERED BY MEASURED USE, then APPEND-ONLY — the escape-coded index makes
  * the most-shared shapes cost 3 bits and the table free to grow forever.
  * (This order was set once, from the corpus, while the format was still
- * beta; from 1.0 on it never moves again. Append new templates at the end.)
+ * beta. That era is over: as of 1.0 this order never moves again, and new
+ * templates go on the end.)
  *
  * @type {ReadonlyArray<{pattern: string, slots: string[]}>}
  */

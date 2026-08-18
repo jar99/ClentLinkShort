@@ -7,7 +7,7 @@
  * wire encoding, so reordering or removing one silently repoints every link
  * already shared. Add to the end, never anywhere else; the escape-coded
  * index has no cap. (This order was set once, from the corpus, while the
- * format was still beta; from 1.0 on it never moves again.)
+ * format was still beta. That era is over: as of 1.0 it never moves again.)
  *
  * @type {readonly string[]}
  */

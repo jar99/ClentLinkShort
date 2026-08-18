@@ -1,12 +1,13 @@
 /**
  * The compatibility contract: a link, once made, decodes forever.
  *
- * BETA: while the beta runs, re-mining may replace the Huffman tables for
- * compression — when it does, regenerate the pins below deliberately, in
- * the same commit, knowing it invalidates earlier links. Declaring 1.0
- * means this file stops being regenerated: from then on the Huffman tables
- * never change, the indexed tables only grow past the pinned prefixes, and
- * future formats get the VERSION_ESCAPE envelope instead.
+ * FROZEN AT 1.0. This file is not regenerated any more. The beta spent its
+ * licence to re-mine: the tables below are the ones that ship forever, the
+ * indexed tables may only grow past the pinned prefixes, and a future format
+ * gets the VERSION_ESCAPE envelope rather than a renumbering.
+ *
+ * So a failure here is not a pin to refresh. It means a change would break
+ * links that already exist, and the change is what has to give.
  *
  * The golden payloads below were produced by the v1 encoder and committed
  * as literals. They are the actual promise: whatever else changes, these
@@ -17,7 +18,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import {
-  expand, VERSION, VERSION_ESCAPE, BitWriter, ClentError,
+  expand, VERSION, VERSION_ESCAPE, BitWriter, ClentError, HEADER_CODE_LENGTHS,
 } from "../src/clent.js";
 import { CODE_LENGTHS, TOKENS } from "../src/textcode.js";
 import { HOST_CODE_LENGTHS, SUFFIXES } from "../src/hostcode.js";
@@ -56,8 +57,15 @@ const hash = (value) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 
 test("the frozen tables are byte-for-byte what v1 shipped", () => {
-  // These four never change at all: every entry participates in a canonical
+  // These never change at all: every entry participates in a canonical
   // Huffman code, so any edit re-maps codes and repoints existing links.
+  //
+  // The header code belongs here most of all — every payload begins with one
+  // of its symbols, so a single changed length repoints every link ever made,
+  // including the ones that use none of the tables below. It went unpinned
+  // through the whole beta; declaring 1.0 is the moment to fix that.
+  assert.equal(hash([...HEADER_CODE_LENGTHS]), "d70134660e74f8f6",
+    "HEADER_CODE_LENGTHS changed");
   assert.equal(hash([...CODE_LENGTHS]), "6f65aea38c9890b5", "CODE_LENGTHS changed");
   assert.equal(hash([...TOKENS]), "75d125d5afd15e22", "TOKENS changed");
   assert.equal(hash([...HOST_CODE_LENGTHS]), "0cd172fdf782cbd5", "HOST_CODE_LENGTHS changed");

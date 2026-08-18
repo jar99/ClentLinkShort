@@ -492,14 +492,21 @@ Two details that are load-bearing:
 - URLs with `user:password@` are always stored under scheme 2. The compact forms have
   nowhere to keep userinfo and dropping it would repoint the link.
 
-**Compatibility stance (beta):** while the beta runs, re-mining may replace the
-Huffman tables and invalidate earlier links — compression wins over compatibility,
-deliberately. The machinery for the stable era is already in place: indexed tables
-(`HOSTS`, `TEMPLATES`, schemes) grow append-only and the template index chains past
-255 so the table is unbounded; a reserved leading header (`VERSION_ESCAPE`) gives
-future wire formats their own envelope; and `test/compat.test.js` pins golden
-payloads plus table hashes. Declaring 1.0 means freezing that file — after that, a
-link made on any day decodes forever.
+**Compatibility stance: frozen at 1.0.** Through the beta, re-mining was allowed to
+replace the Huffman tables and invalidate earlier links — compression won over
+compatibility, deliberately, and it is why the payloads are the size they are. That
+licence is now spent. `test/compat.test.js` pins every frozen table by hash along with
+golden payloads, and it is no longer regenerated: a failure there means a change would
+break links that already exist, and the change is what gives.
+
+What can still move: `HOSTS`, `TEMPLATES` and the scheme table grow append-only past
+their pinned prefixes, and the escape-coded index chains past 255, so the tables are
+unbounded — new sites can be covered without touching a single existing encoding. What
+cannot move: the five Huffman tables, including the header code that every payload
+begins with. A future format that wants different ones gets its own envelope through
+`VERSION_ESCAPE` rather than renumbering this one.
+
+A link made on any day from here decodes forever.
 
 ## What this does not protect against
 
@@ -677,12 +684,11 @@ silently break the page:
 3. **Caching**: a Cache Rule for `nul.im/*` with "Cache eligible" and an edge
    TTL of an hour or more serves the page from Cloudflare's edge worldwide.
    GitHub Pages only sends `max-age=600`; the rule lifts that at the edge.
-   Deploys still propagate within the TTL — worth remembering while the
-   beta's wire format is still moving: a link made on the new build can't
-   be read by a stale copy of the page, so purge the Cloudflare cache after
-   a deploy that changes the tables. Returning visitors keep an offline
-   fallback via the service worker, which otherwise prefers the network for
-   exactly this reason.
+   Deploys still propagate within the TTL. This mattered more during the beta,
+   when the tables could move and a stale copy of the page could misread a
+   newer link; with the wire frozen at 1.0 an older page decodes today's links
+   correctly. Returning visitors keep an offline fallback via the service
+   worker, which prefers the network anyway.
 
 Two things Cloudflare turns on by default are worth knowing about, because both make
 the browser do something the page itself never asked for. Neither can carry a
@@ -746,9 +752,11 @@ whole experience. Three things follow from that:
   (network-first with cache fallback, rotated per deploy by build hash), so
   the site loads and links decode with no connection whatsoever — the
   destination is inside the fragment, so nothing else was ever fetched.
-  Network-first is deliberate: the page embeds the wire tables, and during
-  the beta a stale cached copy could mis-read a link made after a deploy, so
-  a cached page is served only when the network can't answer.
+  Network-first is deliberate: the page embeds the wire tables, and a cached
+  copy from before a table change could misread a newer link. The 1.0 freeze
+  removes that hazard for the tables themselves, but serving the current page
+  when the network can answer is still the right default for everything else
+  that ships in it.
   The page also installs as a lightweight app via a web manifest; the icon is
   SVG, which Chromium-family browsers use for install (Safari falls back to
   its screenshot behaviour — a deliberate trade against shipping a raster
