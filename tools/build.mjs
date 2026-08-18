@@ -25,8 +25,10 @@ import { HOSTS } from "../src/hosts.js";
 import { TEMPLATES } from "../src/templates.js";
 
 import { ROOT } from "./bundle.js";
-const SRC = path.join(ROOT, "src");
-const DIST = path.join(ROOT, "dist");
+import { assets, dirs, origin as configuredOrigin, pageInputs } from "../clent.config.js";
+
+const SRC = path.join(ROOT, dirs.src);
+const DIST = path.join(ROOT, dirs.dist);
 
 /* -------------------------------------------------------------------------- *
  * Measured claims
@@ -55,15 +57,6 @@ async function readCorpusStats() {
  * Outside a git checkout the commit reads "untracked" rather than failing
  * the build.
  */
-/**
- * Everything the built page is made from. A commit that touches only the
- * README, the corpus or the miners cannot change a byte of the page, so it
- * must not change the stamp either.
- */
-const PAGE_INPUTS = [
-  "src", "corpus/stats.json", "package.json",
-  "tools/build.mjs", "tools/bundle.js", "tools/minify.js",
-];
 
 /**
  * Identify the build by what it contains, not by when it ran.
@@ -87,7 +80,7 @@ async function buildStamp() {
   // nothing better; inside one this is the page's own last-changed date.
   let when = new Date();
   try {
-    const paths = PAGE_INPUTS.join(" ");
+    const paths = pageInputs.join(" ");
     commit = git(`log -1 --format=%h -- ${paths}`) || git("rev-parse --short HEAD");
     const iso = git(`log -1 --format=%cI -- ${paths}`);
     if (iso) when = new Date(iso);
@@ -104,7 +97,9 @@ function substituteStats(html, stats, stamp) {
     version: stamp.version,
     commit: stamp.commit,
     built: stamp.built,
-    siteUrl: (stats.origin ?? "").replace(/#$/, ""),
+    // Falls back to the configured origin: a fork that has not measured its
+    // own corpus yet still needs a canonical URL, and "" is not one.
+    siteUrl: (stats.origin ?? configuredOrigin).replace(/#$/, ""),
     checked: stats.checked.toLocaleString("en-US"),
     roundTrip: stats.failures === 0 ? "100%" : `${(100 * stats.checked /
       (stats.checked + stats.failures)).toFixed(2)}%`,
@@ -230,8 +225,9 @@ async function main() {
 
   // The canonical site address comes from the measured origin — the one
   // place it is already written down — with the fragment marker dropped.
-  const siteUrl = new URL((stats.origin ?? "https://example.invalid/#")
-    .replace(/#$/, ""));
+  // Stats win over config: the quoted break-even lengths are only true for the
+  // prefix they were measured against, so the page must name that one.
+  const siteUrl = new URL((stats.origin ?? configuredOrigin).replace(/#$/, ""));
   const cssSource = await readFile(path.join(SRC, "style.css"), "utf8");
   const { code, files } = await bundle(path.join(SRC, "app.js"));
 
@@ -309,13 +305,12 @@ async function main() {
   // The offline pieces: manifest, icon, and the service worker stamped with
   // this build's content hash so a deploy rotates the cache.
   const buildHash = createHash("sha256").update(html).digest("hex").slice(0, 12);
-  const swSource = await readFile(path.join(SRC, "sw.js"), "utf8");
-  await writeFile(path.join(DIST, "sw.js"),
-    minifyJS(swSource.replace(/\{\{cacheVersion\}\}/g, () => buildHash)));
-  await writeFile(path.join(DIST, "manifest.webmanifest"),
-    await readFile(path.join(SRC, "manifest.webmanifest"), "utf8"));
-  await writeFile(path.join(DIST, "icon.svg"),
-    await readFile(path.join(SRC, "icon.svg"), "utf8"));
+  for (const asset of assets) {
+    let text = await readFile(path.join(SRC, asset.from), "utf8");
+    if (asset.stamp) text = text.replace(/\{\{cacheVersion\}\}/g, () => buildHash);
+    if (asset.minify) text = minifyJS(text);
+    await writeFile(path.join(DIST, asset.to ?? asset.from), text);
+  }
 
   const after = sizes("index.html", html);
   const beforeTotal = before.reduce((sum, s) => sum + s.raw, 0);

@@ -131,7 +131,12 @@ jobs:
       - id: inputs
         name: Did anything the page is built from change?
         run: |
-          paths="src corpus/stats.json package.json tools/build.mjs tools/bundle.js tools/minify.js"
+          # Asked of the config rather than restated here: this list and the
+          # build stamp's must agree, and two copies of it did not have to.
+          paths=$(node --input-type=module -e "
+            import { pageInputs } from './clent.config.js';
+            process.stdout.write(pageInputs.join(' '));
+          ")
           before="${{ github.event.before }}"
           changed=yes
           if [ "${{ github.event_name }}" = "push" ] && \

@@ -574,6 +574,7 @@ src/hosts.js      host dictionary       (data, append-only)
 src/templates.js  known URL shapes      (data, append-only)
 src/sign.js       integrity checks and signatures
 src/*.d.ts        types, one per module, pinned by test/exports.test.js
+clent.config.js   origin, directories, assets, ports — what a fork edits
 src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
@@ -729,6 +730,12 @@ identified from, collected without touching the page.
   premise is that nothing observes the people using it. If deeper insight is
   ever wanted, it comes from Cloudflare's edge, never from the visitor's
   browser.
+
+**Configuring a fork.** `clent.config.js` holds the values a fork actually changes —
+the site origin, the source and output directories, the assets copied beside the page,
+and the ports the dev server and browser suite use. Every one has a working default, so
+a clone builds unchanged; point `origin` somewhere else and the canonical link, OpenGraph
+URL, sitemap, robots.txt, security.txt and CNAME all follow it.
 
 **Deploying a fork on a different domain:** the links themselves adapt
 automatically — the prefix comes from `location` at runtime. Only the *prose*

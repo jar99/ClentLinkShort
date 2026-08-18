@@ -13,12 +13,13 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ports } from "../clent.config.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const dir = path.resolve(ROOT, args.find((a) => !a.startsWith("--")) ?? "src");
 const portAt = args.indexOf("--port");
-const port = Number(portAt === -1 ? process.env.PORT || 8000 : args[portAt + 1]);
+const port = Number(portAt === -1 ? process.env.PORT || ports.serve : args[portAt + 1]);
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",

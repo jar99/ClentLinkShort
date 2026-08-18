@@ -20,10 +20,11 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { shorten } from "../src/clent.js";
+import { ports } from "../clent.config.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIR = process.argv[2] ?? "dist";
-const PORT = 8781;
+const PORT = Number(process.env.PORT || ports.test);
 const BASE = `http://localhost:${PORT}/`;
 
 let chromium;

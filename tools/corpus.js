@@ -10,6 +10,7 @@ import path from "node:path";
 
 import { analyze, expand, parse, stripTracking } from "../src/clent.js";
 import { ROOT } from "./bundle.js";
+import { origin as configuredOrigin } from "../clent.config.js";
 
 export const CORPUS_FILE = path.join(ROOT, "corpus", "urls.txt.br");
 export const RANKS_FILE = path.join(ROOT, "corpus", "ranks.txt.br");
@@ -35,7 +36,9 @@ export const hasRanks = () => existsSync(RANKS_FILE);
  * domain the site is served from, so it is stated rather than assumed away.
  * This is also where the build learns the site's canonical address.
  */
-export const DEFAULT_ORIGIN = "https://nul.im/#";
+export const DEFAULT_ORIGIN = configuredOrigin.endsWith("#")
+  ? configuredOrigin
+  : configuredOrigin + "#";
 
 /** Stream lines out of a brotli-compressed text file. */
 export async function* readLines(file, limit = Infinity) {
