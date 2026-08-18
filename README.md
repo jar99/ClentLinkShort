@@ -16,7 +16,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 153 tests, no dependencies
+npm test              # 158 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run corpus:get    # fetch the corpus (a release asset, not committed)
@@ -578,7 +578,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             153 tests on node:test
+test/             158 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -596,6 +596,7 @@ test/             153 tests on node:test
   corpus          the real-URL corpus, one shared scan
   realworld       links in the shapes people actually paste
   optimality      brute-force check that no smaller encoding existed
+  contrast        every text colour against WCAG AA, both themes
   minify          that the minified library computes what the source computes
   readme          this file's quoted numbers against corpus/stats.json
 

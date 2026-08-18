@@ -11,7 +11,7 @@
   --panel:     #ffffff;
   --ink:       #17160f;
   --ink-soft:  #56534a;
-  --ink-faint: #86827a;
+  --ink-faint: #6f6b63;
   --line:      #e4e1d7;
   --line-soft: #eeebe3;
   --accent:    #b4471c;
@@ -40,7 +40,7 @@
     --panel:     #1b1b17;
     --ink:       #eeece2;
     --ink-soft:  #a5a196;
-    --ink-faint: #78746a;
+    --ink-faint: #928e85;
     --line:      #2c2c24;
     --line-soft: #24241d;
     --accent:    #e2794a;
@@ -205,50 +205,83 @@ textarea::placeholder { color: var(--ink-faint); }
   outline-offset: 2px;
 }
 
+/* Two columns that become one when there is no room for two. A wrapping
+   flexbox put each option wherever the last one ended, so nothing lined up
+   with anything below it. */
 .opts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 28px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 4px 28px;
   margin-top: 16px;
 }
 
+/* control | text, with the hint under the text rather than under the box. */
 .opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 9px;
   font-size: .9rem;
-  cursor: pointer;
+  padding: 4px 0;
   user-select: none;
 }
 
+/* The label wraps the box and its title so the whole row is tappable; 32px is
+   the floor the browser suite enforces for a finger. */
+.opt-main {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 9px;
+  min-height: 32px;
+  align-content: center;
+  cursor: pointer;
+}
+
+.opt em {
+  grid-column: 1 / -1;
+  padding-left: 27px;
+  font-style: normal;
+  font-size: .8rem;
+  color: var(--ink-faint);
+}
+
 .opt input {
-  margin: 3px 0 0;
+  grid-column: 1;
+  /* Baseline alignment does not apply to a replaced element, so nudge the box
+     onto the text's baseline by hand. */
+  transform: translateY(2px);
   accent-color: var(--accent);
   width: 18px;
   height: 18px;
-  flex: 0 0 auto;
+  cursor: pointer;
 }
 
-.opt select {
-  flex: 0 0 auto;
+/* The select reads label-then-control like every other field on the page; as
+   a flex item beside its text it rendered before its own name. */
+.opt-choice { grid-template-columns: 1fr; }
+
+.opt-choice select {
+  grid-column: 1;
+  justify-self: start;
+  margin-top: 3px;
   font: inherit;
   font-size: .85rem;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  padding: 1px 4px;
+  padding: 3px 6px;
 }
 
-/* A bigger hit area than the box itself, without moving anything visually. */
-.opt { padding: 4px 0; min-height: 32px; }
+.opt-choice > label,
+.opt-choice em { grid-column: 1; padding-left: 0; }
 
-.opt em {
-  display: block;
-  font-style: normal;
-  font-size: .8rem;
-  color: var(--ink-faint);
-}
+/* A select is its own target, so it gets the height directly. */
+.opt-choice select { min-height: 32px; }
+
+.error.is-shown { display: block; }
 
 .error {
   margin: 16px 0 0;

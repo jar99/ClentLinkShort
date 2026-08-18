@@ -122,7 +122,7 @@
 
   <section class="card tool">
     <noscript>
-      <p class="error" style="display:block">
+      <p class="error is-shown">
         JavaScript is off, so the box below won't do anything. Everything here runs
         in your browser and there's no server to fall back on. The rest of the page
         explains how it works and reads fine without it.
@@ -132,27 +132,48 @@
     <textarea id="url" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"
       placeholder="https://example.com/a/very/long/path?with=parameters"></textarea>
 
+    <!--
+      Each option is its own grid cell rather than a wrapping flex item, so the
+      four line up in two columns instead of drifting to wherever the previous
+      one happened to end. The hint is a sibling described by the control, not
+      part of its label: a screen reader announcing "Remove tracking parameters"
+      and then, separately, the explanation, reads far better than one run-on
+      name — and it lets the select carry a real <label> instead of the
+      aria-label that was papering over one. The label still wraps the box and
+      its title, so the tap target stays the whole row rather than an 18px
+      square, which is the other half of the same problem.
+    -->
     <div class="opts">
-      <label class="opt">
-        <input type="checkbox" id="clean" checked>
-        <span>Remove tracking parameters<em id="clean-note">utm_*, fbclid, gclid and similar</em></span>
-      </label>
-      <label class="opt">
-        <input type="checkbox" id="preview">
-        <span>Preview link<em>shows the destination instead of going there</em></span>
-      </label>
-      <label class="opt">
-        <input type="checkbox" id="tamper" checked>
-        <span>Tamper check<em>4 characters; catches a link that got clipped or edited</em></span>
-      </label>
-      <label class="opt">
-        <select id="style" aria-label="Link style">
+      <div class="opt">
+        <label class="opt-main">
+          <input type="checkbox" id="clean" checked aria-describedby="clean-note">
+          <span>Remove tracking parameters</span>
+        </label>
+        <em id="clean-note">utm_*, fbclid, gclid and similar</em>
+      </div>
+      <div class="opt">
+        <label class="opt-main">
+          <input type="checkbox" id="preview" aria-describedby="preview-note">
+          <span>Preview link</span>
+        </label>
+        <em id="preview-note">shows the destination instead of going there</em>
+      </div>
+      <div class="opt">
+        <label class="opt-main">
+          <input type="checkbox" id="tamper" checked aria-describedby="tamper-note">
+          <span>Tamper check</span>
+        </label>
+        <em id="tamper-note">4 characters; catches a link that got clipped or edited</em>
+      </div>
+      <div class="opt opt-choice">
+        <label for="style">Link style</label>
+        <select id="style" aria-describedby="style-note">
           <option value="plain" selected>Standard</option>
           <option value="dense">Dense</option>
           <option value="emoji">Emoji</option>
         </select>
-        <span>Link style<em id="style-note">Base64url; survives every app and clipboard</em></span>
-      </label>
+        <em id="style-note">Base64url; survives every app and clipboard</em>
+      </div>
     </div>
 
     <details class="advanced">
