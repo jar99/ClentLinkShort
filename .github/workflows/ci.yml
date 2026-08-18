@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -48,6 +49,7 @@ jobs:
 
   types:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -62,6 +64,7 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -70,7 +73,20 @@ jobs:
 
       # The only place a dependency appears, and it stays out of the library.
       - run: npm install --no-save playwright@1
-      - run: npx playwright install --with-deps chromium
+      # --with-deps runs apt-get, which has now wedged twice on a mirror and
+      # sat there until the job timed out. A bare retry cannot help with a
+      # hang, so bound each attempt and retry the ones that never return.
+      - name: Install Chromium
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 300 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::playwright install attempt $attempt failed or timed out; retrying"
+            sleep 15
+          done
+          echo "::error::playwright install did not complete after three attempts"
+          exit 1
 
       # Builds from the committed corpus stats; no need to re-measure here.
       - run: node tools/build.mjs
@@ -92,6 +108,7 @@ jobs:
     needs: [test, types, browser]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: write
