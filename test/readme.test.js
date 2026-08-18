@@ -59,6 +59,23 @@ test("the README mode shares match the measured stats", { skip }, async () => {
   }
 });
 
+test("the README lists every test file", async () => {
+  // The layout block drifted to "134 tests" and three missing suites before
+  // anyone noticed, because nothing checked it. Names are cheap to verify
+  // even though the count is not, so at least the listing stays honest.
+  const readme = await readFile(path.join(ROOT, "README.md"), "utf8");
+  const { readdirSync } = await import("node:fs");
+  const suites = readdirSync(path.join(ROOT, "test"))
+    .filter((file) => file.endsWith(".test.js"))
+    .map((file) => file.replace(/\.test\.js$/, ""));
+  const block = readme.match(/^test\/ +\d+ tests on node:test\n([\s\S]*?)\n\n/m);
+  assert.ok(block, "the README should carry the test layout block");
+  for (const suite of suites) {
+    assert.match(block[1], new RegExp(`^ {2}${suite}\\b`, "m"),
+      `README's test listing is missing "${suite}"`);
+  }
+});
+
 test("the README template count matches the shipped table", async () => {
   const readme = await readFile(path.join(ROOT, "README.md"), "utf8");
   const { TEMPLATES } = await import("../src/templates.js");

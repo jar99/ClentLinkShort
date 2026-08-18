@@ -5,7 +5,7 @@
  * The page is a redirector: the time between a click and the browser knowing
  * where to go is the entire user experience. Every separate request is a round
  * trip added to that, so the build inlines the module graph, the stylesheet and
- * the icon into one HTML file. A visitor makes exactly one request, and the
+ * the icon into one HTML file. Resolving a link takes exactly one request, and the
  * redirect fires as soon as it lands.
  *
  * The bundler is intentionally tiny and only understands this project's own
@@ -296,7 +296,7 @@ async function main() {
     `${(100 * after.raw / beforeTotal).toFixed(0)}% of source`);
   console.log(`  ${"gzip".padEnd(12)} ${kb(after.gz)}`);
   console.log(`  ${"brotli".padEnd(12)} ${kb(after.br)}`);
-  console.log(`\n  1 request, ${after.br} bytes over the wire with brotli.`);
+  console.log(`\n  1 request on the critical path, ${after.br} bytes over the wire with brotli.`);
 }
 
 main().catch((error) => {

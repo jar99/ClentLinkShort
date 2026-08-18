@@ -16,7 +16,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 152 tests, no dependencies
+npm test              # 153 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run validate      # round-trip the whole corpus
@@ -521,7 +521,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             134 tests on node:test
+test/             153 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -530,11 +530,14 @@ test/             134 tests on node:test
   robustness      size caps, decompression bombs, unassigned symbols
   property        generated URLs, truncation, bit-flips, random payloads
   templates       shape matching, near-miss safety
+  transport       dense and emoji spellings, grammar collisions
   sign            checksums, signatures, tamper detection
-  tables          data-table wire invariants in one place
+  tables          data-table wire invariants, incl. host-slot charsets
+  compat          golden payloads and table hashes: links decode forever
   exports         .d.ts vs runtime export parity, both directions
   qr              matrices vs a reference implementation, capacity edges
   corpus          the real-URL corpus, one shared scan
+  realworld       links in the shapes people actually paste
   optimality      brute-force check that no smaller encoding existed
   minify          that the minified library computes what the source computes
   readme          this file's quoted numbers against corpus/stats.json
@@ -564,9 +567,13 @@ whole experience. The build inlines the module graph, stylesheet and icon into o
 file.
 
 ```
-Source  ~172 kB across 19 files (over half of it the mined tables and templates)
-Built   ~95 kB raw · ~30 kB gzip · ~26 kB brotli · 1 request
+Source  ~189 kB across 19 files (over half of it the mined tables and templates)
+Built   ~105 kB raw · ~33 kB gzip · ~29 kB brotli · 1 request on the critical path
 ```
+
+"One request" is the document: everything the codec needs to resolve a link is
+inlined, so a redirect never waits on a second round trip. The manifest and the
+service worker load after that and block nothing.
 
 The minifier is a tokeniser, not a pile of regexes: it tracks strings, template
 literals with nested `${}`, regex literals and both comment forms, and keeps newlines
