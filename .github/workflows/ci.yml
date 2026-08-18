@@ -63,20 +63,23 @@ jobs:
 
       # The only place a dependency appears, and it stays out of the library.
       - run: npm install --no-save playwright@1
-      # --with-deps runs apt-get, which has now wedged twice on a mirror and
-      # sat there until the job timed out. A bare retry cannot help with a
-      # hang, so bound each attempt and retry the ones that never return.
+      # The hang was never the browser download — it is apt-get, which
+      # --with-deps shells out to, wedging on a mirror until the job dies.
+      # The runner image already carries what Chromium needs, so the plain
+      # install is the happy path and apt only appears as a fallback for a
+      # runner that turns out to be missing something. Each attempt is bounded
+      # because a retry cannot help with a hang: the command never exits.
       - name: Install Chromium
         run: |
-          for attempt in 1 2 3; do
-            if timeout 300 npx playwright install --with-deps chromium; then
+          for attempt in 1 2; do
+            if timeout 300 npx playwright install chromium; then
               exit 0
             fi
-            echo "::warning::playwright install attempt $attempt failed or timed out; retrying"
+            echo "::warning::browser download attempt $attempt failed; retrying"
             sleep 15
           done
-          echo "::error::playwright install did not complete after three attempts"
-          exit 1
+          echo "::warning::falling back to --with-deps, which may need apt"
+          timeout 420 npx playwright install --with-deps chromium
 
       # Builds from the committed corpus stats; no need to re-measure here.
       - run: node tools/build.mjs
