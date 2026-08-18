@@ -744,6 +744,14 @@ requests" is only true of the page:
   which asks the browser to prefetch same-origin links. Harmless here; disable it under
   Speed → Optimization if you want the page's network behaviour to be exactly what the
   source says.
+- **The service worker caches whatever Cloudflare injected.** The worker stores
+  the HTML as it was served, injected challenge script included, so turning the
+  injection off does not clear it from a returning visitor's copy until the
+  cache rotates on the next deploy. This is also the likeliest reading of a
+  Lighthouse report that lists `sw.js` under CSP issues: a locally-built page
+  with the worker active and serving produces no inspector issues at all, so
+  what is being blocked in that report arrived with the injection, attributed
+  to the worker that replayed it.
 - **Network Error Logging** is advertised via `NEL` and `Report-To` headers pointing at
   `a.nel.cloudflare.com`, so browsers report failed requests to Cloudflare. Reports
   carry the request URL, which never includes the fragment.
@@ -789,6 +797,65 @@ your domain, re-measure and commit:
 node tools/validate-corpus.mjs --origin https://your.domain/path/#
 git add corpus/stats.json && git commit -m "Re-measure for our origin"
 ```
+
+## Being findable
+
+Everything on this list is done and checkable against the deployed page; what is
+not done is at the end, because it is the part that actually matters.
+
+- **One canonical URL.** `<link rel="canonical">`, `og:url` and the sitemap all
+  name the same address, `http` 301s to `https`, and there is no `www` record to
+  split the domain in two.
+- **A title and description written for the results page**, not for a keyword.
+  The description is kept under ~155 characters: past that Google truncates, and
+  half a sentence in the results reads worse than a shorter whole one.
+- **Nothing that blocks a crawler.** No `noindex`, no `X-Robots-Tag`,
+  `robots.txt` allows everything and points at the sitemap. Cloudflare prepends
+  its own AI-crawler block to that file — `GPTBot`, `Google-Extended` and
+  friends — which does not affect Google Search: `Google-Extended` governs
+  Gemini training data, not indexing or ranking.
+- **`lastmod` in the sitemap**, taken from the commit that last changed anything
+  the page is built from rather than from the clock, so a rebuild that changed
+  nothing does not claim otherwise.
+- **The content is in the HTML.** Every word of the explainer is served markup,
+  not something JavaScript assembles, so it does not depend on a crawler
+  choosing to render.
+- **The first heading is the page's own.** The frame-refusal notice and the
+  redirect card sit above it in the document and both ship `hidden`, so a
+  crawler, a reader-mode parser and the accessibility tree all skip them
+  instead of meeting "This page can't run in a frame" first.
+- **Structured data**: `WebApplication` (with licence and repository) and
+  `FAQPage`. The FAQ markup is valid and worth keeping for machine readers, but
+  it no longer produces rich results — since August 2023 Google shows FAQ rich
+  results only for well-known health and government sites.
+- **Prose declares its own language.** The interface is translated and the
+  explainer is not, so a Spanish interface leaves `<html lang="es">` over
+  English prose. Each untranslated block carries `lang="en"` itself, and the
+  browser suite fails if new prose arrives without it.
+
+### If the page is not showing up in Google
+
+None of the above makes Google index a site; it only removes reasons not to.
+Two things do, and neither is in this repository:
+
+1. **Verify the domain in Search Console and submit the sitemap.** Google has to
+   find the site before it can rank it, and a new domain with no inbound links
+   has nothing pointing at it to find. Search Console also answers the question
+   directly — Page Indexing tells you whether the URL is indexed, excluded, or
+   never crawled, which is not something you can infer from an empty
+   `site:` search.
+2. **Earn a link or two from somewhere Google already crawls.** This is the slow
+   part and there is no technical substitute for it.
+
+Be realistic about the category, too: link shorteners are heavily abused, so a
+brand-new one-page shortener on a new domain starts from a sceptical position.
+What answers that scepticism is Google's own "who, how and why" test — is it
+self-evident who made this, how it works, and why it exists? The how is
+answered at length on the page and the why is the entire pitch. The **who**
+currently is not: the repository, licence and author appear only inside the
+JSON-LD, which no visitor sees. Making that visible is the single largest
+remaining trust signal, and it is a deliberate choice rather than an oversight
+— the visible source links were removed on request.
 
 ## Loading, no-JS and mobile
 

@@ -85,6 +85,18 @@ try {
     pristine === "" && errorShown === 0, `value=${JSON.stringify(pristine)}`);
   check("the page shows no visible GitHub link",
     await page.locator("a[href*='github.com']").count() === 0);
+  // Hidden markup is what a crawler and the accessibility tree skip, so the
+  // first heading either meets must be the page's own — not the frame-refusal
+  // notice, which sits above it in the document.
+  const firstHeading = await page.evaluate(() =>
+    [...document.querySelectorAll("h1")]
+      // checkVisibility walks ancestors: a heading inside a hidden <aside> is
+      // itself display:block, which is how a naive test passes on a page a
+      // crawler would read quite differently.
+      .find((h) => h.checkVisibility())
+      ?.textContent?.trim());
+  check("the first visible heading is the page's own",
+    firstHeading === "The link shortener that stores\u00a0nothing.", firstHeading);
 
   const LONG = "https://www.theguardian.com/world/2024/jan/15/some-long-article" +
     "-title-here?utm_source=twitter&utm_medium=social";
@@ -251,9 +263,18 @@ try {
           framed: document.documentElement.dataset.framed === "1",
           destination: document.getElementById("r-dest")?.textContent ?? "",
           go: document.getElementById("r-go")?.getAttribute("href") ?? "",
+          // The notice ships hidden so crawlers and the accessibility tree
+          // skip it; a real frame is the one thing that must reveal it.
+          noticeShown: (() => {
+            const notice = document.getElementById("framed");
+            return !!notice && !notice.hidden &&
+              getComputedStyle(notice).display !== "none";
+          })(),
         }))
       : null;
     check("a framed page marks itself framed", state?.framed === true, JSON.stringify(state));
+    check("the refusal notice is shown inside a frame, and only there",
+      state?.noticeShown === true);
     check("a framed page decodes nothing and offers no destination to click",
       state !== null && state.destination === "" && state.go === "",
       JSON.stringify(state));
@@ -562,6 +583,45 @@ try {
         after.note === "Base64url; sobrevive a cualquier aplicación y portapapeles",
         `copy=${after.copy} note=${after.note}`);
       check("a left-to-right language keeps dir=ltr", after.dir === "ltr", after.dir);
+
+      // The catalogues cover the controls, not the explainer. With the
+      // interface in Spanish, <html lang> says "es", so any prose still in
+      // English has to say so itself or it is mislabelled for a screen reader
+      // and for every translation engine that reads the page. This is the
+      // check that catches new prose arriving without its lang.
+      const mislabelled = await page.evaluate(() => {
+        const blocks = "#create p, #create li, #create dt, #create dd, " +
+          "#create h1, #create h2, #create h3, #create figcaption";
+        return [...document.querySelectorAll(blocks)]
+          .filter((el) => el.checkVisibility())
+          // Elements the catalogue owns are translated by definition, as are
+          // the ones the app fills with decoded values rather than prose.
+          .filter((el) => !el.closest("[data-t]") && !el.querySelector("[data-t]"))
+          .filter((el) => !el.closest("[data-t-dynamic]"))
+          .filter((el) => (el.textContent ?? "").trim().length > 40)
+          .filter((el) => el.closest("[lang]")?.getAttribute("lang") !== "en")
+          .map((el) => (el.textContent ?? "").trim().slice(0, 48));
+      });
+      check("untranslated prose declares its own language",
+        mislabelled.length === 0, mislabelled.join(" | "));
+
+      // The verdict is the maker's actual answer. It used to be built from
+      // English fragments in app.js, so a Spanish page reported its result in
+      // English — the one line someone was reading for.
+      // A verdict is already on screen from an earlier block, so wait for this
+      // one to replace it rather than for "some text", which is true already.
+      const staleVerdict = await page.textContent("#verdict");
+      await page.fill("#url",
+        "https://www.theguardian.com/world/2026/aug/18/a-long-article-title" +
+        "?utm_source=twitter&utm_medium=social");
+      await page.waitForFunction((stale) =>
+        (document.getElementById("verdict")?.textContent ?? "") !== stale,
+        staleVerdict, { timeout: 5000 });
+      const verdict = await page.textContent("#verdict");
+      check("the maker's verdict is translated, not just its labels",
+        /caracteres más cort|misma longitud|caracteres más largo/.test(verdict ?? ""),
+        verdict ?? "");
+
       await page.selectOption("#lang", "en");
     }
 

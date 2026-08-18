@@ -49,6 +49,7 @@ export const MESSAGES_EN = Object.freeze({
   "err.damaged": "This link is damaged.",
   "err.damagedAddress": "This link is damaged — its address isn't valid.",
   "err.wrong": "Something went wrong opening this link.",
+  "err.update": "Something went wrong — try editing the URL.",
   "err.notEncoded": "That couldn't be encoded.",
 
   // Risk reasons, shown on the interstitial.
@@ -79,6 +80,16 @@ export const MESSAGES_EN = Object.freeze({
   "m.styleNotePlain": "Base64url; survives every app and clipboard",
   "m.styleNoteDense": "≈7% shorter with URL punctuation; some chat apps cut links at it",
   "m.styleNoteEmoji": "a quarter fewer characters to look at; some apps mangle emoji",
+  "m.shorter": "{saved} characters shorter",
+  "m.shorterCleaned1": "{saved} characters shorter, after removing 1 tracking parameter",
+  "m.shorterCleaned": "{saved} characters shorter, after removing {removed} tracking parameters",
+  "m.sameLength": "Exactly the same length.",
+  "m.longer":
+    "{longer} characters longer. This URL is already short enough that carrying " +
+    "it whole costs more than it saves.",
+  "m.willWarn": "Anyone opening this link will see a warning first: {reasons}",
+  "m.veryLong":
+    "At {length} characters, some chat apps and older servers may truncate this link.",
   "m.copy": "Copy",
   "m.copied": "Copied",
   "m.qr": "QR",

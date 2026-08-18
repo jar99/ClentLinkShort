@@ -44,6 +44,11 @@ test("placeholders survive translation", () => {
     "risk.userinfo": ["host"],
     "risk.impersonation": ["brand", "host"],
     "risk.port": ["port"],
+    "m.shorter": ["saved"],
+    "m.shorterCleaned": ["saved", "removed"],
+    "m.longer": ["longer"],
+    "m.willWarn": ["reasons"],
+    "m.veryLong": ["length"],
   };
   for (const [code, messages] of Object.entries(CATALOGUES)) {
     for (const [key, names] of Object.entries(withValues)) {

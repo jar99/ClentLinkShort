@@ -494,19 +494,17 @@ function setUpCreate(prefill = "") {
     const verdict = $("verdict");
     const saved = before - after;
     if (saved > 0) {
-      verdict.textContent = `${saved} characters shorter` +
-        (analysis.removed.length
-          ? `, after removing ${analysis.removed.length} tracking parameter` +
-            `${analysis.removed.length === 1 ? "" : "s"}`
-          : "");
+      const stripped = analysis.removed.length;
+      verdict.textContent = stripped
+        ? t(stripped === 1 ? "m.shorterCleaned1" : "m.shorterCleaned",
+          { saved, removed: stripped })
+        : t("m.shorter", { saved });
       verdict.className = "verdict win";
     } else if (saved === 0) {
-      verdict.textContent = "Exactly the same length.";
+      verdict.textContent = t("m.sameLength");
       verdict.className = "verdict";
     } else {
-      verdict.textContent =
-        `${-saved} characters longer. This URL is already short enough that ` +
-        "carrying it whole costs more than it saves.";
+      verdict.textContent = t("m.longer", { longer: -saved });
       verdict.className = "verdict lose";
     }
 
@@ -516,17 +514,22 @@ function setUpCreate(prefill = "") {
     const notes = [];
     const risk = assess(analysis.url);
     if (risk.reasons.length) {
-      notes.push("Anyone opening this link will see a warning first: " +
-        risk.reasons.map((reason) => reason.message).join(" "));
+      notes.push(t("m.willWarn", {
+        reasons: risk.reasons.map((reason) => has(`risk.${reason.code}`)
+          ? t(`risk.${reason.code}`, reason.values)
+          : reason.message).join(" "),
+      }));
     }
     if (link.length > 2000) {
-      notes.push(`At ${link.length} characters, some chat apps and older ` +
-        "servers may truncate this link.");
+      notes.push(t("m.veryLong", { length: link.length }));
     }
     document.querySelectorAll(".maker-note").forEach((el) => el.remove());
     for (const text of notes) {
       const note = document.createElement("p");
       note.className = "maker-note";
+      // Its text came through t(), so it is translated even though no
+      // catalogue key names it — see data-t-dynamic in index.html.
+      note.dataset.tDynamic = "";
       note.textContent = text;
       verdict.after(note);
     }
@@ -537,7 +540,7 @@ function setUpCreate(prefill = "") {
   // A rejection out of an async listener is otherwise unhandled: the page
   // would look fine and just silently stop updating.
   const safeUpdate = () => update().catch(() => {
-    error.textContent = "Something went wrong — try editing the URL.";
+    error.textContent = t("err.update");
     error.hidden = false;
   });
 

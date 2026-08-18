@@ -269,10 +269,15 @@ async function main() {
   await writeFile(path.join(DIST, ".nojekyll"), "");
   await writeFile(path.join(DIST, "robots.txt"),
     `User-agent: *\nAllow: /\nSitemap: ${siteUrl.href}sitemap.xml\n`);
+  // lastmod tells a crawler whether a recrawl is worth its time. It is the
+  // build stamp — the commit that last touched anything the page is built
+  // from — rather than the clock, so it stays honest: a rebuild that changed
+  // nothing does not claim the page changed.
   await writeFile(path.join(DIST, "sitemap.xml"),
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    `  <url><loc>${siteUrl.href}</loc></url>\n` +
+    `  <url><loc>${siteUrl.href}</loc>` +
+    `<lastmod>${stamp.when.toISOString().slice(0, 10)}</lastmod></url>\n` +
     "</urlset>\n");
 
   // Where to send a security report. A project whose pitch is "we handle

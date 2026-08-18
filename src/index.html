@@ -17,7 +17,11 @@
 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src data: 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types clent-sw">
 <title>Clent — private, open-source link shortener</title>
-<meta name="description" content="A free, open-source link shortener that stores nothing. The destination is compressed into the link itself — no database, no accounts, no tracking, no record of where any link goes, and links never expire.">
+<!--
+  Kept under ~155 characters: past that Google truncates, and a description
+  that ends mid-sentence in the results is worse than a shorter complete one.
+-->
+<meta name="description" content="A free, open-source link shortener that stores nothing. The destination is compressed into the link itself, so links never expire and nothing is tracked.">
 <link rel="canonical" href="{{siteUrl}}">
 <meta property="og:title" content="Clent — private, open-source link shortener">
 <meta property="og:description" content="The destination is compressed into the link itself. No database, no accounts, no tracking — and the link never expires.">
@@ -38,26 +42,33 @@
   // they never saw. frame-ancestors is the right fix but it only works as a
   // header, which a static host may not be able to send — so the page also
   // declines to be framed by itself, which works everywhere.
-  if (self !== top) {
-    document.documentElement.dataset.framed = "1";
-  }
-
+  var framed = self !== top;
   // Choose the view before first paint so the creator UI never flashes in
   // front of someone who only clicked a link. "#s=…" is the one fragment
   // that is not a payload: the bookmarklet's "open the maker prefilled".
-  // The hidden attribute moves with the choice so only one <main> is ever
-  // exposed to the accessibility tree, as the spec asks.
-  if (location.hash.length > 1 && !location.hash.startsWith("#s=")) {
-    document.documentElement.dataset.mode = "redirect";
-    // Swap the views as each one arrives, not when the document ends. The
-    // maker, the explainer and the FAQ below the redirect card are most of
-    // this file, and someone opening a link waits for none of it.
-    new MutationObserver((_, observer) => {
+  var opening = location.hash.length > 1 && location.hash.slice(0, 3) !== "#s=";
+  if (framed) document.documentElement.dataset.framed = "1";
+  if (opening) document.documentElement.dataset.mode = "redirect";
+
+  // Every view ships hidden and is revealed as its markup arrives, rather
+  // than at DOMContentLoaded. Two reasons, and they pull the same way:
+  //
+  //   - the maker, the explainer and the FAQ below the redirect card are most
+  //     of this file, and someone opening a link waits for none of it;
+  //   - what ships hidden is what a crawler, a reader-mode parser and the
+  //     accessibility tree all skip, so the first heading they meet is the
+  //     page's own rather than "This page can't run in a frame".
+  //
+  // Only one <main> is ever exposed at a time, as the spec asks.
+  if (framed || opening) {
+    new MutationObserver(function (_, observer) {
+      var notice = document.getElementById("framed");
       var view = document.getElementById("redirect");
       var maker = document.getElementById("create");
-      if (view) view.hidden = false;
-      if (maker) maker.hidden = true;
-      if (view && maker) observer.disconnect();
+      if (framed && notice) notice.hidden = false;
+      if (opening && view) view.hidden = false;
+      if (opening && maker) maker.hidden = true;
+      if ((!framed || notice) && (!opening || (view && maker))) observer.disconnect();
     }).observe(document.documentElement, { childList: true, subtree: true });
   }
 </script>
@@ -67,7 +78,7 @@
 <body>
 
 <!-- ─────────────────────────────  redirect view  ───────────────────────── -->
-<aside id="framed" aria-label="Blocked">
+<aside id="framed" aria-label="Blocked" hidden>
   <div class="card center">
     <h1>This page can't run in a frame</h1>
     <p class="muted">
@@ -110,7 +121,13 @@
 <!-- ─────────────────────────────   create view   ───────────────────────── -->
 <main id="create" aria-label="Make a link">
 
-  <header class="hero">
+  <!--
+    lang="en" on everything the catalogues do not cover. i18n.js sets
+    <html lang> to the interface language, and prose that is still English
+    under lang="es" is a lie to a screen reader and to a translation engine
+    alike. Each of these carries its own language instead; see README.
+  -->
+  <header class="hero" lang="en">
     <div class="wordmark">
       <svg viewBox="0 0 24 24" aria-hidden="true" width="19" height="19" fill="none"
            stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
@@ -183,7 +200,13 @@
       </div>
     </div>
 
-    <details class="advanced">
+    <!--
+      data-t-dynamic marks text the app writes through t() rather than from a
+      data-t key: translated, but not by translate(). It is what tells the
+      browser suite's language check the difference between "translated at
+      runtime" and "English nobody has labelled".
+    -->
+    <details class="advanced" lang="en">
       <summary>Sign this link with a passphrase</summary>
       <p class="muted small">
         Adds 18 characters. Anyone opening the link needs the same passphrase to
@@ -221,9 +244,9 @@
           <span class="bar-num" id="len-short">0</span>
         </div>
       </div>
-      <p class="verdict" id="verdict"></p>
+      <p class="verdict" id="verdict" data-t-dynamic></p>
     </div>
-    <p class="muted small">
+    <p class="muted small" lang="en">
       Shorten from anywhere: drag
       <a id="bookmarklet" href="#" draggable="true">Shorten this page</a>
       to your bookmarks bar — dragging is the point, clicking it here does
@@ -234,7 +257,7 @@
     </p>
   </section>
 
-  <section class="card note-card" aria-labelledby="h-shorter">
+  <section class="card note-card" aria-labelledby="h-shorter" lang="en">
     <h2 id="h-shorter">Is it actually shorter?</h2>
     <p>
       For most links people share, yes. The destination compresses to
@@ -264,7 +287,7 @@
   </section>
 
   <!-- ────────────────────  what the encoder decided  ──────────────────── -->
-  <section id="breakdown" aria-labelledby="h-breakdown" hidden>
+  <section id="breakdown" aria-labelledby="h-breakdown" lang="en" hidden>
     <h2 id="h-breakdown">What's in the link</h2>
 
     <div class="card">
@@ -279,7 +302,7 @@
     </div>
   </section>
 
-  <section aria-labelledby="h-known">
+  <section aria-labelledby="h-known" lang="en">
     <h2 id="h-known">Popular sites compress even harder</h2>
     <p>
       Most shared links are one site's pattern with an ID in it.
@@ -297,7 +320,7 @@
   </section>
 
   <!-- ──────────────────────────  how it works  ────────────────────────── -->
-  <section aria-labelledby="h-how">
+  <section aria-labelledby="h-how" lang="en">
     <h2 id="h-how">How it works</h2>
     <p>
       The URL is compressed with codes measured from real links — common
@@ -314,7 +337,7 @@
     </p>
   </section>
 
-  <section aria-labelledby="h-safety">
+  <section aria-labelledby="h-safety" lang="en">
     <h2 id="h-safety">Safety</h2>
     <p>
       Any redirector can be dressed up as a trap, so this one is careful:
@@ -339,7 +362,7 @@
   </section>
 
   <!-- ───────────────────────────   limits   ──────────────────────────── -->
-  <section aria-labelledby="h-limits">
+  <section aria-labelledby="h-limits" lang="en">
     <h2 id="h-limits">Limits</h2>
     <ul class="limits">
       <li><b>Short URLs stay shorter than any link to here.</b> Below about
@@ -355,7 +378,7 @@
     </p>
   </section>
 
-  <section aria-labelledby="h-faq">
+  <section aria-labelledby="h-faq" lang="en">
     <h2 id="h-faq">Questions</h2>
     <dl class="faq">
       <dt>Do the links expire?</dt>
@@ -383,7 +406,7 @@
 </main>
 
 <footer>
-  <p>
+  <p lang="en">
     No cookies, no localStorage, no analytics. Decoding a link takes one
     request, for this page itself — everything above runs in your browser.
   </p>

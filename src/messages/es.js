@@ -42,6 +42,7 @@ export const MESSAGES_ES = Object.freeze({
   "err.damaged": "Este enlace está dañado.",
   "err.damagedAddress": "Este enlace está dañado: su dirección no es válida.",
   "err.wrong": "Algo ha fallado al abrir este enlace.",
+  "err.update": "Algo ha fallado: prueba a editar la URL.",
   "err.notEncoded": "No se ha podido codificar eso.",
 
   "risk.userinfo":
@@ -73,6 +74,18 @@ export const MESSAGES_ES = Object.freeze({
   "m.styleNotePlain": "Base64url; sobrevive a cualquier aplicación y portapapeles",
   "m.styleNoteDense": "≈7% más corto usando puntuación de URL; algunas aplicaciones de chat cortan los enlaces ahí",
   "m.styleNoteEmoji": "una cuarta parte menos de caracteres que mirar; algunas aplicaciones estropean los emoji",
+  "m.shorter": "{saved} caracteres más corto",
+  "m.shorterCleaned1": "{saved} caracteres más corto, tras quitar 1 parámetro de seguimiento",
+  "m.shorterCleaned":
+    "{saved} caracteres más corto, tras quitar {removed} parámetros de seguimiento",
+  "m.sameLength": "Exactamente la misma longitud.",
+  "m.longer":
+    "{longer} caracteres más largo. Esta URL ya es lo bastante corta como para que " +
+    "llevarla entera cueste más de lo que ahorra.",
+  "m.willWarn": "Quien abra este enlace verá primero un aviso: {reasons}",
+  "m.veryLong":
+    "Con {length} caracteres, algunas aplicaciones de chat y servidores antiguos " +
+    "pueden cortar este enlace.",
   "m.copy": "Copiar",
   "m.copied": "Copiado",
   "m.qr": "QR",
