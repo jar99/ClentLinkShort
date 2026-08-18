@@ -120,7 +120,10 @@ const body = await response.text();
 // injecting, and the page keeps logging a violation for a setting that looks
 // disabled.
 const INJECTED = [
-  ["JavaScript Detections (Security \u2192 Bots), /cdn-cgi/challenge-platform/",
+  // On a Free zone this one cannot be switched off — see the README. It is
+  // listed so the state is known, not because it is actionable there.
+  ["JavaScript Detections (Security \u2192 Bots), /cdn-cgi/challenge-platform/ " +
+    "\u2014 not disableable on a Free zone",
     /__CF\$cv\$params|challenge-platform/],
   ["AI Labyrinth (Security \u2192 Settings) \u2014 a hidden nofollow link, first in <body>",
     /cdn-cgi\/content\?id=/],

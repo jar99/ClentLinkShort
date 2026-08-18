@@ -321,6 +321,30 @@ about a host, not something this repository can know. It also reports what the
 host is injecting into the page, since a hash-pinned policy blocks those, which
 means they log a violation and achieve nothing.
 
+**On Windows**, use `curl.exe` rather than `curl` for every shell snippet in
+this file: Windows PowerShell 5.1 aliases `curl` to `Invoke-WebRequest`, which
+does not take curl's flags and will fail confusingly. `curl.exe` has shipped in
+Windows since 1803 and behaves identically to the examples here. The native
+equivalents, if you prefer them:
+
+```powershell
+# The bot_management PATCH above.
+Invoke-RestMethod -Method Patch `
+  -Uri "https://api.cloudflare.com/client/v4/zones/$env:ZONE_ID/bot_management" `
+  -Headers @{ Authorization = "Bearer $env:CF_API_TOKEN" } `
+  -ContentType "application/json" `
+  -Body '{"enable_js": false}'
+
+# Is the challenge script minted per request, or is this a cached copy?
+# If the two values match, JavaScript Detections is still on.
+$r = Invoke-WebRequest "https://nul.im/?cb=$(Get-Random)" -UseBasicParsing
+$r.Headers['cf-ray']
+[regex]::Match($r.Content, "r:'([a-f0-9]+)'").Groups[1].Value
+```
+
+`npm run headers` needs no translation — it is Node, and runs the same
+everywhere.
+
 **On Cloudflare specifically**, the five it cannot get from a settings toggle go
 in one place: Rules → Transform Rules → **Modify Response Header** → Create
 rule, matching *All incoming requests*, with a **Set static** entry per header
@@ -753,7 +777,13 @@ silently break the page:
    `__CF$cv$params` is that request's `cf-ray`, so it is minted per request. If
    the two match, the setting is still on.
 
-   The Bots card shows it as read-only text, so the switch is the API:
+   **On a Free zone it cannot be turned off at all.** Cloudflare's own
+   documentation says so: under Bot Fight Mode "JavaScript Detections is
+   automatically enabled and cannot be disabled", and it is optional only for
+   Super Bot Fight Mode and Enterprise. Turning Bot Fight Mode *off* does not
+   release it either — that is the state this zone is in, and a recurring
+   report on Cloudflare's forum. The API call below is worth one attempt, and
+   on a Free zone expect it to report success and change nothing:
 
    ```sh
    curl -X PATCH "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/bot_management" \
@@ -764,6 +794,20 @@ silently break the page:
 
    The token needs *Zone → Bot Management → Edit*, or *Zone → Zone Settings →
    Edit* on plans without that scope.
+
+   So the end state on Free is: the script is injected, the policy blocks it,
+   and a console violation is logged on every page view. **That is the correct
+   outcome, not a fault to fix.** Nothing is broken — the page runs, no visitor
+   is affected, and Cloudflare's bot scoring simply never runs.
+
+   There is no CSP that admits it without giving up the pin. The inline
+   bootstrap carries per-request tokens, so no hash can match it; and
+   Cloudflare's own guidance for this feature asks for a nonce, while noting
+   that **nonces set via `<meta>` tags are unsupported** — and a meta tag is the
+   only way a static host can deliver this policy. The three real options are:
+   accept the console entry, move to a plan where JavaScript Detections is
+   optional, or stop proxying the zone through Cloudflare (which also gives up
+   the response headers above, since GitHub Pages cannot send them).
 
    **There is no third option.** A CSP report will name the blocked script's
    hash, and Lighthouse will suggest adding it — do not. The injected script
