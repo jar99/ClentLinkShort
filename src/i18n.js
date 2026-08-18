@@ -84,9 +84,27 @@ const format = (text, values) =>
  * @returns {string}
  */
 export function t(key, values) {
-  const text = CATALOGUES[active]?.[key] ?? MESSAGES_EN[key] ?? key;
+  // hasOwn, not plain access: `toString` and friends are on every object, so
+  // a key like that would resolve to a function and format() would call
+  // .replace on it. has() below uses the same test; they have to agree.
+  const catalogue = CATALOGUES[active];
+  const text = catalogue && Object.hasOwn(catalogue, key)
+    ? catalogue[key]
+    : Object.hasOwn(MESSAGES_EN, key) ? MESSAGES_EN[key] : key;
   return format(text, values);
 }
+
+/**
+ * Attributes a catalogue is allowed to set.
+ *
+ * data-t-attr turns a translated string into a DOM attribute. The attribute
+ * name comes from this repository's markup, but the value comes from a
+ * catalogue — which is a file someone contributes, and adding a language is
+ * meant to be exactly that. Without this list, `data-t-attr="href:some.key"`
+ * would let a translation supply a javascript: URL. These four carry text and
+ * nothing else, so the worst a hostile translation can do through them is lie.
+ */
+const TRANSLATABLE_ATTRIBUTES = new Set(["placeholder", "aria-label", "title", "alt"]);
 
 /**
  * Apply the active catalogue to the document: every [data-t] gets its text,
@@ -101,7 +119,10 @@ export function translate(root = document) {
       root.querySelectorAll("[data-t-attr]"))) {
     for (const pair of String(el.dataset.tAttr).split(",")) {
       const [attr, key] = pair.split(":");
-      if (attr && key) el.setAttribute(attr.trim(), t(key.trim()));
+      if (!attr || !key) continue;
+      const name = attr.trim();
+      if (!TRANSLATABLE_ATTRIBUTES.has(name)) continue;
+      el.setAttribute(name, t(key.trim()));
     }
   }
 }

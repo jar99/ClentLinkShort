@@ -6,6 +6,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only by default. The three test jobs npm-install third-party code
+# (playwright, typescript) and have no reason to hold a token that could write
+# to this repository; without this line they inherit whatever the repository
+# default is, which is often contents: write. The deploy job below declares the
+# three permissions it genuinely needs and overrides this for itself.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

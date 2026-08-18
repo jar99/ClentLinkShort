@@ -16,7 +16,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 172 tests, no dependencies
+npm test              # 174 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run corpus:get    # fetch the corpus (a release asset, not committed)
@@ -651,7 +651,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             172 tests on node:test
+test/             174 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -1012,6 +1012,12 @@ whole experience. Three things follow from that:
   (network-first with cache fallback, rotated per deploy by build hash), so
   the site loads and links decode with no connection whatsoever — the
   destination is inside the fragment, so nothing else was ever fetched.
+  It caches **only the app's own files** — the document, `404.html`, the
+  manifest, the icon and the preview image — and passes everything else
+  through untouched. Same-origin is not the same test: a proxy that injects
+  scripts serves them from this origin too, so caching by origin would store a
+  third party's code under this name and serve it back offline long after the
+  setting that injected it was turned off.
   Network-first is deliberate: the page embeds the wire tables, and a cached
   copy from before a table change could misread a newer link. The 1.0 freeze
   removes that hazard for the tables themselves, but serving the current page

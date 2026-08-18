@@ -19,7 +19,25 @@
 /* eslint-env serviceworker */
 
 const CACHE = "clent-{{cacheVersion}}";
-const PAGES = ["./", "./404.html", "./manifest.webmanifest", "./icon.svg"];
+const PAGES = ["./", "./404.html", "./manifest.webmanifest", "./icon.svg", "./og.png"];
+
+/**
+ * What this worker will keep a copy of. Everything else goes to the network
+ * and is forgotten.
+ *
+ * It used to cache every same-origin 200, which sounds like the same thing and
+ * is not. A proxy that injects scripts serves them from this origin too --
+ * Cloudflare's bot script lives under /cdn-cgi/ -- so the worker would store a
+ * third party's code under our name and hand it back offline, long after the
+ * setting that injected it was turned off. It could never execute, because the
+ * page pins its scripts by hash either way. But a cache holding things the app
+ * does not own is not the app's cache, and the offline story needs none of it.
+ */
+const OWN = new Set(PAGES.map((page) => new URL(page, self.location.href).pathname));
+
+/** A navigation is the app too, whatever path it arrives on: /#payload, /any/thing. */
+const isOurs = (request, url) =>
+  request.mode === "navigate" || OWN.has(url.pathname);
 
 self.addEventListener("install", (event) => {
   // The page itself must cache; the extras are best-effort (dev serving has
@@ -49,6 +67,8 @@ self.addEventListener("fetch", (event) => {
   // destination a link redirects to, for one) goes straight to the network.
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+
+  if (!isOurs(request, url)) return;
 
   event.respondWith(
     fetch(request)

@@ -141,3 +141,36 @@ test("the stylesheet is direction-independent, so an RTL catalogue would lay out
   assert.deepEqual(aligned.map(([whole]) => whole), [],
     "use text-align: start / end instead");
 });
+
+test("a catalogue can only set attributes it has no way to abuse", async () => {
+  // data-t-attr turns a catalogue value into a DOM attribute. The attribute
+  // name comes from our markup and the value from a translation, which is data
+  // someone else contributes -- so "href:some.key" would let a catalogue supply
+  // a javascript: URL. Adding a language is meant to be a file and a line;
+  // this is what makes accepting that file safe.
+  const { translate, setLanguage } = await import("../src/i18n.js");
+  const seen = [];
+  const element = {
+    dataset: { tAttr: "placeholder:r.passphrase,href:r.continue,onclick:r.continue" },
+    setAttribute: (name, value) => seen.push([name, value]),
+  };
+  const root = {
+    querySelectorAll: (selector) =>
+      selector === "[data-t-attr]" ? [element] : [],
+  };
+  setLanguage("en");
+  translate(/** @type {any} */ (root));
+  assert.deepEqual(seen.map(([name]) => name), ["placeholder"],
+    "only allowlisted attributes may come from a catalogue");
+});
+
+test("a key that is only on Object.prototype is not a message", () => {
+  // t() used plain property access, so "toString" resolved to a function and
+  // format() then called .replace on it -- a TypeError thrown midway through a
+  // DOM walk, leaving the page half translated. has() beside it already used
+  // Object.hasOwn; these two have to agree.
+  for (const key of ["toString", "constructor", "__proto__", "valueOf"]) {
+    assert.equal(t(key), key, `${key} must fall through to the key itself`);
+    assert.equal(has(key), false, `${key} is not a message`);
+  }
+});

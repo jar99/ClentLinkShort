@@ -250,6 +250,37 @@ try {
   check("no cached entry carries a link payload",
     cached.urls.every((url) => url.startsWith(BASE) && !url.includes("#")),
     cached.urls.join(" "));
+
+  if (DIR === "dist") {
+    // The worker used to cache every same-origin 200. A proxy that injects
+    // scripts serves them from this origin too -- Cloudflare's bot script
+    // lives under /cdn-cgi/ -- so the worker would store a third party's code
+    // under our name and hand it back offline. It cannot execute either way,
+    // but a cache of things the app does not own is not the app's cache.
+    // Not fetch(): the page's own policy is connect-src 'none', so a fetch
+    // from here never leaves and the check would pass without testing
+    // anything. An image does leave -- img-src allows 'self' -- and the worker
+    // intercepts it exactly as it would any other same-origin GET. It does not
+    // matter that robots.txt is not an image; the request and its 200 are what
+    // the worker sees, and caching them is the behaviour under test.
+    await counter.evaluate((url) => new Promise((resolve) => {
+      const probe = new Image();
+      probe.onload = probe.onerror = () => resolve(null);
+      probe.src = url;
+    }), `${BASE}robots.txt`);
+    await counter.waitForTimeout(400);
+    const after = await counter.evaluate(async () => {
+      const urls = [];
+      for (const name of await caches.keys()) {
+        for (const request of await (await caches.open(name)).keys()) urls.push(request.url);
+      }
+      return urls;
+    });
+    check("the worker caches the app's own assets and nothing else",
+      !after.some((url) => url.endsWith("/robots.txt")),
+      `cached: ${after.map((u) => u.replace(BASE, "/")).join(" ")}`);
+  }
+
   await counter.close();
   await fresh.close();
 
