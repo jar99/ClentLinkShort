@@ -689,6 +689,23 @@ silently break the page:
    in every console and Cloudflare's bot scoring never runs. Turn Bot Fight
    Mode off to quiet it, or leave it; blocking a third party's injected
    script is exactly what the policy is for.
+
+   **There is no third option.** A CSP report will name the blocked script's
+   hash, and Lighthouse will suggest adding it — do not. The injected script
+   carries per-request tokens (`r`, `t`, `u` in `__CF$cv$params` change on
+   every response), so its hash is different every time and no pin can ever
+   match it. The only CSP that admits it is one with `'unsafe-inline'` in
+   `script-src`, which is not a concession, it is the end of the pin: with it
+   the policy stops distinguishing Cloudflare's injected script from anyone
+   else's. Turn the injection off, or accept the console entry.
+
+   **Web Analytics injects too.** If a console shows
+   `static.cloudflareinsights.com/beacon.min.js` blocked, automatic injection
+   is enabled under Web Analytics. It will never run under this policy — and
+   it is also the page's only would-be third-party request — so it is
+   collecting nothing while looking like it is. Turn it off and read the
+   server-side numbers instead (see below); they are strictly better here,
+   because they need no script at all.
 3. **Caching**: a Cache Rule for `nul.im/*` with "Cache eligible" and an edge
    TTL of an hour or more serves the page from Cloudflare's edge worldwide.
    GitHub Pages only sends `max-age=600`; the rule lifts that at the edge.
@@ -710,6 +727,10 @@ requests" is only true of the page:
 - **Network Error Logging** is advertised via `NEL` and `Report-To` headers pointing at
   `a.nel.cloudflare.com`, so browsers report failed requests to Cloudflare. Reports
   carry the request URL, which never includes the fragment.
+- **Managed robots.txt** prepends a block of AI-crawler `Disallow` rules to the file
+  the build produces, under a `# END Cloudflare Managed Content` marker. The site's own
+  directives survive underneath it, so `dist/robots.txt` and the served file are not
+  byte-identical and are not meant to be. It is under Settings → Manage robots.txt.
 
 ### Analytics without tracking
 
