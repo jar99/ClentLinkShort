@@ -74,21 +74,22 @@
 <main id="redirect" aria-label="Opening a link" hidden>
   <div class="card center">
     <div class="spinner" id="r-spinner" aria-hidden="true"></div>
-    <h1 id="r-title">Redirecting</h1>
-    <p class="muted" id="r-note">Taking you to</p>
+    <h1 id="r-title" data-t="r.redirecting">Redirecting</h1>
+    <p class="muted" id="r-note" data-t="r.takingYou">Taking you to</p>
     <p class="dest" id="r-dest"></p>
     <ul class="warnings" id="r-warnings" hidden></ul>
     <div id="r-passphrase" hidden>
-      <p class="muted small">This link is signed. Enter the passphrase to check it.</p>
+      <p class="muted small" data-t="r.passphrasePrompt">This link is signed. Enter the passphrase to check it.</p>
       <div class="out">
         <input type="text" id="r-pass" placeholder="passphrase" autocomplete="off"
-               spellcheck="false" aria-label="Passphrase">
-        <button class="btn" id="r-check" type="button">Check</button>
+               spellcheck="false" aria-label="Passphrase"
+               data-t-attr="placeholder:r.passphrase,aria-label:r.passphrase">
+        <button class="btn" id="r-check" type="button" data-t="r.checkButton">Check</button>
       </div>
     </div>
     <div class="actions" id="r-actions">
-      <a class="btn primary" id="r-go" rel="noreferrer noopener">Continue</a>
-      <a class="btn" href="./">Make a link</a>
+      <a class="btn primary" id="r-go" rel="noreferrer noopener" data-t="r.continue">Continue</a>
+      <a class="btn" href="./" data-t="r.makeLink">Make a link</a>
     </div>
     <noscript>
       <p class="muted small">
@@ -128,7 +129,7 @@
         explains how it works and reads fine without it.
       </p>
     </noscript>
-    <label class="field-label" for="url">Paste a long URL</label>
+    <label class="field-label" for="url" data-t="m.pasteLabel">Paste a long URL</label>
     <textarea id="url" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off"
       placeholder="https://example.com/a/very/long/path?with=parameters"></textarea>
 
@@ -147,32 +148,32 @@
       <div class="opt">
         <label class="opt-main">
           <input type="checkbox" id="clean" checked aria-describedby="clean-note">
-          <span>Remove tracking parameters</span>
+          <span data-t="m.clean">Remove tracking parameters</span>
         </label>
-        <em id="clean-note">utm_*, fbclid, gclid and similar</em>
+        <em id="clean-note" data-t="m.cleanNote">utm_*, fbclid, gclid and similar</em>
       </div>
       <div class="opt">
         <label class="opt-main">
           <input type="checkbox" id="preview" aria-describedby="preview-note">
-          <span>Preview link</span>
+          <span data-t="m.preview">Preview link</span>
         </label>
-        <em id="preview-note">shows the destination instead of going there</em>
+        <em id="preview-note" data-t="m.previewNote">shows the destination instead of going there</em>
       </div>
       <div class="opt">
         <label class="opt-main">
           <input type="checkbox" id="tamper" checked aria-describedby="tamper-note">
-          <span>Tamper check</span>
+          <span data-t="m.tamper">Tamper check</span>
         </label>
-        <em id="tamper-note">4 characters; catches a link that got clipped or edited</em>
+        <em id="tamper-note" data-t="m.tamperNote">4 characters; catches a link that got clipped or edited</em>
       </div>
       <div class="opt opt-choice">
-        <label for="style">Link style</label>
+        <label for="style" data-t="m.style">Link style</label>
         <select id="style" aria-describedby="style-note">
-          <option value="plain" selected>Standard</option>
-          <option value="dense">Dense</option>
-          <option value="emoji">Emoji</option>
+          <option value="plain" selected data-t="m.styleStandard">Standard</option>
+          <option value="dense" data-t="m.styleDense">Dense</option>
+          <option value="emoji" data-t="m.styleEmoji">Emoji</option>
         </select>
-        <em id="style-note">Base64url; survives every app and clipboard</em>
+        <em id="style-note" data-t="m.styleNotePlain">Base64url; survives every app and clipboard</em>
       </div>
     </div>
 
@@ -194,8 +195,8 @@
     <div id="result" hidden>
       <div class="out">
         <input type="text" id="short" readonly spellcheck="false" aria-label="Your short link">
-        <button class="btn primary" id="copy" type="button">Copy</button>
-        <button class="btn" id="qr" type="button" aria-pressed="false">QR</button>
+        <button class="btn primary" id="copy" type="button" data-t="m.copy">Copy</button>
+        <button class="btn" id="qr" type="button" aria-pressed="false" data-t="m.qr">QR</button>
       </div>
       <figure class="qr-box" id="qr-box" hidden>
         <figcaption class="muted small">Scan to open on another device. The
@@ -379,6 +380,10 @@
   <p>
     No cookies, no localStorage, no analytics. Decoding a link takes one
     request, for this page itself — everything above runs in your browser.
+  </p>
+  <p class="langpick" id="lang-pick" hidden>
+    <label for="lang" data-t="m.language">Language</label>
+    <select id="lang"></select>
   </p>
   <p class="stamp">Clent v{{version}} · {{commit}} · built {{built}}</p>
 </footer>

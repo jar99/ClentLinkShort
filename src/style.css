@@ -241,7 +241,7 @@ textarea::placeholder { color: var(--ink-faint); }
 
 .opt em {
   grid-column: 1 / -1;
-  padding-left: 27px;
+  padding-inline-start: 27px;
   font-style: normal;
   font-size: .8rem;
   color: var(--ink-faint);
@@ -276,7 +276,7 @@ textarea::placeholder { color: var(--ink-faint); }
 }
 
 .opt-choice > label,
-.opt-choice em { grid-column: 1; padding-left: 0; }
+.opt-choice em { grid-column: 1; padding-inline-start: 0; }
 
 /* A select is its own target, so it gets the height directly. */
 .opt-choice select { min-height: 32px; }
@@ -357,7 +357,7 @@ textarea::placeholder { color: var(--ink-faint); }
 .bar-num {
   font: 12px var(--mono);
   color: var(--ink-soft);
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
 }
 
@@ -434,7 +434,7 @@ textarea::placeholder { color: var(--ink-faint); }
 .advanced summary:hover { color: var(--ink); }
 .advanced p { margin: 8px 0 10px; }
 
-#r-passphrase { margin: 0 0 20px; text-align: left; }
+#r-passphrase { margin: 0 0 20px; text-align: start; }
 #r-passphrase .out { margin-top: 8px; }
 
 .tag-note {
@@ -516,31 +516,19 @@ textarea::placeholder { color: var(--ink-faint); }
 
 /* ── prose lists ─────────────────────────────────────────────────────── */
 
-.steps, .limits { padding-left: 0; list-style: none; margin: 0; }
+.limits { padding-inline-start: 0; list-style: none; margin: 0; }
 
-.steps li, .limits li {
-  padding-left: 22px;
+.limits li {
+  padding-inline-start: 22px;
   position: relative;
   margin-bottom: 14px;
   color: var(--ink-soft);
 }
 
-.steps { counter-reset: step; }
-
-.steps li::before {
-  counter-increment: step;
-  content: counter(step);
-  position: absolute;
-  left: 0;
-  top: .12em;
-  font: 600 .72rem/1.5 var(--mono);
-  color: var(--accent);
-}
-
 .limits li::before {
   content: "";
   position: absolute;
-  left: 2px;
+  inset-inline-start: 2px;
   top: .62em;
   width: 5px;
   height: 5px;
@@ -548,7 +536,7 @@ textarea::placeholder { color: var(--ink-faint); }
   background: var(--ink-faint);
 }
 
-.steps b, .limits b { color: var(--ink); font-weight: 600; }
+.limits b { color: var(--ink); font-weight: 600; }
 
 .wire {
   margin: 22px 0 0;
@@ -592,7 +580,7 @@ textarea::placeholder { color: var(--ink-faint); }
   border-radius: var(--r-md);
   padding: 12px 14px;
   margin: 16px 0 22px;
-  text-align: left;
+  text-align: start;
 }
 
 .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
@@ -605,7 +593,7 @@ textarea::placeholder { color: var(--ink-faint); }
   padding: 0;
   display: grid;
   gap: 8px;
-  text-align: left;
+  text-align: start;
 }
 
 .warnings li {
@@ -639,6 +627,27 @@ footer {
 }
 
 footer p { margin: 0 0 6px; }
+
+/* The picker is furniture on the redirect view — see buildLanguagePicker(). */
+html[data-mode="redirect"] .langpick { display: none; }
+
+.langpick {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.langpick select {
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
 
 footer .stamp {
   margin-top: 10px;

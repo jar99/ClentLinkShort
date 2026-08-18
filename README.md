@@ -16,7 +16,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 158 tests, no dependencies
+npm test              # 169 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run corpus:get    # fetch the corpus (a release asset, not committed)
@@ -579,7 +579,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             158 tests on node:test
+test/             169 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -598,6 +598,7 @@ test/             158 tests on node:test
   realworld       links in the shapes people actually paste
   optimality      brute-force check that no smaller encoding existed
   contrast        every text colour against WCAG AA, both themes
+  i18n            catalogue parity, placeholders, and that no key is missing
   minify          that the minified library computes what the source computes
   readme          this file's quoted numbers against corpus/stats.json
 
@@ -626,8 +627,8 @@ whole experience. The build inlines the module graph, stylesheet and icon into o
 file.
 
 ```
-Source  ~189 kB across 19 files (over half of it the mined tables and templates)
-Built   ~105 kB raw · ~33 kB gzip · ~29 kB brotli · 1 request on the critical path
+Source  ~214 kB across 23 files (over half of it the mined tables and templates)
+Built   ~117 kB raw · ~37 kB gzip · ~32 kB brotli · 1 request on the critical path
 ```
 
 "One request" is the document: everything the codec needs to resolve a link is
@@ -784,6 +785,64 @@ resolve it server-side. That is the cost of the design, not an oversight.
 On mobile: inputs are 16px so iOS doesn't zoom on focus, tap targets are at least 32px,
 `env(safe-area-inset-*)` keeps content clear of notches, and the browser tests assert
 no horizontal overflow at 320, 360, 390, 414, 768 and 1024 pixels.
+
+## Language
+
+The page picks its language from `navigator.languages` — the browser's own ordered
+preference list — before anything is painted, so nothing is drawn in one language and
+swapped in another. A picker in the footer overrides that for the session. Nothing is
+persisted, because there is nowhere to persist it: the same reason there are no
+cookies applies to the language too.
+
+Catalogues are **bundled, not fetched**. The page is one file that has to work offline
+under a CSP that forbids every network request, so a locale is a module rather than a
+download. English is the fallback for any key a translation has not reached, which is
+what makes a partial translation useful instead of a page full of holes — and if even
+English lacks the key, `t()` returns the key itself, because a visible `m.copy` is a
+bug report and an empty element is not.
+
+The cost is honest: adding Spanish took the built page from ~30.8 kB to ~32.0 kB
+brotli. Every further language is paid by every visitor, in every language, so this is
+a real budget rather than a free feature.
+
+### Adding a language
+
+1. Copy `src/messages/en.js` to `src/messages/<code>.js` and translate the values.
+   The export must be named `MESSAGES_<CODE>` — the build concatenates every module
+   into one scope, and two catalogues both exporting `MESSAGES` would collide.
+2. Import it in `src/i18n.js` and add it to `CATALOGUES`.
+
+That is the whole change; nothing else in the app knows how many languages exist. The
+picker appears only when there are at least two, so a fork that ships one language
+gets no dropdown with one entry in it.
+
+`test/i18n.test.js` enforces what makes this safe rather than merely present: every
+catalogue answers for exactly the English key set, every catalogue file is registered,
+every `{placeholder}` survives translation, every key `src/app.js` and `src/index.html`
+actually ask for exists, and every risk code `src/risk.js` can emit is translatable.
+The browser tests then check the live behaviour — that a Spanish browser gets a Spanish
+page untouched, that a language nothing is translated into lands on English rather than
+on raw keys, and that `<html lang>` and `dir` follow the choice.
+
+### What is not translated
+
+The long explanation below the tool, and this README. Translating an essay is a writing
+job, not a wiring job, and a machine translation of a security warning is worse than an
+English one someone has to work at. What *is* translated is everything functional: the
+redirect view, every warning and failure, and every control in the maker.
+
+Right-to-left languages set `dir="rtl"` on the document, and the layout is built to
+survive it: every direction-dependent rule in `src/style.css` is a logical property
+(`padding-inline-start`, `inset-inline-start`, `text-align: start`) rather than a
+physical one. The single exception is the body's safe-area padding, which is physical
+on purpose — a notch is on a side of the device and does not move with the text.
+
+That is enforced rather than intended. `test/i18n.test.js` fails on any physical
+direction property that creeps back in, and the browser tests flip the document to
+`dir="rtl"` and assert the page still lays out with no horizontal overflow and its
+absolutely-positioned markers still on the leading side. No RTL catalogue ships yet,
+so the layout is exercised and the *translation* is not — adding one is the two steps
+above and nothing more.
 
 ## Browser support
 

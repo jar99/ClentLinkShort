@@ -15,6 +15,7 @@ import {
 } from "./sign.js";
 import { toEmoji, toDense, decodeTransport } from "./transport.js";
 import { qrMatrix } from "./qr.js";
+import { choose, has, language, setLanguage, t, translate, CATALOGUES } from "./i18n.js";
 
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** The same lookup, for elements the code reads values or state from. */
@@ -36,6 +37,50 @@ function whenReady(fn) {
     fn();
   }
 }
+
+// Language before anything is written to the DOM, so nothing is painted in one
+// language and replaced in another. navigator.languages is the browser's own
+// ordered preference list; nothing is stored, and nothing is asked of a server.
+setLanguage(choose(navigator.languages ?? [navigator.language ?? "en"]));
+
+/** Called after a language change so views can redraw text they set by hand. */
+const retranslate = [];
+
+/**
+ * The picker exists only when there is something to pick — a dropdown with one
+ * entry is furniture, not a control. Each language names itself in its own
+ * words, because someone looking for their language does not read the current
+ * one. The choice lasts for the session: there is nowhere to store it, which
+ * is the same reason nothing else here is stored either.
+ *
+ * It is hidden on the redirect view. That view is a security interstitial that
+ * exists for a second, its language already came from the browser's own
+ * preference list, and redrawing a warning under someone about to click
+ * Continue is worse than not offering the control there.
+ */
+function buildLanguagePicker() {
+  const codes = Object.keys(CATALOGUES);
+  if (codes.length < 2) return;
+  const select = /** @type {HTMLSelectElement} */ ($("lang"));
+  for (const code of codes) {
+    const option = document.createElement("option");
+    option.value = code;
+    option.textContent = CATALOGUES[code]["lang.name"] ?? code;
+    select.append(option);
+  }
+  select.value = language();
+  select.addEventListener("change", () => {
+    setLanguage(select.value);
+    translate();
+    for (const redraw of retranslate) redraw();
+  });
+  $("lang-pick").hidden = false;
+}
+
+whenReady(() => {
+  translate();
+  buildLanguagePicker();
+});
 
 /** Marks a link as "show me where this goes" rather than "take me there". */
 const PREVIEW_SUFFIX = "~";
@@ -62,7 +107,7 @@ async function runRedirect() {
     // guard that was an unhandled rejection and a spinner that never stopped.
     fragment = decodeURIComponent(location.hash.slice(1));
   } catch {
-    showLinkFailure("This link is damaged — its address isn't valid.");
+    showLinkFailure(t("err.damagedAddress"));
     return;
   }
   let previewOnly = false;
@@ -80,7 +125,7 @@ async function runRedirect() {
   try {
     payload = decodeTransport(dressed);
   } catch (error) {
-    showLinkFailure(error instanceof ClentError ? error.message : "This link is damaged.");
+    showLinkFailure(error instanceof ClentError ? error.message : t("err.damaged"));
     return;
   }
 
@@ -99,7 +144,7 @@ async function runRedirect() {
     } else if (!result.ok) {
       whenReady(() => {
         $("r-spinner").remove();
-        $("r-title").textContent = "This link has been altered";
+        $("r-title").textContent = t("tag.altered");
         $("r-note").textContent = result.reason ??
           "Its integrity check doesn't match, so it isn't the link that was shared. " +
           "It may have been clipped in transit, or edited.";
@@ -150,7 +195,7 @@ async function runRedirect() {
       const note = document.createElement("p");
       note.className = tagState.ok ? "tag-note ok" : "tag-note";
       note.textContent = tagState.ok
-        ? "Integrity check passed — this link hasn't been altered."
+        ? t("tag.ok")
         : "This browser can't check the link's integrity tag, so it is unverified.";
       $("r-dest").after(note);
     }
@@ -165,8 +210,8 @@ async function runRedirect() {
         const note = document.createElement("p");
         note.className = `tag-note ${result.ok ? "ok" : "bad"}`;
         note.textContent = result.ok
-          ? "Signature verified — made by someone who knows this passphrase."
-          : "Signature does not match this passphrase.";
+          ? t("sig.ok")
+          : t("sig.bad");
         box.append(note);
       };
       $("r-check").addEventListener("click", check);
@@ -181,27 +226,30 @@ async function runRedirect() {
       list.replaceChildren(...risk.reasons.map((reason) => {
         const item = document.createElement("li");
         item.className = reason.level >= RISK_BLOCK ? "warn" : "note";
-        item.textContent = reason.message;
+        // The reason's own English is the fallback: a code with no catalogue
+        // entry must still say why the page stopped, not print its own key.
+        item.textContent = has(`risk.${reason.code}`)
+          ? t(`risk.${reason.code}`, reason.values)
+          : reason.message;
         return item;
       }));
     }
 
     if (risk.level >= RISK_BLOCK) {
-      $("r-title").textContent = "Check this link before continuing";
-      $("r-note").textContent = "It has something about it worth a second look:";
+      $("r-title").textContent = t("r.check");
+      $("r-note").textContent = t("r.worthLook");
     } else if (!follow) {
-      $("r-title").textContent = "Open this link?";
+      $("r-title").textContent = t("r.openExternal");
       $("r-note").textContent =
-        `It opens an external app (${url.protocol.replace(":", "")}). ` +
-        "Continue only if you trust it.";
+        t("r.externalApp", { scheme: url.protocol.replace(":", "") });
     } else if (tagState?.needsPassphrase) {
-      $("r-title").textContent = "This link is signed";
+      $("r-title").textContent = t("r.signed");
       $("r-note").textContent =
-        "Nothing has been loaded yet. Check the signature, or continue without it.";
+        t("r.signedNote");
     } else {
-      $("r-title").textContent = "Where this link goes";
+      $("r-title").textContent = t("r.where");
       $("r-note").textContent =
-        "Nothing has been loaded yet. Check the destination before continuing.";
+        t("r.nothingLoaded");
     }
   });
 }
@@ -367,7 +415,7 @@ function setUpCreate(prefill = "") {
     } catch (failure) {
       error.textContent = failure instanceof ClentError
         ? failure.message
-        : "That couldn't be encoded.";
+        : t("err.notEncoded");
       error.hidden = false;
       result.hidden = true;
       breakdown.hidden = true;
@@ -469,14 +517,21 @@ function setUpCreate(prefill = "") {
 
   input.addEventListener("input", schedule);
   input.addEventListener("paste", () => setTimeout(safeUpdate, 0));
-  const STYLE_NOTES = {
-    plain: "Base64url; survives every app and clipboard",
-    dense: "≈7% shorter with URL punctuation; some chat apps cut links at it",
-    emoji: "a quarter fewer characters to look at; some apps mangle emoji",
+  // The note under the style picker is the one piece of maker copy that is
+  // swapped rather than translated in place, so it carries its key instead of
+  // its text — and re-reads it whenever the language changes.
+  const STYLE_NOTE_KEYS = {
+    plain: "m.styleNotePlain",
+    dense: "m.styleNoteDense",
+    emoji: "m.styleNoteEmoji",
+  };
+  retranslate.push(() => showStyleNote());
+  const showStyleNote = () => {
+    $("style-note").textContent = t(STYLE_NOTE_KEYS[field("style").value]);
   };
   for (const id of ["clean", "preview", "tamper", "style"]) {
     $(id).addEventListener("change", () => {
-      $("style-note").textContent = STYLE_NOTES[field("style").value];
+      showStyleNote();
       safeUpdate();
     });
   }
@@ -491,8 +546,8 @@ function setUpCreate(prefill = "") {
       link.select();
       document.execCommand("copy");
     }
-    button.textContent = "Copied";
-    setTimeout(() => { button.textContent = "Copy"; }, 1400);
+    button.textContent = t("m.copied");
+    setTimeout(() => { button.textContent = t("m.copy"); }, 1400);
   });
 
   // The QR is the same link for another device's camera; it renders from
@@ -562,7 +617,7 @@ if (self !== top) {
   // Every expected failure inside runRedirect renders its own card; this
   // catch is for the unexpected ones, which otherwise leave the spinner
   // running forever with the error only in the console.
-  runRedirect().catch(() => showLinkFailure("Something went wrong opening this link."));
+  runRedirect().catch(() => showLinkFailure(t("err.wrong")));
 } else {
   whenReady(() => setUpCreate());
 }

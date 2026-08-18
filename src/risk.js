@@ -60,18 +60,27 @@ const suffixTail = (labels) =>
  * never has and a deceptive one often does, so the page shows the destination
  * and waits instead of going there quietly.
  *
+ * The English message ships with each reason so this module stays useful on
+ * its own — in tests, in Node, in a fork that never loads the page. The page
+ * prefers a translation of `code` and falls back to `message`, so `values`
+ * carries the placeholders the translated string needs. Both must always say
+ * the same thing.
+ *
  * @param {URL} url
- * @returns {{level: number, reasons: Array<{code: string, level: number, message: string}>}}
+ * @returns {{level: number, reasons: Array<{code: string, level: number,
+ *   message: string, values?: Record<string, string>}>}}
  */
 export function assess(url) {
   const reasons = [];
-  const add = (code, level, message) => reasons.push({ code, level, message });
+  const add = (code, level, message, values) =>
+    reasons.push({ code, level, message, values });
 
   // "https://paypal.com@evil.example/" reads as PayPal and goes to evil.
   // The oldest trick there is, and still the most effective.
   if (url.username || url.password) {
     add("userinfo", RISK_BLOCK,
-      `The part before the "@" is not the destination. This link actually goes to ${url.hostname}.`);
+      `The part before the "@" is not the destination. This link actually goes to ${url.hostname}.`,
+      { host: url.hostname });
   }
 
   // An internationalised name is a valid, safe URL and gets opened like any
@@ -105,7 +114,8 @@ export function assess(url) {
       // on one link in a million is the right side of that trade.
       add("impersonation", RISK_BLOCK,
         `This address contains "${brand}", but the site it actually opens is ` +
-        `${url.hostname}.`);
+        `${url.hostname}.`,
+        { brand, host: url.hostname });
       break;
     }
   }
@@ -116,7 +126,8 @@ export function assess(url) {
   }
 
   if (url.port && url.port !== "80" && url.port !== "443") {
-    add("port", RISK_NOTE, `It connects on port ${url.port} rather than the usual one.`);
+    add("port", RISK_NOTE,
+      `It connects on port ${url.port} rather than the usual one.`, { port: url.port });
   }
 
   if (url.protocol === "http:") {

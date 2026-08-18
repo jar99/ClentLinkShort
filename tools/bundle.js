@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const IMPORT = /^[ \t]*import\s+[\s\S]*?from\s*["'](\.[^"']+)["'];?[ \t]*$/gm;
+const IMPORT = /^[ \t]*import\s+([\s\S]*?)from\s*["'](\.[^"']+)["'];?[ \t]*$/gm;
+/** The only import clause this bundler can honour: plain named bindings. */
+const NAMED_ONLY = /^\{[\s\S]*\}$/;
 const BARE_IMPORT = /^[ \t]*import\s*["'](\.[^"']+)["'];?[ \t]*$/gm;
 const REEXPORT = /^[ \t]*export\s*\{[^}]*\}\s*(?:from\s*["'][^"']+["'])?\s*;?[ \t]*$/gm;
 const EXPORT_DECL = /^([ \t]*)export\s+(?=(?:async\s+)?(?:const|let|var|function|class)\b)/gm;
@@ -39,8 +41,9 @@ export async function bundle(entry) {
     visiting.add(file);
 
     const source = await readFile(file, "utf8");
+    assertPlainImports(file, source);
     const deps = [
-      ...[...source.matchAll(IMPORT)].map((m) => m[1]),
+      ...[...source.matchAll(IMPORT)].map((m) => m[2]),
       ...[...source.matchAll(BARE_IMPORT)].map((m) => m[1]),
     ];
     for (const spec of deps) await visit(path.resolve(path.dirname(file), spec));
@@ -69,6 +72,34 @@ export async function bundle(entry) {
 
   assertNoCollisions(order, chunks);
   return { code: chunks.join("\n"), files: order };
+}
+
+/**
+ * Reject import clauses this bundler cannot honour.
+ *
+ * Concatenating modules into one scope means an import is not a binding, it is
+ * a promise that the name already exists. A default import or a renaming one
+ * (`import { A as b }`) breaks that promise, and because the import line is
+ * simply deleted, the result is not a build error — it is a page that loads
+ * and then throws "b is not defined" the moment it runs. That is precisely the
+ * silent mistake this file exists to prevent, so it is caught here instead.
+ *
+ * @param {string} file
+ * @param {string} source
+ */
+function assertPlainImports(file, source) {
+  for (const [line, clause] of source.matchAll(IMPORT)) {
+    const trimmed = clause.trim();
+    const what = !NAMED_ONLY.test(trimmed)
+      ? "only `import { a, b } from \"./x.js\"` is supported here"
+      : /\bas\b/.test(trimmed)
+        ? "renaming an import would leave the new name undefined once bundled"
+        : null;
+    if (what) {
+      throw new Error(
+        `${path.relative(ROOT, file)}: ${what}\n  ${line.trim()}`);
+    }
+  }
 }
 
 /**

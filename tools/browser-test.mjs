@@ -475,6 +475,92 @@ try {
       await page.locator("#qr-box svg").count() === 0);
   }
 
+  // ---- language -----------------------------------------------------------
+  {
+    // The picker only exists when there is more than one catalogue, so this
+    // block also tells you whether a translation actually shipped.
+    const options = await page.$$eval("#lang option",
+      (list) => list.map((o) => o.value));
+    check("the language picker offers every bundled catalogue",
+      options.length >= 2, options.join(","));
+    check("the picker is visible once there is a choice",
+      await page.locator("#lang-pick").isVisible());
+
+    if (options.includes("es")) {
+      await page.selectOption("#lang", "es");
+      const after = await page.evaluate(() => ({
+        lang: document.documentElement.lang,
+        dir: document.documentElement.dir,
+        paste: document.querySelector('[data-t="m.pasteLabel"]')?.textContent,
+        copy: document.getElementById("copy")?.textContent,
+        note: document.getElementById("style-note")?.textContent,
+      }));
+      check("choosing a language relabels the page and says so in <html lang>",
+        after.lang === "es" && after.paste === "Pega una URL larga",
+        JSON.stringify(after));
+      check("text the app writes by hand is retranslated too",
+        after.copy === "Copiar" &&
+        after.note === "Base64url; sobrevive a cualquier aplicación y portapapeles",
+        `copy=${after.copy} note=${after.note}`);
+      check("a left-to-right language keeps dir=ltr", after.dir === "ltr", after.dir);
+      await page.selectOption("#lang", "en");
+    }
+
+    // The browser's own preference list decides the language with no picker
+    // involved — that is the path almost everyone actually takes.
+    const spanish = await browser.newContext({ locale: "es-MX" });
+    const spanishPage = await spanish.newPage();
+    await spanishPage.goto(BASE);
+    await spanishPage.waitForTimeout(200);
+    const auto = await spanishPage.evaluate(() => ({
+      lang: document.documentElement.lang,
+      go: document.getElementById("r-go")?.textContent,
+    }));
+    check("a Spanish browser gets a Spanish page without touching anything",
+      auto.lang === "es" && auto.go === "Continuar", JSON.stringify(auto));
+
+    // A language nothing is translated into must land on English, not on a
+    // page of raw keys.
+    const finnish = await browser.newContext({ locale: "fi-FI" });
+    const finnishPage = await finnish.newPage();
+    await finnishPage.goto(BASE);
+    await finnishPage.waitForTimeout(200);
+    const fallback = await finnishPage.evaluate(() => ({
+      lang: document.documentElement.lang,
+      paste: document.querySelector('[data-t="m.pasteLabel"]')?.textContent,
+    }));
+    check("an untranslated language falls back to English, not to keys",
+      fallback.lang === "en" && fallback.paste === "Paste a long URL",
+      JSON.stringify(fallback));
+    await spanish.close();
+    await finnish.close();
+
+    // No right-to-left catalogue ships yet, so force the direction the way one
+    // would and check the layout survives it. This is the difference between
+    // "dir is set" and "RTL works": a stray physical margin shows up here as
+    // overflow, which the stylesheet test cannot see.
+    await page.evaluate(() => { document.documentElement.dir = "rtl"; });
+    await page.waitForTimeout(80);
+    const rtl = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      // The bullet markers are absolutely positioned; in RTL they must sit on
+      // the right of their text, not on top of it.
+      marker: (() => {
+        const li = document.querySelector(".limits li");
+        if (!li) return null;
+        const before = getComputedStyle(li, "::before");
+        return { insetStart: before.insetInlineStart, padStart:
+          getComputedStyle(li).paddingInlineStart };
+      })(),
+    }));
+    check("the layout holds when the document direction is flipped",
+      rtl.overflow <= 0, `${rtl.overflow}px overflow`);
+    check("direction-dependent spacing is logical, not physical",
+      rtl.marker?.padStart === "22px", JSON.stringify(rtl.marker));
+    await page.evaluate(() => { document.documentElement.dir = "ltr"; });
+  }
+
   // ---- offline: the service worker keeps the page working -----------------
   // Only the built site ships sw.js, so this block is dist-only.
   if (DIR === "dist") {
