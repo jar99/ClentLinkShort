@@ -62,6 +62,36 @@ test("TEMPLATES slots agree with their patterns", () => {
   }
 });
 
+test("a slot inside the host can never reach past the host", () => {
+  // Wildcard-host templates ("https://{0}.fandom.com/...") put attacker
+  // controlled bytes into the authority. A decoded payload never goes through
+  // asTemplate's reproduce-exactly guard — it is fed straight to fill() — so
+  // the only thing standing between a slot value and a different site is the
+  // slot's alphabet. A charset containing "/", "@" or ":" would let slot 0 of
+  // "https://{0}.fandom.com/wiki/{1}" be "evil.com/", making the host
+  // evil.com: still https, so finish() would happily allow it.
+  //
+  // Every host slot uses a charset today; "text" accepts anything and must
+  // never appear in one. This is the check that keeps the next appended
+  // template honest.
+  const ESCAPES = ["/", "@", ":", "?", "#", "\\"];
+  for (const { pattern, slots } of TEMPLATES) {
+    const authority = pattern.slice("https://".length).split("/")[0];
+    for (const [n, slot] of slots.entries()) {
+      if (!authority.includes(`{${n}}`)) continue;
+      assert.notEqual(slot, "text",
+        `${pattern}: slot ${n} is in the host, so it cannot use the unrestricted "text" charset`);
+      const charset = CHARSETS[slot];
+      assert.ok(charset, `${pattern}: slot ${n} uses unknown charset "${slot}"`);
+      for (const character of ESCAPES) {
+        assert.ok(!charset.chars.includes(character),
+          `${pattern}: slot ${n} is in the host and its "${slot}" charset contains ` +
+          `"${character}", which can escape the host label`);
+      }
+    }
+  }
+});
+
 test("charsets are consistent with the widths they claim", () => {
   for (const [name, set] of Object.entries(CHARSETS)) {
     assert.ok(set.chars.length <= 1 << set.bits,

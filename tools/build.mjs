@@ -120,8 +120,11 @@ const sha256 = (text) =>
  * make it into the document, it would have the wrong hash and not run.
  *
  * frame-ancestors is absent because a meta tag cannot set it — browsers ignore
- * it there and log an error — and GitHub Pages cannot send headers. That is a
- * real gap, and the README says so rather than pretending otherwise.
+ * it there and log an error. It has to arrive as a real response header, which
+ * GitHub Pages cannot send but the Cloudflare proxy in front of it can; the
+ * README carries the exact rule. The page also refuses to run framed on its
+ * own (see the head script), so a fork on a host with no header control is
+ * still not clickjackable.
  */
 function applyStrictCsp(html) {
   const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
@@ -145,9 +148,15 @@ function applyStrictCsp(html) {
     "connect-src 'none'",
     "form-action 'none'",
     "base-uri 'none'",
+    // Nothing here builds HTML from strings, so the strictest Trusted Types
+    // policy costs nothing today and turns any future innerHTML regression
+    // into a load-time failure instead of a silent XSS sink.
+    "require-trusted-types-for 'script'",
+    "trusted-types clent-sw",
     // frame-ancestors is deliberately absent: it is ignored in a meta tag and
     // browsers log an error for it on every load. Clickjacking protection
-    // needs a real header, which GitHub Pages cannot send. Noted in the README.
+    // needs a real header (the README has the Cloudflare rule) — and the head
+    // script refuses to run framed regardless, which works on any host.
   ].join("; ");
 
   const replaced = html.replace(

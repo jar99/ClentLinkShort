@@ -231,14 +231,49 @@ URL. These are properties an ordinary shared link almost never has.
 **The page itself.** The built page ships a Content-Security-Policy that names its own
 script and style by SHA-256 hash and forbids everything else: `default-src 'none'`, no
 network of any kind, no form submission, no `<base>` rewriting. An injected script would
-have the wrong hash and not run. `frame-ancestors` is *not* set, because a meta tag
-cannot set it and GitHub Pages cannot send headers — clickjacking protection is the one
-control not available here.
+have the wrong hash and not run. `require-trusted-types-for 'script'` closes the DOM
+injection sinks too — one named policy may mint the service worker's URL and nothing
+else may mint anything.
 
-**Privacy.** No cookies, no storage, no analytics, and one network request, for the page
-itself — all asserted in the browser tests rather than claimed. `Referrer-Policy:
-no-referrer` means the destination isn't told where you came from. The fragment never
-leaves the browser, so no server ever learns the destination.
+One caveat the policy cannot cover: a service worker runs under *its own* response
+headers, not the document's, so `dist/sw.js` is outside the hash pin. It is same-origin,
+refuses every cross-origin request, and registers no message handlers — but it is the
+one piece of shipped code the CSP does not constrain, which is worth knowing rather than
+discovering.
+
+**Clickjacking.** `frame-ancestors` is *not* in the policy, because browsers ignore it in
+a meta tag; it has to arrive as a real header. The page therefore refuses to run framed
+on its own — the pre-paint script swaps the whole document for a "can't run in a frame"
+notice, so a transparent overlay has nothing to aim a click at. That works on any static
+host. If you also control a proxy, set the header properly; on Cloudflare, add a Rules →
+Transform Rules → **Modify Response Header** rule matching `Hostname equals nul.im` and
+set these static values:
+
+| Header | Value |
+| --- | --- |
+| `Content-Security-Policy` | `frame-ancestors 'none'` |
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `no-referrer` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), interest-cohort=()` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+
+A `Content-Security-Policy` header and the page's own meta policy are enforced
+*together*, and each is applied in full — so a header carrying only `frame-ancestors`
+adds clickjacking protection without weakening any of the hash pinning above.
+
+**Privacy.** No cookies, no `localStorage`, no `sessionStorage`, no analytics — asserted
+in the browser tests rather than claimed. Decoding a link takes exactly **one** request,
+for the document itself; the service worker and the four files it precaches load
+afterwards and never block a redirect, which the tests now count on the browser context
+rather than the page, so a regression is visible. `Referrer-Policy: no-referrer` (a meta
+tag — GitHub Pages cannot send headers unless you add the Cloudflare rule above) means
+the destination isn't told where you came from.
+
+The page does write to Cache Storage — that is what makes it work offline. It holds the
+app itself and provably cannot hold a destination: fragments are excluded from a request
+URL, so no cache key can carry one. The tests read every cached entry back and check
+exactly that.
 
 **Degenerate input.** Hard edges everywhere, each a `ClentError` with a user-showable
 message: URLs over 8,192 characters are refused, payloads over 16,384, and — the one

@@ -86,6 +86,13 @@ main {
 html[data-mode="create"] #redirect { display: none; }
 html[data-mode="redirect"] #create { display: none; }
 
+/* Framed: the guard in the head sets data-framed before first paint, so the
+   real page is never painted inside someone else's frame — there is nothing
+   to overlay and nothing to trick a click onto. */
+#framed { display: none; }
+html[data-framed] #framed { display: block; }
+html[data-framed] body > main { display: none !important; }
+
 /* ── typography ──────────────────────────────────────────────────────── */
 
 h1 {

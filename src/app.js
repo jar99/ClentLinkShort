@@ -8,7 +8,7 @@
 
 import {
   analyze, expand, isFollowable, assess, canCompress, MODE_NAMES,
-  RISK_BLOCK, ClentError,
+  RISK_BLOCK, ClentError, ENCODABLE,
 } from "./clent.js";
 import {
   checksum, sign, split, join, verify, canSign, TAG_CHECK, TAG_SIGNED,
@@ -139,7 +139,12 @@ async function runRedirect() {
     $("r-spinner").remove();
     // textContent, never innerHTML: this string is attacker-controlled.
     $("r-dest").textContent = url.href;
-    anchor("r-go").href = url.href;
+    // The allowlist is enforced in finish() when the URL is built, but the
+    // scheme table is append-only and expected to grow, and this is the one
+    // place a decoded string becomes something a click can navigate to.
+    // Re-asserting it here keeps the invariant next to its sink rather than
+    // in another module.
+    if (ENCODABLE.has(url.protocol)) anchor("r-go").href = url.href;
 
     if (tagState?.kind === TAG_CHECK) {
       const note = document.createElement("p");
@@ -535,7 +540,15 @@ function setUpCreate(prefill = "") {
  * Entry
  * -------------------------------------------------------------------------- */
 
-if (location.hash.startsWith("#s=")) {
+if (self !== top) {
+  // Framed. The head script already swapped the page for the refusal notice
+  // before paint; this stops the decode, the auto-redirect and every href
+  // assignment below from happening at all, so there is nothing behind the
+  // notice for an overlay to aim a click at.
+  whenReady(() => {
+    anchor("framed-out").href = origin() + location.hash;
+  });
+} else if (location.hash.startsWith("#s=")) {
   // The bookmarklet's fragment: open the maker prefilled. The URL rides the
   // fragment for the same reason payloads do — it never reaches a server.
   let prefill = "";
@@ -562,5 +575,19 @@ addEventListener("hashchange", () => location.reload());
 // so the network was only ever needed to fetch this document. Failure is
 // fine — the page just stays online-only.
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  // register() takes a TrustedScriptURL under require-trusted-types-for, so
+  // the one script URL this page ever mints goes through a named policy that
+  // accepts exactly one literal and nothing else. The CSP allows that policy
+  // by name, so anything else trying to create a script URL still fails.
+  let target = "./sw.js";
+  try {
+    const policy = globalThis.trustedTypes?.createPolicy("clent-sw", {
+      createScriptURL: (url) => {
+        if (url !== "./sw.js") throw new TypeError(`refusing to mint ${url}`);
+        return url;
+      },
+    });
+    if (policy) target = policy.createScriptURL("./sw.js");
+  } catch { /* no Trusted Types here, or the policy already exists */ }
+  navigator.serviceWorker.register(target).catch(() => {});
 }

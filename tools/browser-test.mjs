@@ -192,17 +192,72 @@ try {
     stored.local === 0 && stored.session === 0 && stored.cookie === "",
     JSON.stringify(stored));
 
+  // Counted on the CONTEXT, not the page: a page-level listener cannot see
+  // service-worker traffic (its own script, and everything it precaches), so
+  // it reports one request no matter how many the visit actually makes. The
+  // claim in the README is only worth anything if the thing measuring it can
+  // observe a failure.
   const requests = [];
-  const counter = await context.newPage();
-  counter.on("request", (r) => requests.push(r.url()));
+  const fresh = await browser.newContext();
+  fresh.on("request", (r) => requests.push(r.url()));
+  const counter = await fresh.newPage();
   await counter.goto(BASE, { waitUntil: "networkidle" });
+  // The worker registers after load and precaches on its own clock.
+  await counter.waitForTimeout(1500);
   const external = requests.filter((url) => !url.startsWith(BASE) && !url.startsWith("data:"));
   check("the page makes no external requests", external.length === 0, external.join(", "));
+  check("every request is same-origin and none carries a fragment",
+    requests.every((url) => url.startsWith(BASE) && !url.includes("#")),
+    requests.join(" "));
   if (DIR === "dist") {
-    check("the built page is a single request", requests.length === 1,
+    // One request on the critical path — the document — and the rest are the
+    // worker and what it precaches, none of which block a redirect.
+    check("the built page needs one request to decode a link",
+      requests.filter((u) => u === BASE).length >= 1 && requests.length <= 8,
       `${requests.length} requests: ${requests.map((u) => u.replace(BASE, "/")).join(" ")}`);
   }
+
+  // Cache Storage is the one thing the page does write. It holds the app, and
+  // it provably cannot hold a destination: fragments are excluded from a
+  // Request URL, so no cache key can carry one. Asserted rather than argued.
+  const cached = await counter.evaluate(async () => {
+    const names = await caches.keys();
+    const urls = [];
+    for (const name of names) {
+      for (const request of await (await caches.open(name)).keys()) urls.push(request.url);
+    }
+    return { names, urls };
+  });
+  check("no cached entry carries a link payload",
+    cached.urls.every((url) => url.startsWith(BASE) && !url.includes("#")),
+    cached.urls.join(" "));
   await counter.close();
+  await fresh.close();
+
+  // ---- the page refuses to be framed --------------------------------------
+  // frame-ancestors only works as a header, which a static host may not be
+  // able to send, so the page declines on its own. Without this a redirector
+  // is the perfect clickjacking target: frame it, go transparent, and float
+  // the victim's click onto "Continue".
+  {
+    const framed = await context.newPage();
+    await framed.setContent(
+      `<iframe src="${BASE}#B2wjKA2W" width="600" height="400"></iframe>`);
+    await framed.waitForTimeout(1200);
+    const inner = framed.frames().find((f) => f.url().startsWith(BASE));
+    const state = inner
+      ? await inner.evaluate(() => ({
+          framed: document.documentElement.dataset.framed === "1",
+          destination: document.getElementById("r-dest")?.textContent ?? "",
+          go: document.getElementById("r-go")?.getAttribute("href") ?? "",
+        }))
+      : null;
+    check("a framed page marks itself framed", state?.framed === true, JSON.stringify(state));
+    check("a framed page decodes nothing and offers no destination to click",
+      state !== null && state.destination === "" && state.go === "",
+      JSON.stringify(state));
+    await framed.close();
+  }
 
   check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
 
