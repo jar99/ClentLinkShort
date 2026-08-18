@@ -52,7 +52,7 @@ const AS_JSON = args.includes("--json");
 const SERIAL = args.includes("--serial");
 
 if (!hasCorpus()) {
-  console.error("No corpus found. Run: npm run corpus:fetch");
+  console.error("No corpus found. Run: npm run corpus:get");
   process.exit(1);
 }
 

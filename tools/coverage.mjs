@@ -43,7 +43,7 @@ const EXPONENT = Number(value("exponent", 1.0));
 const SWEEP = args.includes("--sweep");
 
 if (!hasCorpus() || !hasRanks()) {
-  console.error("Need corpus/urls.txt.br and corpus/ranks.txt.br. Run: npm run corpus:fetch");
+  console.error("Need corpus/urls.txt.br and corpus/ranks.txt.br. Run: npm run corpus:get");
   process.exit(1);
 }
 

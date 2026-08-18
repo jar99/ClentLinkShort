@@ -19,7 +19,7 @@ import {
 import { shorten } from "../src/clent.js";
 
 const LIMIT = Number(process.env.CLENT_CORPUS_LIMIT) || 40000;
-const skip = hasCorpus() ? false : "no corpus (npm run corpus:fetch)";
+const skip = hasCorpus() ? false : "no corpus (npm run corpus:get)";
 
 const stats = emptyStats();
 const variety = { hosts: new Set(), tlds: new Set(), withQuery: 0, nonAscii: 0, deep: 0, n: 0 };

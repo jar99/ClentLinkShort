@@ -68,7 +68,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:corpus": "node --test test/corpus.test.js",
-    "corpus:fetch": "node tools/fetch-corpus.mjs",
+    "corpus:collect": "node tools/fetch-corpus.mjs",
     "corpus:get": "node tools/get-corpus.mjs",
     "corpus:update": "node --max-old-space-size=10240 tools/fetch-corpus.mjs --merge --count 1000000",
     "validate": "node tools/validate-corpus.mjs",
