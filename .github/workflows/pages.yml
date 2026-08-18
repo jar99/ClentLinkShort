@@ -59,8 +59,20 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
-      - uses: actions/upload-pages-artifact@v4
+      # Rolled by hand instead of actions/upload-pages-artifact, which tars
+      # with --exclude=".[^/]*" and exposes no way to turn that off — so it
+      # silently drops every dotfile, and /.well-known/security.txt with it.
+      # Same archive, same artifact name deploy-pages expects, minus the
+      # exclusion. (.git and .github are not in dist; excluded anyway to match.)
+      - name: Archive the site, hidden files included
+        run: |
+          tar --dereference --hard-dereference --directory dist \
+            -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
+      - uses: actions/upload-artifact@v4
         with:
-          path: dist
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          include-hidden-files: true
       - id: deploy
         uses: actions/deploy-pages@v4
