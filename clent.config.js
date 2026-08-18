@@ -32,6 +32,7 @@ export const assets = [
   { from: "sw.js", stamp: true, minify: true },
   { from: "manifest.webmanifest" },
   { from: "icon.svg" },
+  { from: "og.png" },
 ];
 
 /**

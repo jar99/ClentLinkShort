@@ -605,7 +605,7 @@ test/             172 tests on node:test
 tools/            fetch-corpus, sources, corpus, validate-corpus, coverage,
                   optimality, mine-text, mine-host, mine-header,
                   mine-templates, mine-stamp, bundle, minify, build, serve,
-                  browser-test, perf
+                  browser-test, perf, make-og
 ```
 
 Mining reads millions of URLs to emit a few kilobytes of table, so the miners
@@ -824,10 +824,23 @@ not done is at the end, because it is the part that actually matters.
   redirect card sit above it in the document and both ship `hidden`, so a
   crawler, a reader-mode parser and the accessibility tree all skip them
   instead of meeting "This page can't run in a frame" first.
-- **Structured data**: `WebApplication` (with licence and repository) and
-  `FAQPage`. The FAQ markup is valid and worth keeping for machine readers, but
-  it no longer produces rich results — since August 2023 Google shows FAQ rich
-  results only for well-known health and government sites.
+- **Structured data**: `WebApplication` (with licence, author and repository),
+  `WebSite` — which is what Google reads to show a site name in results rather
+  than the bare domain — and `FAQPage`. The FAQ markup is valid and worth
+  keeping for machine readers, but it no longer produces rich results: since
+  August 2023 Google shows FAQ rich results only for well-known health and
+  government sites.
+- **A link preview.** `og:image` points at a real 1200×630 PNG, with
+  `summary_large_image` for Twitter and alt text for the rest. It is rendered
+  once by `npm run og` and committed, rather than drawn at build time: it is
+  the only raster asset here and it does not need a pipeline. The browser suite
+  checks the bytes served are a PNG of that size, which is how it caught the
+  build corrupting it.
+- **The measured numbers say where they came from.** The four figures under
+  "Is it actually shorter?" carry the date of the corpus run that produced
+  them and a link to the repository holding the corpus and the harness. Four
+  numbers with no method and no date are a marketing claim; the same four with
+  both are a result someone else can check.
 - **Prose declares its own language.** The interface is translated and the
   explainer is not, so a Spanish interface leaves `<html lang="es">` over
   English prose. Each untranslated block carries `lang="en"` itself, and the

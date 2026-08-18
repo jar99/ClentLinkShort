@@ -29,8 +29,24 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Clent">
 <meta property="og:locale" content="en_US">
-<meta name="twitter:card" content="summary">
+<!--
+  The link-preview card. Chat apps and search results fetch this themselves,
+  which is why it is the one thing here that has to be a real raster file at a
+  real URL rather than something the page draws. tools/make-og.mjs renders it;
+  src/og.png is committed. Absolute URL because most consumers will not
+  resolve a relative one.
+-->
+<meta property="og:image" content="{{siteUrl}}og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="Clent — the link shortener that stores nothing. nul.im">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{siteUrl}}og.png">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, and no record of where any link goes.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","author":{"@type":"Person","name":"jar99","url":"https://github.com/jar99"},"sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
+<!-- WebSite is what Google reads to show a site name in results rather than
+     the bare domain. Nothing else uses it. -->
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Clent","alternateName":"Clent link shortener","url":"{{siteUrl}}"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do the links expire?","acceptedAnswer":{"@type":"Answer","text":"No. The destination is inside the link itself, so there is nothing stored that could be deleted. A link keeps working as long as any copy of this page exists."}},{"@type":"Question","name":"What does the site see when a link is opened?","acceptedAnswer":{"@type":"Answer","text":"Only that the page was requested. The destination rides in the URL fragment, which browsers never send to servers, so no server ever sees where a link points."}},{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Free, open source under the MIT licence, no account, no ads, no tracking."}},{"@type":"Question","name":"Does it work offline?","acceptedAnswer":{"@type":"Answer","text":"After the first visit, yes. The page keeps a copy of itself, and links decode in the browser without any network."}}]}</script>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon.svg">
@@ -284,6 +300,18 @@
         <span>characters is the break-even point</span>
       </div>
     </div>
+    <!--
+      Where the numbers came from. Four figures with no method and no date are
+      a marketing claim; the same four with both are a result someone else can
+      check, which is the whole difference this project trades on.
+    -->
+    <p class="muted small">
+      Measured on {{measured}}: every URL in a {{checked}}-link corpus of real
+      addresses was shortened, decoded again and compared with the original.
+      The corpus, the harness and this page's numbers are in the
+      <a href="https://github.com/jar99/ClentLinkShort" rel="noopener">repository</a>,
+      and the run is repeatable.
+    </p>
   </section>
 
   <!-- ────────────────────  what the encoder decided  ──────────────────── -->

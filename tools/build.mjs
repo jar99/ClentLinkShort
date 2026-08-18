@@ -13,7 +13,7 @@
  * Anything outside that is a build error rather than a silent mistake.
  */
 
-import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { readFile, writeFile, copyFile, mkdir, rm } from "node:fs/promises";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
@@ -101,6 +101,10 @@ function substituteStats(html, stats, stamp) {
     // own corpus yet still needs a canonical URL, and "" is not one.
     siteUrl: (stats.origin ?? configuredOrigin).replace(/#$/, ""),
     checked: stats.checked.toLocaleString("en-US"),
+    // The date the corpus run these numbers come from was made. A measured
+    // claim with no date is only half a claim.
+    measured: new Date(`${stats.generated}T00:00:00Z`).toLocaleDateString("en-US",
+      { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }),
     roundTrip: stats.failures === 0 ? "100%" : `${(100 * stats.checked /
       (stats.checked + stats.failures)).toFixed(2)}%`,
     shorterPct: `${stats.payloadShorterPct.toFixed(1)}%`,
@@ -118,7 +122,6 @@ function substituteStats(html, stats, stamp) {
     shortBreakEven: String(
       (stats.prefixes ?? []).filter((p) => p.length > 0 && p.breakEven)
         .sort((a, b) => a.length - b.length)[0]?.breakEven ?? "—"),
-    generated: stats.generated ?? "",
   };
 
   const out = html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
@@ -311,10 +314,20 @@ async function main() {
   // this build's content hash so a deploy rotates the cache.
   const buildHash = createHash("sha256").update(html).digest("hex").slice(0, 12);
   for (const asset of assets) {
-    let text = await readFile(path.join(SRC, asset.from), "utf8");
+    const source = path.join(SRC, asset.from);
+    const target = path.join(DIST, asset.to ?? asset.from);
+    // Only a file the build rewrites gets decoded. Reading bytes as UTF-8 and
+    // writing them back replaces every invalid sequence with U+FFFD, which for
+    // text is a no-op and for a PNG is a corrupt file that is also larger than
+    // the original — the only clue that anything happened.
+    if (!asset.stamp && !asset.minify) {
+      await copyFile(source, target);
+      continue;
+    }
+    let text = await readFile(source, "utf8");
     if (asset.stamp) text = text.replace(/\{\{cacheVersion\}\}/g, () => buildHash);
     if (asset.minify) text = minifyJS(text);
-    await writeFile(path.join(DIST, asset.to ?? asset.from), text);
+    await writeFile(target, text);
   }
 
   const after = sizes("index.html", html);

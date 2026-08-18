@@ -561,6 +561,38 @@ try {
     await cold.close();
   }
 
+  // ---- the link preview ---------------------------------------------------
+  {
+    // Chat apps and search results fetch og:image themselves, so this is the
+    // one asset that has to survive the build as bytes. It did not: the asset
+    // copy read every file as UTF-8, which turns a PNG into replacement
+    // characters and, quietly, a bigger file than the original.
+    const meta = await page.evaluate(() => ({
+      image: document.querySelector('meta[property="og:image"]')?.getAttribute("content"),
+      card: document.querySelector('meta[name="twitter:card"]')?.getAttribute("content"),
+      alt: document.querySelector('meta[property="og:image:alt"]')?.getAttribute("content"),
+    }));
+    // Dev serves the template as written, so the absolute URL is only there
+    // to check once the build has substituted the site address into it.
+    const absolute = DIR === "dist"
+      ? /^https?:\/\/.+\/og\.png$/.test(meta.image ?? "")
+      : meta.image === "{{siteUrl}}og.png";
+    check("the page declares a large-image link preview",
+      meta.card === "summary_large_image" && !!meta.alt && absolute,
+      JSON.stringify(meta));
+
+    const preview = await context.request.get(`${BASE}og.png`);
+    const bytes = Buffer.from(await preview.body());
+    // PNG signature, then the IHDR width and height as big-endian 32-bit.
+    const signature = bytes.subarray(0, 8).toString("hex");
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    check("the preview image is a real 1200x630 PNG",
+      preview.status() === 200 && signature === "89504e470d0a1a0a" &&
+      width === 1200 && height === 630,
+      `${preview.status()} ${signature} ${width}x${height} ${bytes.length}B`);
+  }
+
   // ---- language -----------------------------------------------------------
   {
     // The picker only exists when there is more than one catalogue, so this
