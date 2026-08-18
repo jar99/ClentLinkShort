@@ -246,7 +246,7 @@ page stops instead of following:
 | --- | --- |
 | `https://paypal.com@evil.example/` | the part before the `@` is not the destination |
 | `https://paypal.com.evil.example/` | a brand worn as a subdomain of somewhere else |
-| `https://xn--pypal-4ve.example/` | punycode that renders as a familiar name |
+| `https://xn--pypal-4ve.example/` | a name mixing alphabets so letters can pose as others |
 | `https://192.0.2.10/admin` | a raw IP rather than a named site |
 | non-standard port, plain `http:` | shown as a note, still followed |
 
@@ -261,13 +261,17 @@ million links, and the reader can still continue, is the right side of that trad
 It matches whole labels, so `notpaypal.com.au` is not a hit, and it understands a
 registry tail, so `google.com.au` and `apple.com.cn` are their owners' own sites.
 
-The punycode row is deliberately blunt in the other direction: it flags every
-internationalised name, which is 1,539 of the 4,325,469 corpus URLs (0.036%), most of
-them ordinary Japanese, Chinese and emoji domains rather than anything deceptive.
-Narrowing it to names that *mix* scripts would clear those, but it would also stop
-catching the whole-script homograph — every character Cyrillic, still reading as
-"paypal" — and telling those apart needs a confusables table this page will not carry.
-It shows a screen and lets you continue, which is what makes erring this way tolerable.
+Internationalised names are opened like any other, because they are valid, safe URLs:
+refusing every `xn--` name would support the Latin web rather than the web. `src/idn.js`
+decodes the name and counts the scripts it draws on, so a Cyrillic, Japanese, Chinese or
+emoji domain passes untouched and only a label that *mixes* scripts — the Cyrillic `а`
+hiding in `pаypal` — is treated as deceptive. Combinations real languages need (Japanese
+Han with kana, Korean Han with Hangul) are not mixing. Measured: all 1,539
+internationalised URLs in the corpus pass, and none is flagged.
+
+The limit, stated plainly: a whole-script confusable — every character Cyrillic, still
+reading as "paypal" — is not mixed, so this does not catch it. That needs a confusables
+table far larger than this page, and it is a different problem from the one this solves.
 
 **The page itself.** The built page ships a Content-Security-Policy that names its own
 script and style by SHA-256 hash and forbids everything else: `default-src 'none'`, no
@@ -564,6 +568,7 @@ src/manifest.webmanifest, src/icon.svg   installable-app plumbing
 src/deflate.js    bounded DEFLATE (16 KB inflate cap)
 src/tracking.js   tracking-parameter policy
 src/risk.js       phishing-shape assessment
+src/idn.js        punycode decoding; real IDN vs homograph
 src/schemes.js    scheme table          (data, append-only)
 src/hosts.js      host dictionary       (data, append-only)
 src/templates.js  known URL shapes      (data, append-only)

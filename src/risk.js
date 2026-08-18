@@ -2,6 +2,7 @@
  * Destination risk: the shapes phishing links take.
  *
  * Pure policy over a parsed URL — no codec dependency in either direction.
+ * (idn.js is the one import: name analysis, not encoding.)
  * The page consults this before auto-following a decoded destination.
  *
  * @module risk
@@ -13,6 +14,8 @@ export const RISK_NONE = 0;
 export const RISK_NOTE = 1;
 /** Stop and make a human look before going there. */
 export const RISK_BLOCK = 2;
+
+import { deceptiveIdn } from "./idn.js";
 
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
@@ -71,21 +74,16 @@ export function assess(url) {
       `The part before the "@" is not the destination. This link actually goes to ${url.hostname}.`);
   }
 
-  // Punycode is how a homograph attack survives being written down:
-  // "xn--pypal-4ve.com" renders as something very close to "paypal.com".
-  //
-  // This flags every internationalised name, not only deceptive ones, which
-  // over the corpus is 1,539 URLs in 4.3M (0.036%) — mostly ordinary Japanese,
-  // Chinese and emoji domains. Narrowing it to labels that MIX scripts would
-  // clear those, but it would also stop catching the whole-script homograph,
-  // where every character is Cyrillic and the word still reads as "paypal";
-  // telling those apart needs a confusables table this page will not carry.
-  // So the blunt version stays, and it stays a note-and-continue interstitial
-  // rather than a refusal, which is the part that makes it acceptable.
-  const punycode = url.hostname.split(".").filter((label) => label.startsWith("xn--"));
-  if (punycode.length) {
-    add("punycode", RISK_BLOCK,
-      "This address uses characters that can look like a different name.");
+  // An internationalised name is a valid, safe URL and gets opened like any
+  // other. What is worth stopping for is the narrower thing punycode enables:
+  // a label mixing scripts so non-Latin characters can pose as Latin ones,
+  // like the Cyrillic a in "pаypal". idn.js decodes the name and counts its
+  // scripts, so Japanese, Chinese, Cyrillic and emoji domains pass untouched
+  // and only the deceptive shape is called deceptive.
+  if (deceptiveIdn(url.hostname)) {
+    add("homograph", RISK_BLOCK,
+      "This address mixes alphabets, so some characters may not be the " +
+      "letters they look like.");
   }
 
   // "paypal.com.evil.example" reads as PayPal to anyone scanning left to
