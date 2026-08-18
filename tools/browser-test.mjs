@@ -259,11 +259,23 @@ try {
   // is the perfect clickjacking target: frame it, go transparent, and float
   // the victim's click onto "Continue".
   {
+    // Its own server, with the deployment's headers turned off. The main one
+    // now sends frame-ancestors 'none', which makes the browser refuse the
+    // frame before the page gets a say — correct in production, and useless
+    // for testing the guard, which exists precisely for hosts that cannot send
+    // that header. This block is the only place that weaker setup is wanted.
+    const bare = spawn(process.execPath,
+      [path.join(ROOT, "tools", "serve.mjs"), DIR,
+        "--port", String(PORT + 1), "--no-security-headers"],
+      { stdio: "ignore" });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const bareBase = `http://localhost:${PORT + 1}/`;
+
     const framed = await context.newPage();
     await framed.setContent(
-      `<iframe src="${BASE}#B2wjKA2W" width="600" height="400"></iframe>`);
+      `<iframe src="${bareBase}#B2wjKA2W" width="600" height="400"></iframe>`);
     await framed.waitForTimeout(1200);
-    const inner = framed.frames().find((f) => f.url().startsWith(BASE));
+    const inner = framed.frames().find((f) => f.url().startsWith(bareBase));
     const state = inner
       ? await inner.evaluate(() => ({
           framed: document.documentElement.dataset.framed === "1",
@@ -281,6 +293,18 @@ try {
     check("a framed page marks itself framed", state?.framed === true, JSON.stringify(state));
     check("the refusal notice is shown inside a frame, and only there",
       state?.noticeShown === true);
+
+    // And the header, where a host can send it, stops the frame ever loading.
+    // Two independent defences; the suite should see both work.
+    const blocked = await context.newPage();
+    await blocked.setContent(
+      `<iframe src="${BASE}#B2wjKA2W" width="600" height="400"></iframe>`);
+    await blocked.waitForTimeout(800);
+    check("frame-ancestors stops the frame loading at all, where it is sent",
+      blocked.frames().every((f) => !f.url().startsWith(BASE)),
+      blocked.frames().map((f) => f.url()).join(" "));
+    await blocked.close();
+    bare.kill();
     check("a framed page decodes nothing and offers no destination to click",
       state !== null && state.destination === "" && state.go === "",
       JSON.stringify(state));

@@ -22,6 +22,29 @@ const dir = path.resolve(ROOT, args.find((a) => !a.startsWith("--")) ?? "src");
 const portAt = args.indexOf("--port");
 const port = Number(portAt === -1 ? process.env.PORT || ports.serve : args[portAt + 1]);
 
+/**
+ * The response headers a real deployment is asked to send, per the README.
+ *
+ * Sending them here too means the browser suite exercises the page under the
+ * policy it actually ships under, rather than a weaker one that happens to be
+ * easier to serve. The page is designed to be safe without them — that is why
+ * the in-page frame guard exists — but "safe without" and "unbroken with" are
+ * different claims, and only one of them was being tested.
+ *
+ * --no-security-headers turns them off, which is what the frame-refusal test
+ * needs: frame-ancestors would have the browser block the frame before the
+ * page could decline it, and the guard being tested is the fallback for hosts
+ * that cannot send headers at all.
+ */
+const SECURITY_HEADERS = args.includes("--no-security-headers") ? {} : {
+  "content-security-policy": "frame-ancestors 'none'",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "cross-origin-opener-policy": "same-origin",
+  "x-content-type-options": "nosniff",
+};
+
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -88,6 +111,7 @@ const server = createServer(async (request, response) => {
       "content-type": TYPES[extension] ?? "application/octet-stream",
       "cache-control": "no-store",
       vary: "accept-encoding",
+      ...SECURITY_HEADERS,
       ...(encoding ? { "content-encoding": encoding } : {}),
     });
     response.end(body);

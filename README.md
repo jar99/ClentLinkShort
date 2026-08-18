@@ -315,6 +315,17 @@ protects everyone who has visited once; preload closes only the very first
 request on a brand-new device, which is a small gain for a decision that is
 that hard to reverse.
 
+The dev server sends this set too, so the browser suite exercises the page
+under the policy it ships under rather than a weaker one that is merely easier
+to serve. The page is built to be safe without these headers — that is what the
+in-page frame guard is for — but "safe without" and "unbroken with" are
+different claims, and only the first was being tested. The frame-refusal test
+is the one exception: it runs against a second server started with
+`--no-security-headers`, because `frame-ancestors` makes the browser refuse the
+frame before the page can decline it, and the guard under test is the fallback
+for hosts that cannot send that header at all. The suite now checks both
+defences.
+
 `npm run headers` asks the deployed origin which of these actually arrived, and
 exits non-zero if any are missing — whether a header was applied is a fact
 about a host, not something this repository can know. It also reports what the
