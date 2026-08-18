@@ -36,8 +36,12 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url, "http://localhost");
   const target = path.join(dir, decodeURIComponent(url.pathname));
 
-  // Refuse anything that escapes the served directory.
-  if (!target.startsWith(dir)) {
+  // Refuse anything that escapes the served directory. A prefix test is not
+  // enough: "src" is a prefix of "src-private", so a sibling whose name starts
+  // with the served directory's would pass one. Ask for the relative path
+  // instead and require that it stays inside.
+  const inside = path.relative(dir, target);
+  if (inside.startsWith("..") || path.isAbsolute(inside)) {
     response.writeHead(403).end("Forbidden");
     return;
   }

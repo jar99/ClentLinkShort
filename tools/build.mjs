@@ -63,7 +63,9 @@ async function buildStamp() {
       .toString().trim();
   } catch { /* not a git checkout */ }
   const built = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
-  return { version: pkg.version ?? "0.0.0", commit, built };
+  // "git+https://github.com/owner/repo.git" -> "https://github.com/owner/repo"
+  const repo = (pkg.repository?.url ?? "").replace(/^git\+/, "").replace(/\.git$/, "");
+  return { version: pkg.version ?? "0.0.0", commit, built, repo };
 }
 
 function substituteStats(html, stats, stamp) {
@@ -127,8 +129,12 @@ const sha256 = (text) =>
  * still not clickjackable.
  */
 function applyStrictCsp(html) {
-  const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
-    .map((m) => m[1]);
+  // Only real scripts get a hash. The JSON-LD blocks are data — a browser
+  // never executes them, and hashing them just widens script-src by two
+  // entries that can never be used.
+  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter((m) => !/\bsrc=/.test(m[1]) && !/\btype=["']application\/ld\+json["']/i.test(m[1]))
+    .map((m) => m[2]);
   const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
 
   if (!scripts.length) throw new Error("no inline scripts found to hash");
@@ -241,6 +247,22 @@ async function main() {
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     `  <url><loc>${siteUrl.href}</loc></url>\n` +
     "</urlset>\n");
+
+  // Where to send a security report. A project whose pitch is "we handle
+  // hostile input safely" should say where to tell it when that is wrong.
+  // Expiry is a year out; RFC 9116 wants it absolute, so the build stamps it.
+  const expires = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+  await mkdir(path.join(DIST, ".well-known"), { recursive: true });
+  await writeFile(path.join(DIST, ".well-known", "security.txt"),
+    [
+      `# Security contact for ${siteUrl.host}`,
+      `Contact: ${stamp.repo}/security/advisories/new`,
+      `Expires: ${expires.toISOString().replace(/\.\d{3}Z$/, "Z")}`,
+      "Preferred-Languages: en",
+      `Canonical: ${siteUrl.href}.well-known/security.txt`,
+      `Policy: ${stamp.repo}/blob/main/README.md#what-this-does-not-protect-against`,
+      "",
+    ].join("\n"));
 
   // A custom domain needs a CNAME file in the artifact; a github.io origin
   // must not have one, so forks that revert the origin lose it automatically.
