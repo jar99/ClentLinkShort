@@ -4,6 +4,7 @@ on:
   push:
     branches: [claude/github-pages-link-shortener-1bozyz, main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -60,3 +61,62 @@ jobs:
         run: node tools/browser-test.mjs dist
       - name: End-to-end against the unbuilt sources
         run: node tools/browser-test.mjs src
+
+  # The deploy is a job here rather than its own workflow so that "needs"
+  # orders it. As two workflows on the same push they started together, which
+  # meant the live site could be updated while the suite was still running —
+  # and stay updated if it then failed. Corpus validation in particular only
+  # ever ran in CI, so a commit whose stats disagreed with the corpus, or
+  # whose links no longer round-tripped, could ship regardless.
+  #
+  # Nothing is re-tested here: needs guarantees the whole suite passed on this
+  # exact commit, so the job only builds the artifact and publishes it.
+  deploy:
+    needs: [test, types, browser]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      # Never cancel a deployment mid-flight; queued runs wait their turn.
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Builds from the committed corpus stats, which the test job has already
+      # confirmed match the corpus.
+      - name: Build
+        run: node tools/build.mjs
+
+      # enablement: true flips the Pages source to "GitHub Actions" by API,
+      # so no dashboard step is needed and the Jekyll branch builds stop.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Rolled by hand instead of actions/upload-pages-artifact, which tars
+      # with --exclude=".[^/]*" and exposes no way to turn that off — so it
+      # silently drops every dotfile, and /.well-known/security.txt with it.
+      # Same archive, same artifact name deploy-pages expects, minus the
+      # exclusion. (.git and .github are not in dist; excluded anyway to match.)
+      - name: Archive the site, hidden files included
+        run: |
+          tar --dereference --hard-dereference --directory dist \
+            -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          include-hidden-files: true
+      - id: deploy
+        uses: actions/deploy-pages@v4
