@@ -30,7 +30,7 @@
 <meta property="og:site_name" content="Clent">
 <meta property="og:locale" content="en_US">
 <meta name="twitter:card" content="summary">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, and no record of where any link goes.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clent","url":"{{siteUrl}}","description":"A privacy-focused, open-source link shortener that stores nothing: the destination is compressed into the link itself. No database, no accounts, no tracking, and no record of where any link goes.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","browserRequirements":"Requires JavaScript to make links","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/jar99/ClentLinkShort/blob/main/LICENSE","author":{"@type":"Person","name":"jar99","url":"https://github.com/jar99"},"sameAs":["https://github.com/jar99/ClentLinkShort"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do the links expire?","acceptedAnswer":{"@type":"Answer","text":"No. The destination is inside the link itself, so there is nothing stored that could be deleted. A link keeps working as long as any copy of this page exists."}},{"@type":"Question","name":"What does the site see when a link is opened?","acceptedAnswer":{"@type":"Answer","text":"Only that the page was requested. The destination rides in the URL fragment, which browsers never send to servers, so no server ever sees where a link points."}},{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Free, open source under the MIT licence, no account, no ads, no tracking."}},{"@type":"Question","name":"Does it work offline?","acceptedAnswer":{"@type":"Answer","text":"After the first visit, yes. The page keeps a copy of itself, and links decode in the browser without any network."}}]}</script>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon.svg">
@@ -409,6 +409,17 @@
   <p lang="en">
     No cookies, no localStorage, no analytics. Decoding a link takes one
     request, for this page itself — everything above runs in your browser.
+  </p>
+  <!--
+    Who made this, in one line. A shortener asks you to trust it with where
+    you are going, and "you can read every line of it" is the only answer to
+    that which does not require taking anyone's word. It is also the one
+    signal search engines can actually corroborate: until now the repository
+    and licence existed only inside the JSON-LD, where no visitor sees them.
+  -->
+  <p lang="en">
+    Open source under the MIT licence —
+    <a href="https://github.com/jar99/ClentLinkShort" rel="noopener">source on GitHub</a>.
   </p>
   <p class="langpick" id="lang-pick" hidden>
     <label for="lang" data-t="m.language">Language</label>

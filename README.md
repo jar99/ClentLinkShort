@@ -16,7 +16,7 @@ The payload sits in the fragment, which browsers don't send to servers. No serve
 sees where anyone is going.
 
 ```sh
-npm test              # 169 tests, no dependencies
+npm test              # 172 tests, no dependencies
 npm run dev           # serve src/ as real ES modules
 npm run build         # one self-contained file in dist/
 npm run corpus:get    # fetch the corpus (a release asset, not committed)
@@ -579,7 +579,7 @@ src/index.html    the page
 src/app.js        the two views: link maker and redirector
 src/style.css
 
-test/             169 tests on node:test
+test/             172 tests on node:test
   bits            bit stream round-trips at every width
   codec           encoding, edge cases, mode and token selection
   schemes         the scheme table, reserved indices, escape hatch
@@ -627,8 +627,8 @@ whole experience. The build inlines the module graph, stylesheet and icon into o
 file.
 
 ```
-Source  ~214 kB across 23 files (over half of it the mined tables and templates)
-Built   ~117 kB raw · ~37 kB gzip · ~32 kB brotli · 1 request on the critical path
+Source  ~217 kB across 23 files (over half of it the mined tables and templates)
+Built   ~120 kB raw · ~38 kB gzip · ~33 kB brotli · 1 request on the critical path
 ```
 
 "One request" is the document: everything the codec needs to resolve a link is
@@ -851,11 +851,11 @@ Be realistic about the category, too: link shorteners are heavily abused, so a
 brand-new one-page shortener on a new domain starts from a sceptical position.
 What answers that scepticism is Google's own "who, how and why" test — is it
 self-evident who made this, how it works, and why it exists? The how is
-answered at length on the page and the why is the entire pitch. The **who**
-currently is not: the repository, licence and author appear only inside the
-JSON-LD, which no visitor sees. Making that visible is the single largest
-remaining trust signal, and it is a deliberate choice rather than an oversight
-— the visible source links were removed on request.
+answered at length on the page, the why is the entire pitch, and the who is now
+one line in the footer naming the licence and linking to the source. That link
+is the only one of the three a search engine can corroborate, and the only
+answer to "why trust a redirector" that does not require taking someone's word:
+you can read every line of it.
 
 ## Loading, no-JS and mobile
 

@@ -83,8 +83,14 @@ try {
   const errorShown = await page.locator("#error:not([hidden])").count();
   check("a fresh visit starts with an empty box and no error",
     pristine === "" && errorShown === 0, `value=${JSON.stringify(pristine)}`);
-  check("the page shows no visible GitHub link",
-    await page.locator("a[href*='github.com']").count() === 0);
+  // The provenance line: a shortener that asks to be trusted with where you
+  // are going should say who wrote it somewhere a person can see, not only in
+  // structured data. It is also the "who" of Google's who/how/why test.
+  const source = page.locator("footer a[href*='github.com']");
+  check("the footer says where the source is",
+    await source.count() === 1 &&
+    (await source.getAttribute("href")) === "https://github.com/jar99/ClentLinkShort",
+    await source.getAttribute("href") ?? "absent");
   // Hidden markup is what a crawler and the accessibility tree skip, so the
   // first heading either meets must be the page's own — not the frame-refusal
   // notice, which sits above it in the document.
