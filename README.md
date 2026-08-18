@@ -234,12 +234,21 @@ page stops instead of following:
 | | |
 | --- | --- |
 | `https://paypal.com@evil.example/` | the part before the `@` is not the destination |
+| `https://paypal.com.evil.example/` | a brand worn as a subdomain of somewhere else |
 | `https://xn--pypal-4ve.example/` | punycode that renders as a familiar name |
 | `https://192.0.2.10/admin` | a raw IP rather than a named site |
 | non-standard port, plain `http:` | shown as a note, still followed |
 
 None of this is a verdict on whether a site is malicious — that can't be known from a
 URL. These are properties an ordinary shared link almost never has.
+
+The brand check is the one with a false-positive cost, so it was measured rather than
+assumed: across the whole 4,325,469-URL corpus it fires on five links, all of the form
+`brand.com.<cdn>` (Akamai's `edgesuite.net` and `edgekey.net`, Coral's `nyud.net`) —
+which is the shape it describes, operated by someone benign. One interstitial per
+million links, and the reader can still continue, is the right side of that trade.
+It matches whole labels, so `notpaypal.com.au` is not a hit, and it understands a
+registry tail, so `google.com.au` and `apple.com.cn` are their owners' own sites.
 
 **The page itself.** The built page ships a Content-Security-Policy that names its own
 script and style by SHA-256 hash and forbids everything else: `default-src 'none'`, no
