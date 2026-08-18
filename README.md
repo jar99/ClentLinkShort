@@ -354,6 +354,12 @@ Max Age dropdown should be 12 months with *Apply to subdomains* on, *Preload*
 off, and *No-Sniff* on. Setting either one in both places gives you two sources
 for one header and something to debug later.
 
+Scripting it instead of clicking it needs an API token with **Zone → Transform
+Rules → Edit** on the zone, plus Account → Account Rulesets → Read. Not Zone
+WAF: that permission covers the firewall phase, so a token holding it verifies
+as active and then returns `request is not authorized` on the transform phase,
+which reads like a broken token and is not one.
+
 The non-obvious part is the CSP row. A response header carrying only
 `frame-ancestors` does not replace the page's meta policy or weaken it: two
 policies are enforced together, each in full. So it adds the one protection a
